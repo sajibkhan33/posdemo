@@ -19,7 +19,6 @@ import {
 } from 'lucide-react';
 
 type AccountingViewTab = 'jv' | 'ledger';
-type LedgerTypeFilter = 'ALL' | 'PAYMENT' | 'EXPENSE' | 'INCOME' | 'JOURNAL';
 type DatePreset = 'ALL' | 'TODAY' | '7DAYS' | 'MONTH' | 'CUSTOM';
 
 interface UnifiedLedgerItem {
@@ -52,8 +51,6 @@ export const JournalEntryView: React.FC = () => {
   // Search & Filters
   const [jvSearch, setJvSearch] = useState('');
   const [ledgerSearch, setLedgerSearch] = useState('');
-  const [ledgerTypeFilter, setLedgerTypeFilter] = useState<LedgerTypeFilter>('ALL');
-  const [ledgerAccountFilter, setLedgerAccountFilter] = useState<string>('ALL');
   const [datePreset, setDatePreset] = useState<DatePreset>('ALL');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
@@ -202,18 +199,9 @@ export const JournalEntryView: React.FC = () => {
         const match = item.ref.toLowerCase().includes(q) ||
           item.title.toLowerCase().includes(q) ||
           item.subtitle.toLowerCase().includes(q) ||
-          item.account.toLowerCase().includes(q);
+          item.account.toLowerCase().includes(q) ||
+          item.type.toLowerCase().includes(q);
         if (!match) return false;
-      }
-
-      if (ledgerTypeFilter !== 'ALL' && item.type !== ledgerTypeFilter) {
-        return false;
-      }
-
-      if (ledgerAccountFilter !== 'ALL') {
-        const accLower = item.account.toLowerCase();
-        const filtLower = ledgerAccountFilter.toLowerCase();
-        if (!accLower.includes(filtLower)) return false;
       }
 
       if (datePreset === 'TODAY' && item.date !== todayStr) return false;
@@ -226,7 +214,7 @@ export const JournalEntryView: React.FC = () => {
 
       return true;
     });
-  }, [unifiedLedgerEntries, ledgerSearch, ledgerTypeFilter, ledgerAccountFilter, datePreset, customStartDate, customEndDate]);
+  }, [unifiedLedgerEntries, ledgerSearch, datePreset, customStartDate, customEndDate]);
 
   // =================== JOURNAL VOUCHER (JV) FORM STATE =================== //
   const getNextVoucherNo = () => {
@@ -584,60 +572,70 @@ export const JournalEntryView: React.FC = () => {
               </span>
             </div>
           ) : (
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative w-64">
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Search Bar */}
+              <div className="relative w-64 sm:w-72">
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   value={ledgerSearch}
                   onChange={e => setLedgerSearch(e.target.value)}
-                  placeholder="Search description or ref..."
+                  placeholder="Search ref, description, account, type..."
                   className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium focus:bg-white focus:outline-hidden focus:border-emerald-500"
                 />
               </div>
 
               {/* Date Presets */}
               <div className="flex items-center gap-1 bg-slate-50 p-0.5 rounded-lg border border-slate-200">
-                {(['ALL', 'TODAY', '7DAYS', 'MONTH'] as DatePreset[]).map(p => (
+                {(['ALL', 'TODAY', '7DAYS', 'MONTH', 'CUSTOM'] as DatePreset[]).map(p => (
                   <button
                     key={p}
                     onClick={() => setDatePreset(p)}
-                    className={`px-2 py-1 rounded text-xs font-bold transition cursor-pointer ${
+                    className={`px-2.5 py-1 rounded text-xs font-bold transition cursor-pointer ${
                       datePreset === p 
-                        ? 'bg-slate-900 text-amber-400' 
+                        ? 'bg-slate-900 text-amber-400 shadow-2xs' 
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    {p === 'ALL' ? 'All' : p === 'TODAY' ? 'Today' : p === '7DAYS' ? '7 Days' : 'Month'}
+                    {p === 'ALL' ? 'All' : p === 'TODAY' ? 'Today' : p === '7DAYS' ? '7 Days' : p === 'MONTH' ? 'Month' : 'Custom'}
                   </button>
                 ))}
               </div>
 
-              {/* Type Filter */}
-              <select
-                value={ledgerTypeFilter}
-                onChange={e => setLedgerTypeFilter(e.target.value as LedgerTypeFilter)}
-                className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800"
-              >
-                <option value="ALL">All Types</option>
-                <option value="PAYMENT">PAYMENT (Supplier Bills)</option>
-                <option value="EXPENSE">EXPENSE (Direct & Utility)</option>
-                <option value="INCOME">INCOME (Capital & Revenue)</option>
-                <option value="JOURNAL">JOURNAL (Debit/Credit JV)</option>
-              </select>
+              {/* Custom Date Range Picker */}
+              {datePreset === 'CUSTOM' && (
+                <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
+                  <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                  <input
+                    type="date"
+                    value={customStartDate}
+                    onChange={e => setCustomStartDate(e.target.value)}
+                    className="px-2 py-0.5 bg-white border border-slate-200 rounded text-xs font-semibold text-slate-700 focus:outline-hidden focus:border-emerald-500"
+                    title="From Date"
+                  />
+                  <span className="text-slate-400 text-xs font-bold">to</span>
+                  <input
+                    type="date"
+                    value={customEndDate}
+                    onChange={e => setCustomEndDate(e.target.value)}
+                    className="px-2 py-0.5 bg-white border border-slate-200 rounded text-xs font-semibold text-slate-700 focus:outline-hidden focus:border-emerald-500"
+                    title="To Date"
+                  />
+                  {(customStartDate || customEndDate) && (
+                    <button
+                      onClick={() => { setCustomStartDate(''); setCustomEndDate(''); }}
+                      className="p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                      title="Clear dates"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
 
-              {/* Account Filter */}
-              <select
-                value={ledgerAccountFilter}
-                onChange={e => setLedgerAccountFilter(e.target.value)}
-                className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800"
-              >
-                <option value="ALL">All Accounts</option>
-                <option value="Cash">Cash in Hand</option>
-                <option value="Bank">Bank Account</option>
-                <option value="bKash">bKash Merchant</option>
-                <option value="Nagad">Nagad Merchant</option>
-              </select>
+              <span className="text-xs text-slate-500 font-semibold whitespace-nowrap ml-auto">
+                Showing {filteredLedger.length} entries
+              </span>
             </div>
           )}
         </div>
