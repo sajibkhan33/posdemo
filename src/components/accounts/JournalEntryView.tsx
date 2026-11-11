@@ -6,21 +6,19 @@ import {
   Plus, 
   Trash2, 
   Search, 
-  FileText, 
-  DollarSign, 
-  Sparkles,
-  Printer, 
   Scale, 
-  X, 
+  Printer, 
+  Pencil, 
   Check, 
-  Pencil,
-  Download,
-  Package,
-  ArrowDownRight,
-  TrendingUp,
-  CreditCard
+  X, 
+  DollarSign, 
+  ArrowDownRight, 
+  Sparkles,
+  Layers,
+  Calendar
 } from 'lucide-react';
 
+type AccountingViewTab = 'jv' | 'ledger';
 type LedgerTypeFilter = 'ALL' | 'PAYMENT' | 'EXPENSE' | 'INCOME' | 'JOURNAL';
 type DatePreset = 'ALL' | 'TODAY' | '7DAYS' | 'MONTH' | 'CUSTOM';
 
@@ -45,17 +43,14 @@ export const JournalEntryView: React.FC = () => {
     deleteJournalEntry, 
     saveExpense,
     deleteExpense,
-    deleteVendorPayment,
-    language 
+    deleteVendorPayment
   } = useRestaurant();
 
-  // Active view: 'jv' (Original Design - Image 1) or 'ledger' (Financial Ledger Journal)
-  const [activeView, setActiveView] = useState<'jv' | 'ledger'>('jv');
+  // Active Tab: 'jv' (Default - Double-Entry Journal Vouchers) or 'ledger' (Unified Audit Ledger)
+  const [activeTab, setActiveTab] = useState<AccountingViewTab>('jv');
 
-  // JV Search
+  // Search & Filters
   const [jvSearch, setJvSearch] = useState('');
-
-  // Ledger Filters
   const [ledgerSearch, setLedgerSearch] = useState('');
   const [ledgerTypeFilter, setLedgerTypeFilter] = useState<LedgerTypeFilter>('ALL');
   const [ledgerAccountFilter, setLedgerAccountFilter] = useState<string>('ALL');
@@ -79,7 +74,7 @@ export const JournalEntryView: React.FC = () => {
 
   const journalEntries = data.journalEntries || [];
 
-  // =================== 5 SUMMARY STATS =================== //
+  // =================== 5 SUMMARY STATS (SINGLE ROW) =================== //
   const totalJournalDebit = useMemo(() => {
     return journalEntries.reduce((sum, j) => sum + (j.amount || 0), 0);
   }, [journalEntries]);
@@ -173,7 +168,7 @@ export const JournalEntryView: React.FC = () => {
         subtitle: `Dr: ${j.debitAccountName} • Cr: ${j.creditAccountName}`,
         account: j.creditAccountName || 'General Ledger',
         type: isCapital ? 'INCOME' : 'JOURNAL',
-        amount: isCapital ? (j.amount || 0) : (j.amount || 0),
+        amount: j.amount || 0,
         rawItem: j
       });
     });
@@ -182,7 +177,7 @@ export const JournalEntryView: React.FC = () => {
     return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [data.payments, data.expenses, data.sales, data.journalEntries]);
 
-  // JV Filtered List
+  // Filtered JV list
   const filteredJvEntries = useMemo(() => {
     if (!jvSearch.trim()) return journalEntries;
     const q = jvSearch.toLowerCase();
@@ -194,7 +189,7 @@ export const JournalEntryView: React.FC = () => {
     );
   }, [journalEntries, jvSearch]);
 
-  // Ledger Filtered List
+  // Filtered Ledger list
   const filteredLedger = useMemo(() => {
     const todayStr = new Date().toISOString().split('T')[0];
     const now = new Date();
@@ -202,7 +197,6 @@ export const JournalEntryView: React.FC = () => {
     const monthAgo = new Date(now.getTime() - 30 * 86400000).toISOString().split('T')[0];
 
     return unifiedLedgerEntries.filter(item => {
-      // 1. Text Search
       if (ledgerSearch.trim()) {
         const q = ledgerSearch.toLowerCase();
         const match = item.ref.toLowerCase().includes(q) ||
@@ -212,19 +206,16 @@ export const JournalEntryView: React.FC = () => {
         if (!match) return false;
       }
 
-      // 2. Type Filter
       if (ledgerTypeFilter !== 'ALL' && item.type !== ledgerTypeFilter) {
         return false;
       }
 
-      // 3. Account Filter
       if (ledgerAccountFilter !== 'ALL') {
         const accLower = item.account.toLowerCase();
         const filtLower = ledgerAccountFilter.toLowerCase();
         if (!accLower.includes(filtLower)) return false;
       }
 
-      // 4. Date Presets
       if (datePreset === 'TODAY' && item.date !== todayStr) return false;
       if (datePreset === '7DAYS' && (item.date < sevenDaysAgo || item.date > todayStr)) return false;
       if (datePreset === 'MONTH' && (item.date < monthAgo || item.date > todayStr)) return false;
@@ -236,34 +227,6 @@ export const JournalEntryView: React.FC = () => {
       return true;
     });
   }, [unifiedLedgerEntries, ledgerSearch, ledgerTypeFilter, ledgerAccountFilter, datePreset, customStartDate, customEndDate]);
-
-  // Excel / CSV Export
-  const handleExportCsv = () => {
-    if (filteredLedger.length === 0) {
-      alert('No ledger transactions to export.');
-      return;
-    }
-
-    const headers = ['Date', 'Reference / ID', 'Description', 'Subtitle', 'Account / Method', 'Type', 'Amount (BDT)'];
-    const rows = filteredLedger.map(i => [
-      `"${i.date}"`,
-      `"${i.ref}"`,
-      `"${i.title.replace(/"/g, '""')}"`,
-      `"${i.subtitle.replace(/"/g, '""')}"`,
-      `"${i.account.replace(/"/g, '""')}"`,
-      `"${i.type}"`,
-      i.amount
-    ]);
-
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `financial_ledger_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
 
   // =================== JOURNAL VOUCHER (JV) FORM STATE =================== //
   const getNextVoucherNo = () => {
@@ -450,10 +413,10 @@ export const JournalEntryView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* ================= 1. HEADER ================= */}
-      <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        {/* Left: Original Title & General Ledger Badge */}
+      <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        {/* Left Title */}
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 p-0.5 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-slate-950 shrink-0">
             <BookOpen className="w-6 h-6 text-white" />
@@ -471,32 +434,29 @@ export const JournalEntryView: React.FC = () => {
           </div>
         </div>
 
-        {/* Right: Financial Ledger Button on the LEFT of New Journal Voucher Button */}
+        {/* Right Action Buttons */}
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Owner Capital Button */}
           <button
-            onClick={() => setActiveView(activeView === 'jv' ? 'ledger' : 'jv')}
-            className={`px-4 py-2.5 rounded-xl font-extrabold text-xs flex items-center gap-2 transition cursor-pointer border ${
-              activeView === 'ledger'
-                ? 'bg-slate-900 text-amber-400 border-slate-900 shadow-sm'
-                : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100 hover:text-slate-900 shadow-xs'
-            }`}
+            onClick={handleOpenCapitalModal}
+            className="px-3.5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs transition cursor-pointer"
+            title="Deposit Owner Capital Injection into Cash or Bank"
           >
-            {activeView === 'ledger' ? (
-              <>
-                <Scale className="w-4 h-4 text-purple-400" />
-                <span>Show Journal Vouchers (JV)</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4 text-amber-500" />
-                <span>Financial Ledger</span>
-                <span className="text-[10px] bg-slate-100 text-slate-700 font-black px-1.5 py-0.5 rounded-full border border-slate-200">
-                  {unifiedLedgerEntries.length}
-                </span>
-              </>
-            )}
+            <DollarSign className="w-4 h-4 text-emerald-600" />
+            <span>+ Owner Capital</span>
           </button>
 
+          {/* Record Expense Button */}
+          <button
+            onClick={handleOpenExpenseModal}
+            className="px-3.5 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs transition cursor-pointer"
+            title="Record direct operating expense"
+          >
+            <ArrowDownRight className="w-4 h-4 text-rose-600" />
+            <span>+ Record Expense</span>
+          </button>
+
+          {/* New Journal Voucher Button (Green) */}
           <button
             onClick={handleOpenAddJv}
             className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-2 shadow-md shadow-emerald-500/20 transition cursor-pointer"
@@ -507,8 +467,7 @@ export const JournalEntryView: React.FC = () => {
         </div>
       </div>
 
-      {/* ================= 2. FIVE KPI CARDS ROW ================= */}
-      {/* Total JV, Dr, Cr (Image 1) + Supplier & Product Payments, Operating Expenses (Image 2) */}
+      {/* ================= 2. FIVE KPI CARDS IN ONE ROW ================= */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
         {/* Card 1: Total Journal Vouchers */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
@@ -568,29 +527,126 @@ export const JournalEntryView: React.FC = () => {
         </div>
       </div>
 
-      {/* ================= 3. VIEW 1: JOURNAL VOUCHERS TABLE (IMAGE 1 DESIGN) ================= */}
-      {activeView === 'jv' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden space-y-3 p-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-            <div className="relative flex-1 max-w-md">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search voucher no, account heads, narration..."
-                value={jvSearch}
-                onChange={e => setJvSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-hidden focus:border-emerald-500"
-              />
-            </div>
+      {/* ================= 3. SEAMLESS WORKBENCH TABLE CONTAINER ================= */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden p-5 space-y-4">
+        {/* Top Control Bar: View Switcher Tabs + Search / Filters */}
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          {/* View Switcher Tabs */}
+          <div className="flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200 self-start">
+            <button
+              onClick={() => setActiveTab('jv')}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+                activeTab === 'jv'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Scale className="w-3.5 h-3.5 text-purple-600" />
+              <span>Journal Vouchers (JV)</span>
+              <span className="text-[10px] bg-slate-100 text-slate-700 font-bold px-1.5 py-0.5 rounded-full border border-slate-200">
+                {journalEntries.length}
+              </span>
+            </button>
 
-            <span className="text-xs text-slate-500 font-semibold">
-              Showing {filteredJvEntries.length} entries
-            </span>
+            <button
+              onClick={() => setActiveTab('ledger')}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+                activeTab === 'ledger'
+                  ? 'bg-slate-900 text-amber-400 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span>Financial Audit Ledger</span>
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                activeTab === 'ledger' ? 'bg-amber-400/20 text-amber-300' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {unifiedLedgerEntries.length}
+              </span>
+            </button>
           </div>
 
+          {/* Controls for Active Tab */}
+          {activeTab === 'jv' ? (
+            <div className="flex items-center gap-3">
+              <div className="relative w-72">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search voucher no, account heads, narration..."
+                  value={jvSearch}
+                  onChange={e => setJvSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:bg-white focus:outline-hidden focus:border-emerald-500 font-medium"
+                />
+              </div>
+              <span className="text-xs text-slate-500 font-semibold whitespace-nowrap">
+                Showing {filteredJvEntries.length} entries
+              </span>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative w-64">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={ledgerSearch}
+                  onChange={e => setLedgerSearch(e.target.value)}
+                  placeholder="Search description or ref..."
+                  className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium focus:bg-white focus:outline-hidden focus:border-emerald-500"
+                />
+              </div>
+
+              {/* Date Presets */}
+              <div className="flex items-center gap-1 bg-slate-50 p-0.5 rounded-lg border border-slate-200">
+                {(['ALL', 'TODAY', '7DAYS', 'MONTH'] as DatePreset[]).map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setDatePreset(p)}
+                    className={`px-2 py-1 rounded text-xs font-bold transition cursor-pointer ${
+                      datePreset === p 
+                        ? 'bg-slate-900 text-amber-400' 
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {p === 'ALL' ? 'All' : p === 'TODAY' ? 'Today' : p === '7DAYS' ? '7 Days' : 'Month'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Type Filter */}
+              <select
+                value={ledgerTypeFilter}
+                onChange={e => setLedgerTypeFilter(e.target.value as LedgerTypeFilter)}
+                className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800"
+              >
+                <option value="ALL">All Types</option>
+                <option value="PAYMENT">PAYMENT (Supplier Bills)</option>
+                <option value="EXPENSE">EXPENSE (Direct & Utility)</option>
+                <option value="INCOME">INCOME (Capital & Revenue)</option>
+                <option value="JOURNAL">JOURNAL (Debit/Credit JV)</option>
+              </select>
+
+              {/* Account Filter */}
+              <select
+                value={ledgerAccountFilter}
+                onChange={e => setLedgerAccountFilter(e.target.value)}
+                className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800"
+              >
+                <option value="ALL">All Accounts</option>
+                <option value="Cash">Cash in Hand</option>
+                <option value="Bank">Bank Account</option>
+                <option value="bKash">bKash Merchant</option>
+                <option value="Nagad">Nagad Merchant</option>
+              </select>
+            </div>
+          )}
+        </div>
+
+        {/* ================= TAB 1: JOURNAL VOUCHERS TABLE (IMAGE 1) ================= */}
+        {activeTab === 'jv' && (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase text-[11px]">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold uppercase text-[11px]">
                 <tr>
                   <th className="py-3 px-4">Voucher No & Date</th>
                   <th className="py-3 px-4">Debit Account (Dr.)</th>
@@ -672,144 +728,16 @@ export const JournalEntryView: React.FC = () => {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ================= 4. VIEW 2: FINANCIAL LEDGER JOURNAL TABLE ================= */}
-      {activeView === 'ledger' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-4">
-          {/* Header & Action Buttons */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-            <div>
-              <h2 className="text-lg font-black text-slate-900 tracking-tight">
-                Financial Ledger Journal
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Automated entries from Sales Invoices, Purchase Orders & Direct Expenses
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={handleExportCsv}
-                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition cursor-pointer"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Excel</span>
-              </button>
-
-              <button
-                onClick={() => window.print()}
-                className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition cursor-pointer"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                <span>PDF / Print</span>
-              </button>
-
-              {/* ONLY OWNER'S CAPITAL INVESTMENT PER USER REQUIREMENT */}
-              <button
-                onClick={handleOpenCapitalModal}
-                className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs transition cursor-pointer"
-                title="Deposit Owner Capital Injection into Cash / Bank"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ Owner Capital Investment</span>
-              </button>
-
-              <button
-                onClick={handleOpenExpenseModal}
-                className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs transition cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ Record Expense</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Filter Bar */}
-          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
-            {/* Search Input */}
-            <div className="relative flex-1 max-w-sm">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={ledgerSearch}
-                onChange={e => setLedgerSearch(e.target.value)}
-                placeholder="Search description or ref..."
-                className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:outline-hidden focus:border-emerald-500"
-              />
-            </div>
-
-            {/* Date Preset Buttons */}
-            <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-200 overflow-x-auto">
-              {(['ALL', 'TODAY', '7DAYS', 'MONTH', 'CUSTOM'] as DatePreset[]).map(p => (
-                <button
-                  key={p}
-                  onClick={() => setDatePreset(p)}
-                  className={`px-2.5 py-1 rounded text-xs font-bold transition cursor-pointer whitespace-nowrap ${
-                    datePreset === p 
-                      ? 'bg-slate-900 text-amber-400' 
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  {p === 'ALL' ? 'All' : p === 'TODAY' ? 'Today' : p === '7DAYS' ? '7 Days' : p === 'MONTH' ? 'Month' : 'Custom'}
-                </button>
-              ))}
-            </div>
-
-            {/* Custom Date Inputs */}
-            {datePreset === 'CUSTOM' && (
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="date"
-                  value={customStartDate}
-                  onChange={e => setCustomStartDate(e.target.value)}
-                  className="px-2 py-1 bg-white border border-slate-200 rounded text-xs font-semibold"
-                />
-                <span className="text-xs text-slate-400">to</span>
-                <input
-                  type="date"
-                  value={customEndDate}
-                  onChange={e => setCustomEndDate(e.target.value)}
-                  className="px-2 py-1 bg-white border border-slate-200 rounded text-xs font-semibold"
-                />
-              </div>
-            )}
-
-            {/* Type Filter */}
-            <select
-              value={ledgerTypeFilter}
-              onChange={e => setLedgerTypeFilter(e.target.value as LedgerTypeFilter)}
-              className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800"
-            >
-              <option value="ALL">All Types</option>
-              <option value="PAYMENT">PAYMENT (Supplier & Bills)</option>
-              <option value="EXPENSE">EXPENSE (Direct & Utility)</option>
-              <option value="INCOME">INCOME (Capital & Revenue)</option>
-              <option value="JOURNAL">JOURNAL (Debit/Credit JV)</option>
-            </select>
-
-            {/* Account Filter */}
-            <select
-              value={ledgerAccountFilter}
-              onChange={e => setLedgerAccountFilter(e.target.value)}
-              className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800"
-            >
-              <option value="ALL">All Accounts</option>
-              <option value="Cash">Cash in Hand</option>
-              <option value="Bank">Bank Account</option>
-              <option value="bKash">bKash Merchant</option>
-              <option value="Nagad">Nagad Merchant</option>
-            </select>
-          </div>
-
-          {/* Unified Ledger Table */}
-          <div className="overflow-x-auto border border-slate-200 rounded-xl">
+        {/* ================= TAB 2: FINANCIAL AUDIT LEDGER TABLE ================= */}
+        {activeTab === 'ledger' && (
+          <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold uppercase tracking-wider text-[11px]">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold uppercase text-[11px]">
                 <tr>
-                  <th className="py-3 px-4">Date</th>
-                  <th className="py-3 px-3">Description</th>
+                  <th className="py-3 px-4">Date & Ref</th>
+                  <th className="py-3 px-4">Description / Particulars</th>
                   <th className="py-3 px-4">Account / Method</th>
                   <th className="py-3 px-3 text-center">Type</th>
                   <th className="py-3 px-4 text-right">TK (৳)</th>
@@ -826,14 +754,12 @@ export const JournalEntryView: React.FC = () => {
                 ) : (
                   filteredLedger.map(item => (
                     <tr key={item.id} className="hover:bg-slate-50/80 transition">
-                      {/* Date & Ref */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         <div className="text-slate-600 font-medium">{item.date}</div>
                         <div className="font-mono text-[11px] font-bold text-slate-900 mt-0.5">{item.ref}</div>
                       </td>
 
-                      {/* Description & Subtitle */}
-                      <td className="py-3.5 px-3 max-w-md">
+                      <td className="py-3.5 px-4 max-w-md">
                         <div className="font-extrabold text-slate-900 text-xs">
                           {item.title}
                         </div>
@@ -842,38 +768,35 @@ export const JournalEntryView: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* Account / Method */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        <span className="font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-[11px]">
+                        <span className="font-semibold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-md text-[11px] border border-slate-200">
                           {item.account}
                         </span>
                       </td>
 
-                      {/* Type Badge */}
                       <td className="py-3.5 px-3 text-center whitespace-nowrap">
                         {item.type === 'PAYMENT' && (
-                          <span className="bg-blue-100 text-blue-700 border border-blue-200 font-black px-2 py-0.5 rounded text-[10px] tracking-wide uppercase">
+                          <span className="bg-blue-100 text-blue-700 border border-blue-200 font-black px-2.5 py-0.5 rounded-full text-[10px] tracking-wide uppercase">
                             PAYMENT
                           </span>
                         )}
                         {item.type === 'EXPENSE' && (
-                          <span className="bg-rose-100 text-rose-700 border border-rose-200 font-black px-2 py-0.5 rounded text-[10px] tracking-wide uppercase">
+                          <span className="bg-rose-100 text-rose-700 border border-rose-200 font-black px-2.5 py-0.5 rounded-full text-[10px] tracking-wide uppercase">
                             EXPENSE
                           </span>
                         )}
                         {item.type === 'INCOME' && (
-                          <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 font-black px-2 py-0.5 rounded text-[10px] tracking-wide uppercase">
-                            INCOME
+                          <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 font-black px-2.5 py-0.5 rounded-full text-[10px] tracking-wide uppercase">
+                            CAPITAL / INFLOW
                           </span>
                         )}
                         {item.type === 'JOURNAL' && (
-                          <span className="bg-purple-100 text-purple-800 border border-purple-200 font-black px-2 py-0.5 rounded text-[10px] tracking-wide uppercase">
+                          <span className="bg-purple-100 text-purple-800 border border-purple-200 font-black px-2.5 py-0.5 rounded-full text-[10px] tracking-wide uppercase">
                             JOURNAL
                           </span>
                         )}
                       </td>
 
-                      {/* Amount (TK) */}
                       <td className="py-3.5 px-4 text-right whitespace-nowrap">
                         <span className={`text-sm font-black font-mono ${
                           item.amount > 0 
@@ -886,7 +809,6 @@ export const JournalEntryView: React.FC = () => {
                         </span>
                       </td>
 
-                      {/* Actions */}
                       <td className="py-3.5 px-4 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
                           {item.type === 'JOURNAL' && (
@@ -948,8 +870,8 @@ export const JournalEntryView: React.FC = () => {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* ================= MODAL: NEW / EDIT JOURNAL VOUCHER ================= */}
       {isJvModalOpen && (
@@ -1080,7 +1002,7 @@ export const JournalEntryView: React.FC = () => {
         </div>
       )}
 
-      {/* ================= MODAL: OWNER'S CAPITAL INVESTMENT (RECORD INCOME) ================= */}
+      {/* ================= MODAL: OWNER'S CAPITAL INVESTMENT ================= */}
       {isCapitalModalOpen && (
         <div className="fixed inset-0 bg-slate-950/70 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
