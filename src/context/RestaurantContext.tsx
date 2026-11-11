@@ -3290,15 +3290,6 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const bkashExpenses = data.expenses.filter(e => isExpenseBkash(e.paymentMethod)).reduce((sum, e) => sum + (e.amount || 0), 0);
   const nagadExpenses = data.expenses.filter(e => isExpenseNagad(e.paymentMethod)).reduce((sum, e) => sum + (e.amount || 0), 0);
 
-  const paidCashBillNos = new Set(
-    (data.payments || [])
-      .filter(p => isCashMethod(p.method))
-      .map(p => p.billNo?.trim().toLowerCase())
-      .filter(Boolean)
-  );
-  const totalCashPurchases = data.purchases
-    .filter(p => p.status !== 'DRAFT' && p.paymentType === 'CASH' && (!p.billNo || !paidCashBillNos.has(p.billNo.trim().toLowerCase())))
-    .reduce((sum, p) => sum + (p.total || 0), 0);
   const totalCashDueCollected = activeSalesList.reduce((sum, s) => sum + (s.dueCollected || 0), 0);
 
   const getAdvType = (method?: string): string => {
@@ -3367,6 +3358,16 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const vendorPayCheque = data.payments.filter(p => isChequeMethod(p.method)).reduce((sum, p) => sum + (p.amount || 0), 0);
   const vendorPayBkash = data.payments.filter(p => isBkashMethod(p.method)).reduce((sum, p) => sum + (p.amount || 0), 0);
   const vendorPayNagad = data.payments.filter(p => isNagadMethod(p.method)).reduce((sum, p) => sum + (p.amount || 0), 0);
+
+  const paidCashBillNos = new Set(
+    (data.payments || [])
+      .filter(p => isCashMethod(p.method))
+      .map(p => p.billNo?.trim().toLowerCase())
+      .filter(Boolean)
+  );
+  const totalCashPurchases = data.purchases
+    .filter(p => p.status !== 'DRAFT' && p.paymentType === 'CASH' && (!p.billNo || !paidCashBillNos.has(p.billNo.trim().toLowerCase())))
+    .reduce((sum, p) => sum + (p.total || 0), 0);
 
   const getOpeningBalance = (roleOrCode: string, fallbackKeywords: string[] = []): number => {
     // 1. Dynamic ERP System Role mapping
