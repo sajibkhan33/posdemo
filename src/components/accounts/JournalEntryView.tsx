@@ -1,41 +1,26 @@
 import React, { useState, useMemo } from 'react';
-import { useRestaurant, getAccountSystemRole, getNextAccountCode, resolveExpenseAccount } from '../../context/RestaurantContext';
-import { JournalEntry, AccountHead, AccountType, AccountSystemRole } from '../../types';
+import { useRestaurant } from '../../context/RestaurantContext';
+import { JournalEntry, AccountHead } from '../../types';
 import { 
   BookOpen, 
   Plus, 
   Trash2, 
   Search, 
   FileText, 
-  CheckCircle2, 
   DollarSign, 
-  Filter, 
-  Layers, 
-  ArrowRight, 
-  Calendar, 
   Sparkles,
   Printer, 
-  FileCheck, 
   Scale, 
   X, 
   Check, 
   Pencil,
   Download,
-  TrendingUp,
-  TrendingDown,
-  Wallet,
-  Building2,
-  Smartphone,
-  ArrowUpRight,
-  ArrowDownRight,
-  Tag,
-  CreditCard,
   Package,
-  Activity,
-  Receipt
+  ArrowDownRight,
+  TrendingUp,
+  CreditCard
 } from 'lucide-react';
 
-type AccountingTab = 'financial-ledger' | 'journal-vouchers';
 type LedgerTypeFilter = 'ALL' | 'PAYMENT' | 'EXPENSE' | 'INCOME' | 'JOURNAL';
 type DatePreset = 'ALL' | 'TODAY' | '7DAYS' | 'MONTH' | 'CUSTOM';
 
@@ -61,16 +46,14 @@ export const JournalEntryView: React.FC = () => {
     saveExpense,
     deleteExpense,
     deleteVendorPayment,
-    cashDrawerBalance,
-    bankTransferBalance,
-    bkashMerchantBalance,
-    nagadMerchantBalance,
-    pettyCashBalance,
     language 
   } = useRestaurant();
 
-  // Active Tab
-  const [activeSubTab, setActiveSubTab] = useState<AccountingTab>('financial-ledger');
+  // Active view: 'jv' (Original Design - Image 1) or 'ledger' (Financial Ledger Journal)
+  const [activeView, setActiveView] = useState<'jv' | 'ledger'>('jv');
+
+  // JV Search
+  const [jvSearch, setJvSearch] = useState('');
 
   // Ledger Filters
   const [ledgerSearch, setLedgerSearch] = useState('');
@@ -85,8 +68,8 @@ export const JournalEntryView: React.FC = () => {
   const [editingJvId, setEditingJvId] = useState<string | null>(null);
   const [printingJvEntry, setPrintingJvEntry] = useState<JournalEntry | null>(null);
 
-  const [isRecordExpenseOpen, setIsRecordExpenseOpen] = useState(false);
-  const [isRecordIncomeOpen, setIsRecordIncomeOpen] = useState(false);
+  const [isCapitalModalOpen, setIsCapitalModalOpen] = useState(false);
+  const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
 
   const coa = useMemo(() => {
     return [...(data.chartOfAccounts || [])].sort((a, b) =>
@@ -96,15 +79,12 @@ export const JournalEntryView: React.FC = () => {
 
   const journalEntries = data.journalEntries || [];
 
-  // =================== TOP LIQUID BALANCES =================== //
-  const totalLiquid = (cashDrawerBalance || 0) + (pettyCashBalance || 0) + (bankTransferBalance || 0) + (bkashMerchantBalance || 0) + (nagadMerchantBalance || 0);
+  // =================== 5 SUMMARY STATS =================== //
+  const totalJournalDebit = useMemo(() => {
+    return journalEntries.reduce((sum, j) => sum + (j.amount || 0), 0);
+  }, [journalEntries]);
 
-  // =================== FINANCIAL SUMMARY =================== //
-  const totalInflow = useMemo(() => {
-    const salesTotal = (data.sales || []).reduce((sum, s) => sum + (s.total || 0), 0);
-    const advanceTotal = (data.customerAdvances || []).reduce((sum, a) => sum + (a.amount || 0), 0);
-    return salesTotal + advanceTotal;
-  }, [data.sales, data.customerAdvances]);
+  const totalJournalCredit = totalJournalDebit;
 
   const totalSupplierPayments = useMemo(() => {
     return (data.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
@@ -113,9 +93,6 @@ export const JournalEntryView: React.FC = () => {
   const totalOperatingExpenses = useMemo(() => {
     return (data.expenses || []).reduce((sum, e) => sum + (e.amount || 0), 0);
   }, [data.expenses]);
-
-  const netOperatingBalance = totalInflow - totalSupplierPayments - totalOperatingExpenses;
-  const totalOutflow = totalSupplierPayments + totalOperatingExpenses;
 
   // =================== UNIFIED LEDGER ENTRIES =================== //
   const unifiedLedgerEntries = useMemo<UnifiedLedgerItem[]>(() => {
@@ -183,16 +160,20 @@ export const JournalEntryView: React.FC = () => {
 
     // 4. Double-Entry Journal Vouchers (JOURNAL)
     (data.journalEntries || []).forEach(j => {
+      const isCapital = j.creditAccountName?.toLowerCase().includes('capital') || 
+                        j.creditAccountName?.toLowerCase().includes('equity') ||
+                        j.narration?.toLowerCase().includes('capital');
+
       list.push({
         id: `JV-${j.id}`,
         sourceId: j.id,
         date: j.date,
         ref: j.voucherNo,
-        title: j.narration || 'General Journal Adjustment',
+        title: j.narration || (isCapital ? "Owner's Capital Investment" : 'General Journal Adjustment'),
         subtitle: `Dr: ${j.debitAccountName} • Cr: ${j.creditAccountName}`,
         account: j.creditAccountName || 'General Ledger',
-        type: 'JOURNAL',
-        amount: j.amount || 0,
+        type: isCapital ? 'INCOME' : 'JOURNAL',
+        amount: isCapital ? (j.amount || 0) : (j.amount || 0),
         rawItem: j
       });
     });
@@ -201,7 +182,19 @@ export const JournalEntryView: React.FC = () => {
     return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [data.payments, data.expenses, data.sales, data.journalEntries]);
 
-  // Date Filtering
+  // JV Filtered List
+  const filteredJvEntries = useMemo(() => {
+    if (!jvSearch.trim()) return journalEntries;
+    const q = jvSearch.toLowerCase();
+    return journalEntries.filter(j => 
+      j.voucherNo.toLowerCase().includes(q) ||
+      j.debitAccountName.toLowerCase().includes(q) ||
+      j.creditAccountName.toLowerCase().includes(q) ||
+      j.narration.toLowerCase().includes(q)
+    );
+  }, [journalEntries, jvSearch]);
+
+  // Ledger Filtered List
   const filteredLedger = useMemo(() => {
     const todayStr = new Date().toISOString().split('T')[0];
     const now = new Date();
@@ -361,247 +354,329 @@ export const JournalEntryView: React.FC = () => {
     setEditingJvId(null);
   };
 
-  // Quick Record Expense Form
-  const [quickExpenseHead, setQuickExpenseHead] = useState('Utility / Electricity');
-  const [quickExpenseAmount, setQuickExpenseAmount] = useState(500);
-  const [quickExpenseMethod, setQuickExpenseMethod] = useState('Cash in Hand');
-  const [quickExpenseNote, setQuickExpenseNote] = useState('Office daily utility payment');
+  // =================== OWNER'S CAPITAL INVESTMENT MODAL =================== //
+  const [capitalForm, setCapitalForm] = useState({
+    depositAccountId: '1010', // Cash in Hand
+    equityAccountId: '3010',  // Owner Equity & Capital
+    amount: 50000,
+    date: new Date().toISOString().split('T')[0],
+    referenceNo: `CAP-${Date.now().toString().slice(-4)}`,
+    narration: "Owner Capital Investment / Equity Injection"
+  });
 
-  const handleSaveQuickExpense = (e: React.FormEvent) => {
+  const handleOpenCapitalModal = () => {
+    const cashAcc = coa.find(c => c.code === '1010' || c.name.toLowerCase().includes('cash')) || coa[0];
+    const equityAcc = coa.find(c => c.type === 'EQUITY' || c.code === '3010') || coa[1];
+
+    setCapitalForm({
+      depositAccountId: cashAcc?.id || '1010',
+      equityAccountId: equityAcc?.id || '3010',
+      amount: 50000,
+      date: new Date().toISOString().split('T')[0],
+      referenceNo: `CAP-${Date.now().toString().slice(-4)}`,
+      narration: "Owner Capital Investment / Equity Injection"
+    });
+    setIsCapitalModalOpen(true);
+  };
+
+  const handleSaveCapital = (e: React.FormEvent) => {
     e.preventDefault();
-    if (quickExpenseAmount <= 0) {
-      alert('Amount must be greater than 0');
+    if (capitalForm.amount <= 0) {
+      alert('Please enter a valid investment amount greater than 0.');
       return;
     }
-    saveExpense({
+
+    const debitAcc = coa.find(c => c.id === capitalForm.depositAccountId || c.code === capitalForm.depositAccountId) || coa[0];
+    const creditAcc = coa.find(c => c.id === capitalForm.equityAccountId || c.code === capitalForm.equityAccountId || c.type === 'EQUITY') || coa.find(c => c.type === 'EQUITY') || coa[1];
+
+    if (!debitAcc || !creditAcc) {
+      alert('Please select both deposit and equity accounts.');
+      return;
+    }
+
+    const payload = {
+      voucherNo: getNextVoucherNo(),
+      date: capitalForm.date,
+      debitAccountId: debitAcc.id,
+      debitAccountName: `${debitAcc.code} - ${debitAcc.name}`,
+      creditAccountId: creditAcc.id,
+      creditAccountName: `${creditAcc.code} - ${creditAcc.name}`,
+      amount: Number(capitalForm.amount),
+      narration: capitalForm.narration || "Owner's Capital Investment",
+      referenceNo: capitalForm.referenceNo || `CAP-${Date.now().toString().slice(-4)}`
+    };
+
+    addJournalEntry(payload);
+    setIsCapitalModalOpen(false);
+  };
+
+  // =================== QUICK OPERATING EXPENSE MODAL =================== //
+  const expenseHeadsList = (data.expenseHeads || []).sort((a, b) => a.localeCompare(b));
+  const [expenseForm, setExpenseForm] = useState({
+    head: expenseHeadsList[0] || 'Utility / Electricity',
+    amount: 500,
+    paymentMethod: 'Cash in Hand',
+    date: new Date().toISOString().split('T')[0],
+    note: 'Office daily operational payment'
+  });
+
+  const handleOpenExpenseModal = () => {
+    setExpenseForm({
+      head: expenseHeadsList[0] || 'Utility / Electricity',
+      amount: 500,
+      paymentMethod: 'Cash in Hand',
       date: new Date().toISOString().split('T')[0],
-      head: quickExpenseHead,
-      amount: Number(quickExpenseAmount),
-      paymentMethod: quickExpenseMethod,
-      note: quickExpenseNote,
+      note: 'Office daily operational payment'
+    });
+    setIsExpenseModalOpen(true);
+  };
+
+  const handleSaveExpense = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (expenseForm.amount <= 0) {
+      alert('Expense amount must be greater than 0');
+      return;
+    }
+
+    saveExpense({
+      date: expenseForm.date,
+      head: expenseForm.head,
+      amount: Number(expenseForm.amount),
+      paymentMethod: expenseForm.paymentMethod,
+      note: expenseForm.note,
       category: 'Operating Expenses'
     });
-    setIsRecordExpenseOpen(false);
+    setIsExpenseModalOpen(false);
   };
-
-  // Quick Record Income Form
-  const [quickIncomeHead, setQuickIncomeHead] = useState('Owner Capital Investment');
-  const [quickIncomeAmount, setQuickIncomeAmount] = useState(10000);
-  const [quickIncomeMethod, setQuickIncomeMethod] = useState('Cash in Hand');
-  const [quickIncomeNote, setQuickIncomeNote] = useState("Owner's Capital Injection");
-
-  const handleSaveQuickIncome = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (quickIncomeAmount <= 0) {
-      alert('Amount must be greater than 0');
-      return;
-    }
-    // Record as double-entry JV: Dr Cash/Bank, Cr Capital/Revenue
-    const cashAcc = coa.find(c => c.code === '1010' || c.name.toLowerCase().includes('cash')) || coa[0];
-    const capitalAcc = coa.find(c => c.type === 'EQUITY' || c.code === '3010') || coa[0];
-
-    addJournalEntry({
-      voucherNo: getNextVoucherNo(),
-      date: new Date().toISOString().split('T')[0],
-      debitAccountId: cashAcc?.id || '1010',
-      debitAccountName: `${cashAcc?.code || '1010'} - ${cashAcc?.name || 'Cash in Hand'}`,
-      creditAccountId: capitalAcc?.id || '3010',
-      creditAccountName: `${capitalAcc?.code || '3010'} - ${capitalAcc?.name || quickIncomeHead}`,
-      amount: Number(quickIncomeAmount),
-      narration: quickIncomeNote || 'Owner Capital / Direct Cash Injection',
-      referenceNo: `INC-${Date.now().toString().slice(-4)}`
-    });
-    setIsRecordIncomeOpen(false);
-  };
-
-  // Expense Heads for Quick Expense Modal
-  const expenseHeadsList = (data.expenseHeads || []).sort((a, b) => a.localeCompare(b));
 
   return (
     <div className="space-y-6">
-      {/* ================= 1. TOP LIQUID BALANCE CARDS ================= */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Total Liquid Balance (Dark Card) */}
-        <div className="bg-slate-900 text-white rounded-2xl p-5 border border-slate-800 shadow-lg relative overflow-hidden flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-400">Total Liquid Balance</span>
-            <div className="w-8 h-8 rounded-lg bg-amber-400/20 text-amber-400 flex items-center justify-center">
-              <Wallet className="w-4 h-4" />
-            </div>
+      {/* ================= 1. HEADER ================= */}
+      <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        {/* Left: Original Title & General Ledger Badge */}
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 p-0.5 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-slate-950 shrink-0">
+            <BookOpen className="w-6 h-6 text-white" />
           </div>
-          <div className="mt-2">
-            <div className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-              ৳{totalLiquid.toLocaleString()}
-            </div>
-            <div className="text-[11px] text-slate-400 mt-1 font-medium">
-              Cash + Bank + bKash / Nagad
-            </div>
-          </div>
-        </div>
-
-        {/* Card 2: Cash in Hand */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500">Cash in Hand</span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <DollarSign className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2">
-            <div className="text-2xl font-black text-slate-900 tracking-tight">
-              ৳{(cashDrawerBalance || 0).toLocaleString()}
-            </div>
-            <div className="text-[11px] text-emerald-600 mt-1 font-semibold flex items-center gap-1">
-              <span>Store & Counter Drawer</span>
-            </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+              Accounting Journal Entries
+              <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-300">
+                General Ledger
+              </span>
+            </h1>
+            <p className="text-xs text-slate-500">
+              Double-entry bookkeeping journal vouchers, debit/credit account adjustments, and audit ledger
+            </p>
           </div>
         </div>
 
-        {/* Card 3: Bank Account */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500">Bank Account</span>
-            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Building2 className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2">
-            <div className="text-2xl font-black text-slate-900 tracking-tight">
-              ৳{(bankTransferBalance || 0).toLocaleString()}
-            </div>
-            <div className="text-[11px] text-blue-600 mt-1 font-semibold">
-              Bank A/C & Card Settlements
-            </div>
-          </div>
-        </div>
+        {/* Right: Financial Ledger Button on the LEFT of New Journal Voucher Button */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={() => setActiveView(activeView === 'jv' ? 'ledger' : 'jv')}
+            className={`px-4 py-2.5 rounded-xl font-extrabold text-xs flex items-center gap-2 transition cursor-pointer border ${
+              activeView === 'ledger'
+                ? 'bg-slate-900 text-amber-400 border-slate-900 shadow-sm'
+                : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100 hover:text-slate-900 shadow-xs'
+            }`}
+          >
+            {activeView === 'ledger' ? (
+              <>
+                <Scale className="w-4 h-4 text-purple-400" />
+                <span>Show Journal Vouchers (JV)</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4 text-amber-500" />
+                <span>Financial Ledger</span>
+                <span className="text-[10px] bg-slate-100 text-slate-700 font-black px-1.5 py-0.5 rounded-full border border-slate-200">
+                  {unifiedLedgerEntries.length}
+                </span>
+              </>
+            )}
+          </button>
 
-        {/* Card 4: bKash / Nagad Wallet */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500">bKash / Nagad Wallet</span>
-            <div className="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
-              <Smartphone className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2">
-            <div className="text-2xl font-black text-slate-900 tracking-tight">
-              ৳{((bkashMerchantBalance || 0) + (nagadMerchantBalance || 0)).toLocaleString()}
-            </div>
-            <div className="text-[11px] text-slate-500 mt-1 font-semibold">
-              bKash: ৳{(bkashMerchantBalance || 0).toLocaleString()} • Nagad: ৳{(nagadMerchantBalance || 0).toLocaleString()}
-            </div>
-          </div>
+          <button
+            onClick={handleOpenAddJv}
+            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-2 shadow-md shadow-emerald-500/20 transition cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ New Journal Voucher</span>
+          </button>
         </div>
       </div>
 
-      {/* ================= 2. FINANCIAL SUMMARY CARDS ================= */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Total Inflow / Revenue */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-            <ArrowUpRight className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="text-xs font-bold text-slate-500">Total Inflow / Revenue</div>
-            <div className="text-xl font-black text-emerald-600 mt-0.5">
-              + ৳{totalInflow.toLocaleString()}
-            </div>
-            <div className="text-[11px] text-slate-400 font-medium">Sales & Due Collections</div>
-          </div>
+      {/* ================= 2. FIVE KPI CARDS ROW ================= */}
+      {/* Total JV, Dr, Cr (Image 1) + Supplier & Product Payments, Operating Expenses (Image 2) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+        {/* Card 1: Total Journal Vouchers */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+          <div className="text-slate-500 text-xs font-semibold">Total Journal Vouchers</div>
+          <div className="text-2xl font-black text-slate-900 mt-1">{journalEntries.length}</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">Recorded transaction vouchers</div>
         </div>
 
-        {/* Card 2: Supplier & Product Payments */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-            <Package className="w-6 h-6" />
+        {/* Card 2: Total Debits (Dr.) */}
+        <div className="bg-white p-4 rounded-2xl border border-emerald-200 bg-emerald-50/20 shadow-xs">
+          <div className="text-emerald-700 text-xs font-bold flex items-center gap-1">
+            <Scale className="w-3.5 h-3.5" /> Total Debits (Dr.)
           </div>
+          <div className="text-2xl font-black text-emerald-800 mt-1">৳{totalJournalDebit.toLocaleString()}</div>
+          <div className="text-[11px] text-emerald-600 mt-0.5">Total debited balance</div>
+        </div>
+
+        {/* Card 3: Total Credits (Cr.) */}
+        <div className="bg-white p-4 rounded-2xl border border-teal-200 bg-teal-50/20 shadow-xs">
+          <div className="text-teal-700 text-xs font-bold flex items-center gap-1">
+            <Scale className="w-3.5 h-3.5" /> Total Credits (Cr.)
+          </div>
+          <div className="text-2xl font-black text-teal-800 mt-1">৳{totalJournalCredit.toLocaleString()}</div>
+          <div className="text-[11px] text-teal-600 mt-0.5">Balanced with debit total (100% matched)</div>
+        </div>
+
+        {/* Card 4: Supplier & Product Payments */}
+        <div className="bg-white p-4 rounded-2xl border border-blue-200 bg-blue-50/20 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="text-xs font-bold text-slate-500">Supplier & Product</span>
+              <span className="text-blue-900 text-xs font-bold">Supplier & Product</span>
               <span className="text-[10px] bg-blue-100 text-blue-700 font-extrabold px-1.5 py-0.2 rounded">
                 Payment
               </span>
             </div>
-            <div className="text-xl font-black text-blue-600 mt-0.5">
+            <div className="text-2xl font-black text-blue-600 mt-1">
               - ৳{totalSupplierPayments.toLocaleString()}
             </div>
-            <div className="text-[11px] text-slate-400 font-medium">Raw Materials / PO Payments</div>
           </div>
+          <div className="text-[11px] text-blue-700/80 mt-0.5 font-medium">Raw Materials / PO Payments</div>
         </div>
 
-        {/* Card 3: Operating Expenses */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-            <ArrowDownRight className="w-6 h-6" />
-          </div>
+        {/* Card 5: Operating Expenses */}
+        <div className="bg-white p-4 rounded-2xl border border-rose-200 bg-rose-50/20 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="text-xs font-bold text-slate-500">Operating Expenses</span>
+              <span className="text-rose-900 text-xs font-bold">Operating Expenses</span>
               <span className="text-[10px] bg-rose-100 text-rose-700 font-extrabold px-1.5 py-0.2 rounded">
                 Expense
               </span>
             </div>
-            <div className="text-xl font-black text-rose-600 mt-0.5">
+            <div className="text-2xl font-black text-rose-600 mt-1">
               - ৳{totalOperatingExpenses.toLocaleString()}
             </div>
-            <div className="text-[11px] text-slate-400 font-medium">Office & Direct Expenses</div>
           </div>
-        </div>
-
-        {/* Card 4: Net Operating Balance */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-            <Activity className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="text-xs font-bold text-slate-500">Net Operating Balance</div>
-            <div className={`text-xl font-black mt-0.5 ${netOperatingBalance >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
-              ৳{netOperatingBalance.toLocaleString()}
-            </div>
-            <div className="text-[11px] text-slate-400 font-medium">
-              Total Outflow: -৳{totalOutflow.toLocaleString()}
-            </div>
-          </div>
+          <div className="text-[11px] text-rose-700/80 mt-0.5 font-medium">Office & Direct Expenses</div>
         </div>
       </div>
 
-      {/* ================= 3. SUB-NAVIGATION TABS ================= */}
-      <div className="flex items-center gap-2 p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200/80 overflow-x-auto">
-        <button
-          onClick={() => setActiveSubTab('financial-ledger')}
-          className={`px-4 py-2.5 rounded-xl font-extrabold text-xs transition flex items-center gap-2 cursor-pointer whitespace-nowrap ${
-            activeSubTab === 'financial-ledger'
-              ? 'bg-slate-900 text-amber-400 shadow-md'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-          }`}
-        >
-          <Sparkles className="w-4 h-4 text-amber-400" />
-          <span>Financial Ledger</span>
-          <span className="text-[10px] bg-amber-400/20 text-amber-300 font-bold px-1.5 py-0.5 rounded-full">
-            {unifiedLedgerEntries.length}
-          </span>
-        </button>
+      {/* ================= 3. VIEW 1: JOURNAL VOUCHERS TABLE (IMAGE 1 DESIGN) ================= */}
+      {activeView === 'jv' && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden space-y-3 p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div className="relative flex-1 max-w-md">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search voucher no, account heads, narration..."
+                value={jvSearch}
+                onChange={e => setJvSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-hidden focus:border-emerald-500"
+              />
+            </div>
 
-        <button
-          onClick={() => setActiveSubTab('journal-vouchers')}
-          className={`px-4 py-2.5 rounded-xl font-extrabold text-xs transition flex items-center gap-2 cursor-pointer whitespace-nowrap ${
-            activeSubTab === 'journal-vouchers'
-              ? 'bg-slate-900 text-white shadow-md'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-          }`}
-        >
-          <Scale className="w-4 h-4 text-purple-400" />
-          <span>Journal Vouchers</span>
-          <span className="text-[10px] bg-slate-200 text-slate-700 font-bold px-1.5 py-0.5 rounded-full">
-            {journalEntries.length}
-          </span>
-        </button>
-      </div>
+            <span className="text-xs text-slate-500 font-semibold">
+              Showing {filteredJvEntries.length} entries
+            </span>
+          </div>
 
-      {/* ================= 4. TAB CONTENT ================= */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase text-[11px]">
+                <tr>
+                  <th className="py-3 px-4">Voucher No & Date</th>
+                  <th className="py-3 px-4">Debit Account (Dr.)</th>
+                  <th className="py-3 px-4">Credit Account (Cr.)</th>
+                  <th className="py-3 px-4">Amount (৳)</th>
+                  <th className="py-3 px-4">Narration / Note</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredJvEntries.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-slate-400">
+                      No journal vouchers recorded yet. Click "+ New Journal Voucher" to create one.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredJvEntries.map(j => (
+                    <tr key={j.id} className="hover:bg-slate-50/80 transition">
+                      <td className="py-3.5 px-4">
+                        <div className="font-bold text-slate-900 font-mono">{j.voucherNo}</div>
+                        <div className="text-[11px] text-slate-500">{j.date} • Ref: {j.referenceNo || 'N/A'}</div>
+                      </td>
 
-      {/* ----------------- TAB 1: FINANCIAL LEDGER ----------------- */}
-      {activeSubTab === 'financial-ledger' && (
+                      <td className="py-3.5 px-4">
+                        <div className="font-semibold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100 inline-block">
+                          Dr: {j.debitAccountName}
+                        </div>
+                      </td>
+
+                      <td className="py-3.5 px-4">
+                        <div className="font-semibold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-100 inline-block">
+                          Cr: {j.creditAccountName}
+                        </div>
+                      </td>
+
+                      <td className="py-3.5 px-4">
+                        <span className="font-extrabold text-slate-900 text-sm font-mono">
+                          ৳{j.amount.toLocaleString()}
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-4 text-slate-600 max-w-xs truncate">
+                        {j.narration}
+                      </td>
+
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => setPrintingJvEntry(j)}
+                            className="p-1.5 text-slate-500 hover:text-indigo-600 rounded hover:bg-slate-100 cursor-pointer"
+                            title="Print Voucher"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleOpenEditJv(j)}
+                            className="p-1.5 text-slate-500 hover:text-emerald-600 rounded hover:bg-slate-100 cursor-pointer"
+                            title="Edit Voucher"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm(`Are you sure you want to delete Voucher ${j.voucherNo}?`)) {
+                                deleteJournalEntry(j.id);
+                              }
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 rounded hover:bg-slate-100 cursor-pointer"
+                            title="Delete Voucher"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ================= 4. VIEW 2: FINANCIAL LEDGER JOURNAL TABLE ================= */}
+      {activeView === 'ledger' && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-4">
           {/* Header & Action Buttons */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100">
@@ -631,16 +706,18 @@ export const JournalEntryView: React.FC = () => {
                 <span>PDF / Print</span>
               </button>
 
+              {/* ONLY OWNER'S CAPITAL INVESTMENT PER USER REQUIREMENT */}
               <button
-                onClick={() => setIsRecordIncomeOpen(true)}
+                onClick={handleOpenCapitalModal}
                 className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+                title="Deposit Owner Capital Injection into Cash / Bank"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>+ Record Income</span>
+                <span>+ Owner Capital Investment</span>
               </button>
 
               <button
-                onClick={() => setIsRecordExpenseOpen(true)}
+                onClick={handleOpenExpenseModal}
                 className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs transition cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -708,7 +785,7 @@ export const JournalEntryView: React.FC = () => {
               <option value="ALL">All Types</option>
               <option value="PAYMENT">PAYMENT (Supplier & Bills)</option>
               <option value="EXPENSE">EXPENSE (Direct & Utility)</option>
-              <option value="INCOME">INCOME (POS Sales & Rev)</option>
+              <option value="INCOME">INCOME (Capital & Revenue)</option>
               <option value="JOURNAL">JOURNAL (Debit/Credit JV)</option>
             </select>
 
@@ -874,144 +951,6 @@ export const JournalEntryView: React.FC = () => {
         </div>
       )}
 
-      {/* ----------------- TAB 2: JOURNAL VOUCHERS (JV) ----------------- */}
-      {activeSubTab === 'journal-vouchers' && (
-        <div className="space-y-4">
-          {/* JV Top KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-              <div className="text-slate-500 text-xs font-semibold">Total Journal Vouchers</div>
-              <div className="text-2xl font-black text-slate-900 mt-1">{journalEntries.length}</div>
-              <div className="text-[11px] text-slate-400 mt-0.5">Recorded transaction vouchers</div>
-            </div>
-
-            <div className="bg-white p-4 rounded-2xl border border-emerald-200 bg-emerald-50/20 shadow-xs">
-              <div className="text-emerald-700 text-xs font-bold flex items-center gap-1">
-                <Scale className="w-3.5 h-3.5" /> Total Debits (Dr.)
-              </div>
-              <div className="text-2xl font-black text-emerald-800 mt-1">
-                ৳{journalEntries.reduce((sum, j) => sum + (j.amount || 0), 0).toLocaleString()}
-              </div>
-              <div className="text-[11px] text-emerald-600 mt-0.5">Total debited balance</div>
-            </div>
-
-            <div className="bg-white p-4 rounded-2xl border border-teal-200 bg-teal-50/20 shadow-xs">
-              <div className="text-teal-700 text-xs font-bold flex items-center gap-1">
-                <Scale className="w-3.5 h-3.5" /> Total Credits (Cr.)
-              </div>
-              <div className="text-2xl font-black text-teal-800 mt-1">
-                ৳{journalEntries.reduce((sum, j) => sum + (j.amount || 0), 0).toLocaleString()}
-              </div>
-              <div className="text-[11px] text-teal-600 mt-0.5">Balanced with debit total (100% matched)</div>
-            </div>
-          </div>
-
-          {/* JV Table */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="font-extrabold text-slate-900 text-base">Double-Entry Journal Vouchers</h3>
-                <p className="text-xs text-slate-500">
-                  Manual adjustments, owner capital injections, and debit/credit ledger transfers
-                </p>
-              </div>
-              <button
-                onClick={handleOpenAddJv}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow-xs transition cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ New Journal Voucher</span>
-              </button>
-            </div>
-
-            <div className="overflow-x-auto border border-slate-200 rounded-xl">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold uppercase tracking-wider text-[11px]">
-                  <tr>
-                    <th className="py-3 px-4">Voucher No & Date</th>
-                    <th className="py-3 px-4">Debit Account (Dr.)</th>
-                    <th className="py-3 px-4">Credit Account (Cr.)</th>
-                    <th className="py-3 px-4">Amount (৳)</th>
-                    <th className="py-3 px-4">Narration / Note</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {journalEntries.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="py-12 text-center text-slate-400">
-                        No journal vouchers recorded yet. Click "+ New Journal Voucher" to create one.
-                      </td>
-                    </tr>
-                  ) : (
-                    journalEntries.map(j => (
-                      <tr key={j.id} className="hover:bg-slate-50/80 transition">
-                        <td className="py-3.5 px-4">
-                          <div className="font-bold text-slate-900 font-mono">{j.voucherNo}</div>
-                          <div className="text-[11px] text-slate-500">{j.date} • Ref: {j.referenceNo || 'N/A'}</div>
-                        </td>
-
-                        <td className="py-3.5 px-4">
-                          <div className="font-semibold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100 inline-block">
-                            Dr: {j.debitAccountName}
-                          </div>
-                        </td>
-
-                        <td className="py-3.5 px-4">
-                          <div className="font-semibold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-100 inline-block">
-                            Cr: {j.creditAccountName}
-                          </div>
-                        </td>
-
-                        <td className="py-3.5 px-4">
-                          <span className="font-extrabold text-slate-900 text-sm font-mono">
-                            ৳{j.amount.toLocaleString()}
-                          </span>
-                        </td>
-
-                        <td className="py-3.5 px-4 text-slate-600 max-w-xs truncate">
-                          {j.narration}
-                        </td>
-
-                        <td className="py-3.5 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              onClick={() => setPrintingJvEntry(j)}
-                              className="p-1 text-slate-500 hover:text-indigo-600 rounded hover:bg-slate-100 cursor-pointer"
-                              title="Print Voucher"
-                            >
-                              <Printer className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleOpenEditJv(j)}
-                              className="p-1 text-slate-500 hover:text-emerald-600 rounded hover:bg-slate-100 cursor-pointer"
-                              title="Edit Voucher"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (confirm(`Are you sure you want to delete Voucher ${j.voucherNo}?`)) {
-                                  deleteJournalEntry(j.id);
-                                }
-                              }}
-                              className="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-slate-100 cursor-pointer"
-                              title="Delete Voucher"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ================= MODAL: NEW / EDIT JOURNAL VOUCHER ================= */}
       {isJvModalOpen && (
         <div className="fixed inset-0 bg-slate-950/70 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
@@ -1141,8 +1080,126 @@ export const JournalEntryView: React.FC = () => {
         </div>
       )}
 
+      {/* ================= MODAL: OWNER'S CAPITAL INVESTMENT (RECORD INCOME) ================= */}
+      {isCapitalModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/70 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-extrabold text-slate-900 text-base">Record Owner's Capital Investment</h3>
+              </div>
+              <button onClick={() => setIsCapitalModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCapital} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Deposit / Receiving Account (Dr. Asset) *
+                </label>
+                <select
+                  value={capitalForm.depositAccountId}
+                  onChange={e => setCapitalForm({ ...capitalForm, depositAccountId: e.target.value })}
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-900"
+                >
+                  {coa.filter(c => c.type === 'ASSET').map(c => (
+                    <option key={c.id} value={c.id}>
+                      [{c.code}] {c.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-[10px] text-slate-500 mt-0.5 block">
+                  Select Cash in Hand or Bank Account to increase liquid balance
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Owner Equity & Capital Head (Cr. Equity) *
+                </label>
+                <select
+                  value={capitalForm.equityAccountId}
+                  onChange={e => setCapitalForm({ ...capitalForm, equityAccountId: e.target.value })}
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-900"
+                >
+                  {coa.filter(c => c.type === 'EQUITY').map(c => (
+                    <option key={c.id} value={c.id}>
+                      [{c.code}] {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Investment Amount (৳) *</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={capitalForm.amount}
+                    onChange={e => setCapitalForm({ ...capitalForm, amount: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-black font-mono text-emerald-700"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={capitalForm.date}
+                    onChange={e => setCapitalForm({ ...capitalForm, date: e.target.value })}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Reference / Cheque No</label>
+                <input
+                  type="text"
+                  value={capitalForm.referenceNo}
+                  onChange={e => setCapitalForm({ ...capitalForm, referenceNo: e.target.value })}
+                  placeholder="e.g. CAP-001 / Cheque #"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Narration / Note</label>
+                <input
+                  type="text"
+                  value={capitalForm.narration}
+                  onChange={e => setCapitalForm({ ...capitalForm, narration: e.target.value })}
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsCapitalModalOpen(false)}
+                  className="px-4 py-2 bg-slate-100 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-emerald-600 text-white font-extrabold text-xs rounded-xl hover:bg-emerald-700 shadow-md shadow-emerald-500/20 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Check className="w-4 h-4" /> Save Capital Investment
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* ================= MODAL: RECORD QUICK EXPENSE ================= */}
-      {isRecordExpenseOpen && (
+      {isExpenseModalOpen && (
         <div className="fixed inset-0 bg-slate-950/70 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -1150,17 +1207,17 @@ export const JournalEntryView: React.FC = () => {
                 <ArrowDownRight className="w-5 h-5 text-rose-600" />
                 <h3 className="font-extrabold text-slate-900 text-base">Record Operating Expense</h3>
               </div>
-              <button onClick={() => setIsRecordExpenseOpen(false)} className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer">
+              <button onClick={() => setIsExpenseModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveQuickExpense} className="space-y-3.5">
+            <form onSubmit={handleSaveExpense} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Expense Head *</label>
                 <select
-                  value={quickExpenseHead}
-                  onChange={e => setQuickExpenseHead(e.target.value)}
+                  value={expenseForm.head}
+                  onChange={e => setExpenseForm({ ...expenseForm, head: e.target.value })}
                   className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-900"
                 >
                   {expenseHeadsList.map((h, i) => (
@@ -1169,23 +1226,36 @@ export const JournalEntryView: React.FC = () => {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Amount (৳) *</label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  value={quickExpenseAmount}
-                  onChange={e => setQuickExpenseAmount(parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-black font-mono text-rose-700"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Amount (৳) *</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={expenseForm.amount}
+                    onChange={e => setExpenseForm({ ...expenseForm, amount: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-black font-mono text-rose-700"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={expenseForm.date}
+                    onChange={e => setExpenseForm({ ...expenseForm, date: e.target.value })}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                  />
+                </div>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Payment Method *</label>
                 <select
-                  value={quickExpenseMethod}
-                  onChange={e => setQuickExpenseMethod(e.target.value)}
+                  value={expenseForm.paymentMethod}
+                  onChange={e => setExpenseForm({ ...expenseForm, paymentMethod: e.target.value })}
                   className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-900"
                 >
                   <option value="Cash in Hand">Cash in Hand</option>
@@ -1200,8 +1270,8 @@ export const JournalEntryView: React.FC = () => {
                 <label className="block text-xs font-bold text-slate-700 mb-1">Note / Description</label>
                 <input
                   type="text"
-                  value={quickExpenseNote}
-                  onChange={e => setQuickExpenseNote(e.target.value)}
+                  value={expenseForm.note}
+                  onChange={e => setExpenseForm({ ...expenseForm, note: e.target.value })}
                   placeholder="e.g. November electricity bill"
                   className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
                 />
@@ -1210,7 +1280,7 @@ export const JournalEntryView: React.FC = () => {
               <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setIsRecordExpenseOpen(false)}
+                  onClick={() => setIsExpenseModalOpen(false)}
                   className="px-4 py-2 bg-slate-100 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
                 >
                   Cancel
@@ -1226,92 +1296,6 @@ export const JournalEntryView: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* ================= MODAL: RECORD QUICK INCOME ================= */}
-      {isRecordIncomeOpen && (
-        <div className="fixed inset-0 bg-slate-950/70 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <ArrowUpRight className="w-5 h-5 text-emerald-600" />
-                <h3 className="font-extrabold text-slate-900 text-base">Record Capital / Direct Income</h3>
-              </div>
-              <button onClick={() => setIsRecordIncomeOpen(false)} className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveQuickIncome} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Income Purpose / Head *</label>
-                <input
-                  type="text"
-                  required
-                  value={quickIncomeHead}
-                  onChange={e => setQuickIncomeHead(e.target.value)}
-                  placeholder="e.g. Owner Capital Investment"
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-900"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Amount (৳) *</label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  value={quickIncomeAmount}
-                  onChange={e => setQuickIncomeAmount(parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-black font-mono text-emerald-700"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Deposit To Channel *</label>
-                <select
-                  value={quickIncomeMethod}
-                  onChange={e => setQuickIncomeMethod(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-900"
-                >
-                  <option value="Cash in Hand">Cash in Hand</option>
-                  <option value="Bank Account">Bank Account</option>
-                  <option value="bKash Merchant">bKash Merchant</option>
-                  <option value="Nagad Merchant">Nagad Merchant</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Reference / Note</label>
-                <input
-                  type="text"
-                  value={quickIncomeNote}
-                  onChange={e => setQuickIncomeNote(e.target.value)}
-                  placeholder="e.g. Owner direct investment"
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
-                />
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsRecordIncomeOpen(false)}
-                  className="px-4 py-2 bg-slate-100 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-emerald-600 text-white font-extrabold text-xs rounded-xl hover:bg-emerald-700 shadow-md shadow-emerald-500/20 flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Check className="w-4 h-4" /> Save Income
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-
 
       {/* ================= MODAL: PRINTABLE JV VOUCHER SLIP ================= */}
       {printingJvEntry && (
