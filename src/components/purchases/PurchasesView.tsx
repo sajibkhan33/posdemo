@@ -281,15 +281,18 @@ export const PurchasesView: React.FC = () => {
       return;
     }
 
+    const isPaid = voucherPaymentType !== 'CREDIT';
+    const payMethodName = isPaid ? (voucherPaymentType === 'CASH' ? 'Cash in Hand' : voucherPaymentType) : undefined;
     const newVoucher: PurchaseVoucher = {
       id: Date.now(),
       date: voucherDate,
       vendor: voucherVendor,
       billNo: voucherBillNo.trim() || ('BILL-' + Date.now().toString().slice(-4)),
       paymentType: voucherPaymentType,
+      paymentMethod: payMethodName,
       status: voucherStatus,
       total: totalVoucherAmount,
-      paid: voucherPaymentType === 'CASH' ? totalVoucherAmount : 0,
+      paid: isPaid ? totalVoucherAmount : 0,
       items: JSON.parse(JSON.stringify(voucherItems))
     };
 
@@ -1086,7 +1089,7 @@ export const PurchasesView: React.FC = () => {
                           }`}>
                             {voucher.paymentType === 'CREDIT' 
                               ? (due === 0 ? 'Credit (Settled)' : 'Credit (Due)') 
-                              : 'Cash Paid'}
+                              : (voucher.paymentMethod || voucher.paymentType || 'Cash Paid')}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-center">
@@ -2003,15 +2006,21 @@ export const PurchasesView: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Payment Type *</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Payment Method / Type *</label>
                   <select
                     value={voucherPaymentType}
                     onChange={e => setVoucherPaymentType(e.target.value as any)}
                     className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900"
                   >
                     <option value="CREDIT">Credit (Accounts Due)</option>
-                    <option value="CASH">Cash Paid (Immediate)</option>
-                    <option value="BANK">Bank / Digital Paid</option>
+                    {activeFundMethods.map(m => {
+                      const bal = getMethodLiveBalance(m);
+                      return (
+                        <option key={m.id} value={m.name}>
+                          {m.name} (Available: ৳{bal.toLocaleString()})
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               </div>
@@ -2418,7 +2427,14 @@ export const PurchasesView: React.FC = () => {
                     className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900"
                   >
                     <option value="CREDIT">Credit (Add to Vendor Payable Due)</option>
-                    <option value="CASH">Cash Paid</option>
+                    {activeFundMethods.map(m => {
+                      const bal = getMethodLiveBalance(m);
+                      return (
+                        <option key={m.id} value={m.name}>
+                          {m.name} (Available: ৳{bal.toLocaleString()})
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               </div>

@@ -367,7 +367,7 @@ export interface PurchaseItem {
   total: number;
 }
 
-export type PurchasePaymentType = 'CREDIT' | 'CASH';
+export type PurchasePaymentType = 'CREDIT' | 'CASH' | string;
 export type PurchaseStatus = 'DRAFT' | 'FINAL';
 
 export interface PurchaseVoucher {
@@ -376,6 +376,7 @@ export interface PurchaseVoucher {
   vendor: string;
   billNo: string;
   paymentType: PurchasePaymentType;
+  paymentMethod?: string;
   items: PurchaseItem[];
   total: number;
   paid?: number;

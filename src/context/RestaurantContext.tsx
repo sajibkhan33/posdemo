@@ -3290,8 +3290,14 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const bkashExpenses = data.expenses.filter(e => isExpenseBkash(e.paymentMethod)).reduce((sum, e) => sum + (e.amount || 0), 0);
   const nagadExpenses = data.expenses.filter(e => isExpenseNagad(e.paymentMethod)).reduce((sum, e) => sum + (e.amount || 0), 0);
 
+  const paidCashBillNos = new Set(
+    (data.payments || [])
+      .filter(p => isCashMethod(p.method))
+      .map(p => p.billNo?.trim().toLowerCase())
+      .filter(Boolean)
+  );
   const totalCashPurchases = data.purchases
-    .filter(p => p.status !== 'DRAFT' && p.paymentType === 'CASH')
+    .filter(p => p.status !== 'DRAFT' && p.paymentType === 'CASH' && (!p.billNo || !paidCashBillNos.has(p.billNo.trim().toLowerCase())))
     .reduce((sum, p) => sum + (p.total || 0), 0);
   const totalCashDueCollected = activeSalesList.reduce((sum, s) => sum + (s.dueCollected || 0), 0);
 
@@ -6804,9 +6810,32 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         });
       }
 
+      // Auto-create VendorPayment if direct bill is marked as paid immediately
+      let updatedPayments = prev.payments || [];
+      const isPaidImmediately = voucher.paymentType && voucher.paymentType !== 'CREDIT';
+      if (isPaidImmediately && voucher.status === 'FINAL' && voucher.total > 0) {
+        const hasPayment = updatedPayments.some(
+          p => p.billNo && voucher.billNo && p.billNo.trim().toLowerCase() === voucher.billNo.trim().toLowerCase()
+        );
+        if (!hasPayment) {
+          const payMethodName = voucher.paymentMethod || (voucher.paymentType === 'CASH' ? 'Cash in Hand' : voucher.paymentType);
+          const newPayment: VendorPayment = {
+            id: Date.now() + 1,
+            date: voucher.date,
+            vendor: voucher.vendor,
+            billNo: voucher.billNo,
+            amount: voucher.paid || voucher.total,
+            method: payMethodName,
+            note: `Payment for Purchase Bill #${voucher.billNo} (Paid) - Supplier: ${voucher.vendor}`
+          };
+          updatedPayments = [newPayment, ...updatedPayments];
+        }
+      }
+
       return {
         ...prev,
         purchases: updatedPurchases,
+        payments: updatedPayments,
         inventory: updatedInventory,
         masterItems: updatedMasterItems
       };
@@ -6894,16 +6923,35 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const generatedBillNo = billNo.trim() || (`INV-${Date.now().toString().slice(-4)}`);
 
       // 1. Create Purchase Voucher (Bill)
+      const isPaidImmediately = paymentType && paymentType !== 'CREDIT';
+      const payMethodName = isPaidImmediately ? (paymentType === 'CASH' ? 'Cash in Hand' : paymentType) : undefined;
       const newVoucher: PurchaseVoucher = {
         id: Date.now(),
         date: dateStr,
         vendor: targetPO.vendor,
         billNo: generatedBillNo,
         paymentType: paymentType || 'CREDIT',
+        paymentMethod: payMethodName,
         status: 'FINAL',
         total: totalReceivedVal,
+        paid: isPaidImmediately ? totalReceivedVal : 0,
         items: JSON.parse(JSON.stringify(receivedItems))
       };
+
+      // 1b. Auto-create VendorPayment if paid immediately
+      let updatedPayments = prev.payments || [];
+      if (isPaidImmediately && totalReceivedVal > 0) {
+        const newPayment: VendorPayment = {
+          id: Date.now() + 1,
+          date: dateStr,
+          vendor: targetPO.vendor,
+          billNo: generatedBillNo,
+          amount: totalReceivedVal,
+          method: payMethodName || 'Cash in Hand',
+          note: `Payment for Purchase Order ${targetPO.poNo} (Paid) - Supplier: ${targetPO.vendor}`
+        };
+        updatedPayments = [newPayment, ...updatedPayments];
+      }
 
       // 2. Update Stock Inventory Valuation Rate (Do not add purchase quantity to opening stock)
       const invMap = new Map<number, StockInventoryRecord>((prev.inventory || []).map(i => [i.id, { ...i }]));
@@ -6977,6 +7025,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return {
         ...prev,
         purchases: [newVoucher, ...prev.purchases],
+        payments: updatedPayments,
         inventory: Array.from(invMap.values()),
         purchaseOrders: updatedPOs,
         masterItems: updatedMasterItems
