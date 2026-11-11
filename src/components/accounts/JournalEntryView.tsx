@@ -35,7 +35,7 @@ import {
   Receipt
 } from 'lucide-react';
 
-type AccountingTab = 'financial-ledger' | 'coa' | 'expense-heads' | 'journal-vouchers';
+type AccountingTab = 'financial-ledger' | 'journal-vouchers';
 type LedgerTypeFilter = 'ALL' | 'PAYMENT' | 'EXPENSE' | 'INCOME' | 'JOURNAL';
 type DatePreset = 'ALL' | 'TODAY' | '7DAYS' | 'MONTH' | 'CUSTOM';
 
@@ -61,16 +61,11 @@ export const JournalEntryView: React.FC = () => {
     saveExpense,
     deleteExpense,
     deleteVendorPayment,
-    addAccountHead,
-    editAccountHead,
-    deleteAccountHead,
-    getLiveAccountBalance,
     cashDrawerBalance,
     bankTransferBalance,
     bkashMerchantBalance,
     nagadMerchantBalance,
     pettyCashBalance,
-    metrics,
     language 
   } = useRestaurant();
 
@@ -92,8 +87,6 @@ export const JournalEntryView: React.FC = () => {
 
   const [isRecordExpenseOpen, setIsRecordExpenseOpen] = useState(false);
   const [isRecordIncomeOpen, setIsRecordIncomeOpen] = useState(false);
-  const [isAddCoaOpen, setIsAddCoaOpen] = useState(false);
-  const [editingCoa, setEditingCoa] = useState<AccountHead | null>(null);
 
   const coa = useMemo(() => {
     return [...(data.chartOfAccounts || [])].sort((a, b) =>
@@ -421,84 +414,7 @@ export const JournalEntryView: React.FC = () => {
     setIsRecordIncomeOpen(false);
   };
 
-  // COA Tab State & Handlers
-  const [coaSearch, setCoaSearch] = useState('');
-  const [coaTypeFilter, setCoaTypeFilter] = useState<'ALL' | AccountType>('ALL');
-
-  const filteredCoa = useMemo(() => {
-    return coa.filter(item => {
-      if (coaTypeFilter !== 'ALL' && item.type !== coaTypeFilter) return false;
-      if (coaSearch.trim()) {
-        const q = coaSearch.toLowerCase();
-        return item.code.toLowerCase().includes(q) ||
-          item.name.toLowerCase().includes(q) ||
-          (item.category || '').toLowerCase().includes(q);
-      }
-      return true;
-    });
-  }, [coa, coaSearch, coaTypeFilter]);
-
-  const [coaForm, setCoaForm] = useState({
-    code: '1070',
-    name: '',
-    type: 'ASSET' as AccountType,
-    category: 'Current Assets',
-    balance: 0
-  });
-
-  const handleOpenAddCoa = () => {
-    setEditingCoa(null);
-    setCoaForm({
-      code: getNextAccountCode(coa, 'ASSET'),
-      name: '',
-      type: 'ASSET',
-      category: 'Current Assets',
-      balance: 0
-    });
-    setIsAddCoaOpen(true);
-  };
-
-  const handleOpenEditCoa = (a: AccountHead) => {
-    setEditingCoa(a);
-    setCoaForm({
-      code: a.code,
-      name: a.name,
-      type: a.type,
-      category: a.category || '',
-      balance: a.balance || 0
-    });
-    setIsAddCoaOpen(true);
-  };
-
-  const handleSaveCoa = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!coaForm.name.trim()) {
-      alert('Please enter an account head title.');
-      return;
-    }
-
-    if (editingCoa) {
-      editAccountHead(editingCoa.id, {
-        code: coaForm.code.trim(),
-        name: coaForm.name.trim(),
-        type: coaForm.type,
-        category: coaForm.category,
-        balance: Number(coaForm.balance) || 0
-      });
-    } else {
-      addAccountHead({
-        id: coaForm.code.trim() || `ACC-${Date.now().toString().slice(-4)}`,
-        code: coaForm.code.trim(),
-        name: coaForm.name.trim(),
-        type: coaForm.type,
-        category: coaForm.category,
-        balance: Number(coaForm.balance) || 0
-      });
-    }
-    setIsAddCoaOpen(false);
-  };
-
-  // Expense Heads Tab
+  // Expense Heads for Quick Expense Modal
   const expenseHeadsList = (data.expenseHeads || []).sort((a, b) => a.localeCompare(b));
 
   return (
@@ -663,36 +579,6 @@ export const JournalEntryView: React.FC = () => {
           <span>Financial Ledger</span>
           <span className="text-[10px] bg-amber-400/20 text-amber-300 font-bold px-1.5 py-0.5 rounded-full">
             {unifiedLedgerEntries.length}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveSubTab('coa')}
-          className={`px-4 py-2.5 rounded-xl font-extrabold text-xs transition flex items-center gap-2 cursor-pointer whitespace-nowrap ${
-            activeSubTab === 'coa'
-              ? 'bg-slate-900 text-white shadow-md'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-          }`}
-        >
-          <Layers className="w-4 h-4 text-emerald-500" />
-          <span>Chart of Accounts</span>
-          <span className="text-[10px] bg-slate-200 text-slate-700 font-bold px-1.5 py-0.5 rounded-full">
-            {coa.length}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveSubTab('expense-heads')}
-          className={`px-4 py-2.5 rounded-xl font-extrabold text-xs transition flex items-center gap-2 cursor-pointer whitespace-nowrap ${
-            activeSubTab === 'expense-heads'
-              ? 'bg-slate-900 text-white shadow-md'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-          }`}
-        >
-          <Tag className="w-4 h-4 text-blue-500" />
-          <span>Expense Heads</span>
-          <span className="text-[10px] bg-slate-200 text-slate-700 font-bold px-1.5 py-0.5 rounded-full">
-            {expenseHeadsList.length}
           </span>
         </button>
 
@@ -988,199 +874,7 @@ export const JournalEntryView: React.FC = () => {
         </div>
       )}
 
-      {/* ----------------- TAB 2: CHART OF ACCOUNTS (COA) ----------------- */}
-      {activeSubTab === 'coa' && (
-        <div className="space-y-4">
-          {/* COA Live KPI Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            <div className="bg-white p-3.5 rounded-xl border border-slate-200">
-              <span className="text-[10px] font-bold text-slate-500 block uppercase">Live Total Assets</span>
-              <span className="text-lg font-black text-slate-900 mt-0.5 block">
-                ৳{(metrics?.liveTotalAssets || 0).toLocaleString()}
-              </span>
-              <span className="text-[9px] text-slate-400">Cash, Bank, Stock & Dues</span>
-            </div>
-
-            <div className="bg-white p-3.5 rounded-xl border border-slate-200">
-              <span className="text-[10px] font-bold text-slate-500 block uppercase">Live Total Liabilities</span>
-              <span className="text-lg font-black text-amber-700 mt-0.5 block">
-                ৳{(metrics?.liveTotalLiabilities || 0).toLocaleString()}
-              </span>
-              <span className="text-[9px] text-slate-400">Vendor Dues & Advances</span>
-            </div>
-
-            <div className="bg-white p-3.5 rounded-xl border border-purple-200 bg-purple-50/20">
-              <span className="text-[10px] font-bold text-purple-700 block uppercase">Live Total Equity</span>
-              <span className="text-lg font-black text-purple-900 mt-0.5 block">
-                ৳{(metrics?.liveTotalEquity || 0).toLocaleString()}
-              </span>
-              <span className="text-[9px] text-purple-600">Owner Capital & Profit</span>
-            </div>
-
-            <div className="bg-white p-3.5 rounded-xl border border-slate-200">
-              <span className="text-[10px] font-bold text-slate-500 block uppercase">Live Revenue / Sales</span>
-              <span className="text-lg font-black text-emerald-700 mt-0.5 block">
-                ৳{(metrics?.totalSales || 0).toLocaleString()}
-              </span>
-              <span className="text-[9px] text-slate-400">Gross Sales</span>
-            </div>
-
-            <div className="bg-white p-3.5 rounded-xl border border-slate-200">
-              <span className="text-[10px] font-bold text-slate-500 block uppercase">Live Total Expenses</span>
-              <span className="text-lg font-black text-rose-700 mt-0.5 block">
-                ৳{(metrics?.totalExpenses || 0).toLocaleString()}
-              </span>
-              <span className="text-[9px] text-slate-400">COGS + OpEx</span>
-            </div>
-          </div>
-
-          {/* COA Search & Table */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-4">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-1.5">
-                {(['ALL', 'ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE'] as const).map(type => (
-                  <button
-                    key={type}
-                    onClick={() => setCoaTypeFilter(type)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                      coaTypeFilter === type
-                        ? 'bg-slate-900 text-amber-400 shadow-xs'
-                        : 'bg-slate-100 text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    {type === 'ALL' ? 'All Types' : type}
-                  </button>
-                ))}
-              </div>
-
-              <button
-                onClick={handleOpenAddCoa}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow-xs transition cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ Add New Account Head</span>
-              </button>
-            </div>
-
-            <div className="overflow-x-auto border border-slate-200 rounded-xl">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold uppercase tracking-wider text-[11px]">
-                  <tr>
-                    <th className="py-3 px-4">Account Code</th>
-                    <th className="py-3 px-4">Account Title / Name</th>
-                    <th className="py-3 px-3">Type</th>
-                    <th className="py-3 px-3">Classification</th>
-                    <th className="py-3 px-4 text-right">Opening (৳)</th>
-                    <th className="py-3 px-4 text-right">Live Current Balance (৳)</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredCoa.map(a => {
-                    const liveBal = getLiveAccountBalance(a);
-                    return (
-                      <tr key={a.id} className="hover:bg-slate-50/80 transition">
-                        <td className="py-3 px-4 font-mono font-bold text-slate-900">{a.code}</td>
-                        <td className="py-3 px-4 font-extrabold text-slate-900">
-                          {a.name}
-                          {a.systemRole && (
-                            <span className="ml-2 text-[10px] bg-emerald-50 text-emerald-800 font-semibold px-1.5 py-0.2 rounded border border-emerald-200">
-                              {a.systemRole}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-3 px-3">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
-                            a.type === 'ASSET' ? 'bg-blue-50 text-blue-800 border border-blue-200' :
-                            a.type === 'LIABILITY' ? 'bg-amber-50 text-amber-800 border border-amber-200' :
-                            a.type === 'EQUITY' ? 'bg-purple-50 text-purple-800 border border-purple-200' :
-                            a.type === 'REVENUE' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' :
-                            'bg-rose-50 text-rose-800 border border-rose-200'
-                          }`}>
-                            {a.type}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 text-slate-500 font-medium">{a.category || '-'}</td>
-                        <td className="py-3 px-4 text-right font-mono font-bold text-slate-600">
-                          ৳{(a.balance || 0).toLocaleString()}
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono font-black text-slate-900 text-sm">
-                          ৳{liveBal.toLocaleString()}
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              onClick={() => handleOpenEditCoa(a)}
-                              className="p-1 text-slate-500 hover:text-slate-800 rounded hover:bg-slate-100 cursor-pointer"
-                              title="Edit Head"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (confirm(`Delete account head "${a.code} - ${a.name}"?`)) {
-                                  deleteAccountHead(a.id);
-                                }
-                              }}
-                              className="p-1 text-rose-500 hover:text-rose-700 rounded hover:bg-rose-50 cursor-pointer"
-                              title="Delete Head"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ----------------- TAB 3: EXPENSE HEADS ----------------- */}
-      {activeSubTab === 'expense-heads' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-            <div>
-              <h3 className="font-extrabold text-slate-900 text-base">Configured Expense Heads</h3>
-              <p className="text-xs text-slate-500">
-                Operating expense categories mapped to Chart of Accounts expense heads
-              </p>
-            </div>
-            <button
-              onClick={() => setIsRecordExpenseOpen(true)}
-              className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow-xs transition cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>+ Record Expense</span>
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {expenseHeadsList.map((head, idx) => (
-              <div key={idx} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 hover:border-slate-300 transition flex items-center justify-between">
-                <div>
-                  <div className="font-extrabold text-xs text-slate-900">{head}</div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">Operating Expense Head</div>
-                </div>
-                <button
-                  onClick={() => {
-                    setQuickExpenseHead(head);
-                    setIsRecordExpenseOpen(true);
-                  }}
-                  className="px-2 py-1 bg-white border border-slate-300 text-slate-700 hover:bg-rose-50 hover:text-rose-700 rounded text-[10px] font-bold transition cursor-pointer"
-                >
-                  Pay
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ----------------- TAB 4: JOURNAL VOUCHERS (JV) ----------------- */}
+      {/* ----------------- TAB 2: JOURNAL VOUCHERS (JV) ----------------- */}
       {activeSubTab === 'journal-vouchers' && (
         <div className="space-y-4">
           {/* JV Top KPI Cards */}
@@ -1617,114 +1311,7 @@ export const JournalEntryView: React.FC = () => {
         </div>
       )}
 
-      {/* ================= MODAL: ADD / EDIT ACCOUNT HEAD (COA) ================= */}
-      {isAddCoaOpen && (
-        <div className="fixed inset-0 bg-slate-950/70 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <Layers className="w-5 h-5 text-emerald-600" />
-                <h3 className="font-extrabold text-slate-900 text-base">
-                  {editingCoa ? 'Edit Account Head' : 'Add New Account Head'}
-                </h3>
-              </div>
-              <button onClick={() => setIsAddCoaOpen(false)} className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <form onSubmit={handleSaveCoa} className="space-y-3.5">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Account Code *</label>
-                  <input
-                    type="text"
-                    required
-                    value={coaForm.code}
-                    onChange={e => setCoaForm({ ...coaForm, code: e.target.value })}
-                    className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Account Type *</label>
-                  <select
-                    value={coaForm.type}
-                    onChange={e => {
-                      const newType = e.target.value as AccountType;
-                      setCoaForm({
-                        ...coaForm,
-                        type: newType,
-                        code: editingCoa ? coaForm.code : getNextAccountCode(coa, newType),
-                        category: newType === 'ASSET' ? 'Current Assets' :
-                          newType === 'LIABILITY' ? 'Current Liabilities' :
-                          newType === 'EQUITY' ? 'Equity & Capital' :
-                          newType === 'REVENUE' ? 'Sales Revenue' : 'Operating Expenses'
-                      });
-                    }}
-                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-900"
-                  >
-                    <option value="ASSET">ASSET (1000)</option>
-                    <option value="LIABILITY">LIABILITY (2000)</option>
-                    <option value="EQUITY">EQUITY (3000)</option>
-                    <option value="REVENUE">REVENUE (4000)</option>
-                    <option value="EXPENSE">EXPENSE (5000/6000)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Account Title / Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={coaForm.name}
-                  onChange={e => setCoaForm({ ...coaForm, name: e.target.value })}
-                  placeholder="e.g. Southeast Bank A/C"
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-900"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Category / Classification</label>
-                <input
-                  type="text"
-                  value={coaForm.category}
-                  onChange={e => setCoaForm({ ...coaForm, category: e.target.value })}
-                  placeholder="e.g. Bank Accounts"
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Opening Balance (৳)</label>
-                <input
-                  type="number"
-                  value={coaForm.balance}
-                  onChange={e => setCoaForm({ ...coaForm, balance: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold"
-                />
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsAddCoaOpen(false)}
-                  className="px-4 py-2 bg-slate-100 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-emerald-600 text-white font-extrabold text-xs rounded-xl hover:bg-emerald-700 shadow-md shadow-emerald-500/20 flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Check className="w-4 h-4" /> Save Account Head
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* ================= MODAL: PRINTABLE JV VOUCHER SLIP ================= */}
       {printingJvEntry && (
