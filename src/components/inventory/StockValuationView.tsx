@@ -252,6 +252,16 @@ export const StockValuationView: React.FC = () => {
     }
   };
 
+  // Format currency without truncation, preserving up to 2 decimal places for accurate BOM costs
+  const formatVal = (val: number | undefined | null) => {
+    if (val === undefined || val === null || isNaN(val)) return '0';
+    const rounded = Math.round((val + Number.EPSILON) * 100) / 100;
+    return rounded.toLocaleString(undefined, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    });
+  };
+
   // Main Stock Calculation Engine with Date Range Filter support
   const stockRows = useMemo(() => {
     return data.masterItems.map(item => {
@@ -916,19 +926,19 @@ export const StockValuationView: React.FC = () => {
       `"${r.item.category}"`,
       r.item.uom,
       r.openQty.toFixed(2),
-      Math.round(r.openValuation),
+      (Math.round((r.openValuation + Number.EPSILON) * 100) / 100).toFixed(2),
       r.totalReceivedQty.toFixed(2),
-      Math.round(r.totalReceivedVal),
-      Math.round(r.periodAvgInwardRate),
+      (Math.round((r.totalReceivedVal + Number.EPSILON) * 100) / 100).toFixed(2),
+      (Math.round((r.periodAvgInwardRate + Number.EPSILON) * 100) / 100).toFixed(2),
       r.autoBomUsedQty.toFixed(2),
-      Math.round(r.bomCostVal),
+      (Math.round((r.bomCostVal + Number.EPSILON) * 100) / 100).toFixed(2),
       r.manualUsedQty.toFixed(2),
-      Math.round(r.manualUsedVal),
+      (Math.round((r.manualUsedVal + Number.EPSILON) * 100) / 100).toFixed(2),
       r.wastageQty.toFixed(2),
-      Math.round(r.wastageVal),
+      (Math.round((r.wastageVal + Number.EPSILON) * 100) / 100).toFixed(2),
       r.closingQty.toFixed(2),
-      Math.round(r.valuationRate),
-      Math.round(r.closingValuation),
+      (Math.round((r.valuationRate + Number.EPSILON) * 100) / 100).toFixed(2),
+      (Math.round((r.closingValuation + Number.EPSILON) * 100) / 100).toFixed(2),
       r.status
     ]);
 
@@ -1002,7 +1012,7 @@ export const StockValuationView: React.FC = () => {
               <Layers className="w-4 h-4 text-emerald-600" />
             </div>
             <div className="text-2xl font-black text-emerald-700 mt-2 font-mono">
-              ৳ {Math.round(summaryMetrics.totalOpeningVal).toLocaleString()}
+              ৳ {formatVal(summaryMetrics.totalOpeningVal)}
             </div>
           </div>
           <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
@@ -1019,7 +1029,7 @@ export const StockValuationView: React.FC = () => {
               <ArrowDownRight className="w-4 h-4 text-blue-600" />
             </div>
             <div className="text-2xl font-black text-blue-700 mt-2 font-mono">
-              ৳ {Math.round(summaryMetrics.totalPurchasesVal).toLocaleString()}
+              ৳ {formatVal(summaryMetrics.totalPurchasesVal)}
             </div>
           </div>
           <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
@@ -1036,7 +1046,7 @@ export const StockValuationView: React.FC = () => {
               <ArrowUpRight className="w-4 h-4 text-amber-600" />
             </div>
             <div className="text-2xl font-black text-amber-600 mt-2 font-mono">
-              ৳ {Math.round(summaryMetrics.totalBomVal).toLocaleString()}
+              ৳ {formatVal(summaryMetrics.totalBomVal)}
             </div>
           </div>
           <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
@@ -1053,7 +1063,7 @@ export const StockValuationView: React.FC = () => {
               <UtensilsCrossed className="w-4 h-4 text-orange-600" />
             </div>
             <div className="text-2xl font-black text-orange-600 mt-2 font-mono">
-              ৳ {Math.round(summaryMetrics.totalManualUsedVal).toLocaleString()}
+              ৳ {formatVal(summaryMetrics.totalManualUsedVal)}
             </div>
           </div>
           <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
@@ -1070,7 +1080,7 @@ export const StockValuationView: React.FC = () => {
               <AlertTriangle className="w-4 h-4 text-rose-600" />
             </div>
             <div className="text-2xl font-black text-rose-700 mt-2 font-mono">
-              ৳ {Math.round(summaryMetrics.totalWastageVal).toLocaleString()}
+              ৳ {formatVal(summaryMetrics.totalWastageVal)}
             </div>
           </div>
           <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
@@ -1082,14 +1092,14 @@ export const StockValuationView: React.FC = () => {
         </div>
 
         {/* 6. Closing Stock Valuation */}
-        <div className="p-4 rounded-2xl bg-white text-white shadow-xs flex flex-col justify-between">
+        <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wide">
               <span>Closing Stock Valuation</span>
-              <Boxes className="w-4 h-4 text-amber-400" />
+              <Boxes className="w-4 h-4 text-amber-500" />
             </div>
-            <div className="text-2xl font-black text-amber-400 mt-2 font-mono">
-              ৳ {Math.round(summaryMetrics.totalClosingVal).toLocaleString()}
+            <div className="text-2xl font-black text-amber-500 mt-2 font-mono">
+              ৳ {formatVal(summaryMetrics.totalClosingVal)}
             </div>
           </div>
           <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
@@ -1360,7 +1370,7 @@ export const StockValuationView: React.FC = () => {
                             title="Double-click to edit Opening Stock"
                           >
                             <div className="font-bold text-slate-800">{row.openQty.toFixed(2)}</div>
-                            <div className="text-[10px] text-slate-400">৳{Math.round(row.openValuation).toLocaleString()}</div>
+                            <div className="text-[10px] text-slate-400">৳{formatVal(row.openValuation)}</div>
                           </div>
                         )}
                       </td>
@@ -1368,13 +1378,13 @@ export const StockValuationView: React.FC = () => {
                       {/* Inward Purchases (+) */}
                       <td className="py-2.5 px-2.5 text-right font-mono">
                         <div className="font-bold text-blue-600">+{row.totalReceivedQty.toFixed(2)}</div>
-                        <div className="text-[10px] text-blue-500">৳{Math.round(row.totalReceivedVal).toLocaleString()}</div>
+                        <div className="text-[10px] text-blue-500">৳{formatVal(row.totalReceivedVal)}</div>
                       </td>
 
                       {/* POS Recipe Used (-) */}
                       <td className="py-2.5 px-2.5 text-right font-mono">
                         <div className="font-bold text-amber-700">-{row.autoBomUsedQty.toFixed(2)}</div>
-                        <div className="text-[10px] text-amber-600">৳{Math.round(row.bomCostVal).toLocaleString()}</div>
+                        <div className="text-[10px] text-amber-600">৳{formatVal(row.bomCostVal)}</div>
                       </td>
 
                       {/* Manual Used (-) */}
@@ -1406,7 +1416,7 @@ export const StockValuationView: React.FC = () => {
                             title="Double-click to edit Manual Kitchen Used"
                           >
                             <div className="font-bold text-orange-600">-{row.manualUsedQty.toFixed(2)}</div>
-                            <div className="text-[10px] text-orange-500">৳{Math.round(row.manualUsedVal).toLocaleString()}</div>
+                            <div className="text-[10px] text-orange-500">৳{formatVal(row.manualUsedVal)}</div>
                           </div>
                         )}
                       </td>
@@ -1440,7 +1450,7 @@ export const StockValuationView: React.FC = () => {
                             title="Double-click to edit Spoilage / Wastage"
                           >
                             <div className="font-bold text-rose-600">-{row.wastageQty.toFixed(2)}</div>
-                            <div className="text-[10px] text-rose-500">৳{Math.round(row.wastageVal).toLocaleString()}</div>
+                            <div className="text-[10px] text-rose-500">৳{formatVal(row.wastageVal)}</div>
                           </div>
                         )}
                       </td>
@@ -1452,13 +1462,13 @@ export const StockValuationView: React.FC = () => {
 
                       {/* Avg Rate */}
                       <td className="py-2.5 px-2.5 text-right font-mono">
-                        <div className="font-bold text-slate-800 text-xs">৳{Math.round(row.valuationRate)}</div>
+                        <div className="font-bold text-slate-800 text-xs">৳{formatVal(row.valuationRate)}</div>
                       </td>
 
                       {/* Total Stock Value */}
                       <td className="py-2.5 px-3 text-right font-mono">
                         <div className="font-black text-indigo-900 text-xs sm:text-sm">
-                          ৳ {Math.round(row.closingValuation).toLocaleString()}
+                          ৳ {formatVal(row.closingValuation)}
                         </div>
                       </td>
 
@@ -1644,7 +1654,7 @@ export const StockValuationView: React.FC = () => {
                             {entry.balanceQty.toFixed(2)}
                           </td>
                           <td className="py-2.5 px-3 text-right font-mono font-bold text-indigo-900">
-                            ৳ {Math.round(entry.balanceVal).toLocaleString()}
+                            ৳ {formatVal(entry.balanceVal)}
                           </td>
                         </tr>
                       );

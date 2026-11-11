@@ -438,7 +438,7 @@ export const ReportsView: React.FC = () => {
             <Boxes className="w-4 h-4 text-teal-600" />
           </div>
           <div className="text-lg sm:text-2xl font-black text-teal-800 mt-1">
-            ৳{Math.round(metrics.totalClosingStockVal).toLocaleString()}
+            ৳{(Math.round((metrics.totalClosingStockVal + Number.EPSILON) * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
           </div>
           <div className="text-[11px] text-slate-400 mt-0.5 font-medium">
             Physical raw material valuation
