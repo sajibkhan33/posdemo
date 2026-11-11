@@ -1430,29 +1430,37 @@ export const HeadsConfigView: React.FC = () => {
           </div>
 
           {/* Summary Stat Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="p-4 bg-blue-50/70 border border-blue-200 rounded-2xl shadow-xs">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="p-3.5 bg-blue-50/70 border border-blue-200 rounded-2xl shadow-xs">
               <div className="text-[11px] font-bold text-blue-800 uppercase tracking-wide">Live Total Assets</div>
               <div className="text-xl font-black text-blue-950 mt-1">
                 ৳ {chartList.filter(a => a.type === 'ASSET').reduce((sum, a) => sum + getLiveAccountBalance(a), 0).toLocaleString()}
               </div>
-              <div className="text-[10px] text-blue-700 mt-0.5">Cash, Bank, Stock & Receivables</div>
+              <div className="text-[10px] text-blue-700 mt-0.5 truncate">Cash, Bank, Stock & Dues</div>
             </div>
 
-            <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-2xl shadow-xs">
+            <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-2xl shadow-xs">
               <div className="text-[11px] font-bold text-amber-800 uppercase tracking-wide">Live Total Liabilities</div>
               <div className="text-xl font-black text-amber-950 mt-1">
                 ৳ {chartList.filter(a => a.type === 'LIABILITY').reduce((sum, a) => sum + getLiveAccountBalance(a), 0).toLocaleString()}
               </div>
-              <div className="text-[10px] text-amber-700 mt-0.5">Vendor dues & Customer advances</div>
+              <div className="text-[10px] text-amber-700 mt-0.5 truncate">Vendor dues & Advances</div>
             </div>
 
-            <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-2xl shadow-xs">
+            <div className="p-3.5 bg-purple-50/70 border border-purple-200 rounded-2xl shadow-xs">
+              <div className="text-[11px] font-bold text-purple-800 uppercase tracking-wide">Live Total Equity</div>
+              <div className="text-xl font-black text-purple-950 mt-1">
+                ৳ {chartList.filter(a => a.type === 'EQUITY').reduce((sum, a) => sum + getLiveAccountBalance(a), 0).toLocaleString()}
+              </div>
+              <div className="text-[10px] text-purple-700 mt-0.5 truncate">Owner Capital & Profit</div>
+            </div>
+
+            <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-2xl shadow-xs">
               <div className="text-[11px] font-bold text-emerald-800 uppercase tracking-wide">Live Revenue / Sales</div>
               <div className="text-xl font-black text-emerald-950 mt-1">
                 ৳ {metrics.totalSales.toLocaleString()}
               </div>
-              <div className="text-[10px] text-emerald-700 mt-0.5">POS Dine-in & Delivery gross</div>
+              <div className="text-[10px] text-emerald-700 mt-0.5 truncate">POS Dine-in & Delivery</div>
             </div>
 
             {(() => {
@@ -1463,12 +1471,12 @@ export const HeadsConfigView: React.FC = () => {
                 .reduce((sum, a) => sum + getLiveAccountBalance(a), 0);
               const liveOpEx = Math.max(0, liveTotalExpenses - liveCogs);
               return (
-                <div className="p-4 bg-rose-50/70 border border-rose-200 rounded-2xl shadow-xs">
+                <div className="p-3.5 bg-rose-50/70 border border-rose-200 rounded-2xl shadow-xs">
                   <div className="text-[11px] font-bold text-rose-800 uppercase tracking-wide">Live Total Expenses</div>
                   <div className="text-xl font-black text-rose-950 mt-1">
                     ৳ {liveTotalExpenses.toLocaleString()}
                   </div>
-                  <div className="text-[10px] text-rose-700 mt-0.5">
+                  <div className="text-[10px] text-rose-700 mt-0.5 truncate">
                     COGS: ৳{liveCogs.toLocaleString()} | OpEx: ৳{liveOpEx.toLocaleString()}
                   </div>
                 </div>

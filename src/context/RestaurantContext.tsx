@@ -3329,29 +3329,29 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const isCashMethod = (m: string) => {
     const norm = (m || '').toLowerCase().trim();
-    if (norm === 'cash drawer' || norm === 'cash') return true;
+    if (norm === 'cash drawer' || norm === 'cash' || norm.includes('cash') || norm.includes('drawer')) return true;
     const cfg = getMethodConfig(m);
-    return cfg?.type === 'CASH';
+    return cfg?.type === 'CASH' || cfg?.ledgerAccountId === '1010';
   };
   const isBankMethod = (m: string) => {
     const norm = (m || '').toLowerCase().trim();
-    if (norm === 'bank transfer' || norm === 'bank') return true;
+    if (norm === 'bank transfer' || norm === 'bank' || norm.includes('bank') || norm.includes('card') || norm.includes('qr')) return true;
     const cfg = getMethodConfig(m);
-    return cfg?.type === 'BANK' || cfg?.type === 'CARD' || cfg?.type === 'BANGLA_QR';
+    return cfg?.type === 'BANK' || cfg?.type === 'CARD' || cfg?.type === 'BANGLA_QR' || cfg?.ledgerAccountId === '1030';
   };
   const isChequeMethod = (m: string) => {
     const norm = (m || '').toLowerCase().trim();
-    return norm === 'cheque';
+    return norm === 'cheque' || norm.includes('cheque');
   };
   const isBkashMethod = (m: string) => {
     const norm = (m || '').toLowerCase().trim();
-    if (norm === 'bkash merchant' || norm === 'bkash') return true;
+    if (norm === 'bkash merchant' || norm === 'bkash' || norm.includes('bkash')) return true;
     const cfg = getMethodConfig(m);
-    return cfg?.type === 'MFS' && !cfg.name.toLowerCase().includes('nagad');
+    return (cfg?.type === 'MFS' && !cfg.name.toLowerCase().includes('nagad')) || cfg?.ledgerAccountId === '1040';
   };
   const isNagadMethod = (m: string) => {
     const norm = (m || '').toLowerCase().trim();
-    if (norm === 'nagad merchant' || norm === 'nagad') return true;
+    if (norm === 'nagad merchant' || norm === 'nagad' || norm.includes('nagad')) return true;
     const cfg = getMethodConfig(m);
     return cfg?.type === 'MFS' && cfg.name.toLowerCase().includes('nagad');
   };
@@ -3400,12 +3400,30 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const effectiveCashOpening = Math.max(baseCashDrawer, activeShiftFloat);
 
-  const cashDrawerBalance = Math.max(0, effectiveCashOpening + payCash + totalCashDueCollected + advCash - cashExpenses - totalCashPurchases - vendorPayCash);
-  const pettyCashBalance = Math.max(0, basePettyCash - pettyCashExpenses);
-  const bankTransferBalance = Math.max(0, baseBank + payCard + advBank - vendorPayBank - bankExpenses);
-  const chequeBalance = Math.max(0, baseCheque - vendorPayCheque);
-  const bkashMerchantBalance = Math.max(0, baseBkash + payBkash + advBkash - vendorPayBkash - bkashExpenses);
-  const nagadMerchantBalance = Math.max(0, baseNagad + payNagad + advNagad - vendorPayNagad - nagadExpenses);
+  // Cash Journal Effect for active drawer stats
+  const cashJournalEffect = (data.journalEntries || []).reduce((sum, j) => {
+    let delta = 0;
+    if (j.debitAccountId === '1010' || (j.debitAccountName && j.debitAccountName.includes('1010'))) delta += (j.amount || 0);
+    if (j.creditAccountId === '1010' || (j.creditAccountName && j.creditAccountName.includes('1010'))) delta -= (j.amount || 0);
+    return sum + delta;
+  }, 0);
+
+  const rawCashDrawer = effectiveCashOpening + payCash + totalCashDueCollected + advCash - cashExpenses - totalCashPurchases - vendorPayCash;
+  const cashDrawerBalance = rawCashDrawer + cashJournalEffect;
+
+  const rawPettyCash = basePettyCash - pettyCashExpenses;
+  const pettyCashBalance = rawPettyCash;
+
+  const rawBankTransfer = baseBank + payCard + advBank - vendorPayBank - bankExpenses;
+  const bankTransferBalance = rawBankTransfer;
+
+  const chequeBalance = baseCheque - vendorPayCheque;
+
+  const rawBkashMerchant = baseBkash + payBkash + advBkash - vendorPayBkash - bkashExpenses;
+  const bkashMerchantBalance = rawBkashMerchant;
+
+  const rawNagadMerchant = baseNagad + payNagad + advNagad - vendorPayNagad - nagadExpenses;
+  const nagadMerchantBalance = rawNagadMerchant;
 
   const openTables = useMemo(() => {
     return (data.tables || []).filter(t => t.status !== 'free' && (t.cart?.length > 0 || t.status === 'billed' || t.status === 'hold'));
@@ -7733,16 +7751,16 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         return opening + totalClosingStockVal + journalEffect;
 
       case 'CASH':
-        return cashDrawerBalance + journalEffect;
+        return rawCashDrawer + journalEffect;
 
       case 'PETTY_CASH':
-        return pettyCashBalance + journalEffect;
+        return rawPettyCash + journalEffect;
 
       case 'BANK':
-        return bankTransferBalance + journalEffect;
+        return rawBankTransfer + journalEffect;
 
       case 'MOBILE_BANKING':
-        return bkashMerchantBalance + nagadMerchantBalance + journalEffect;
+        return (rawBkashMerchant + rawNagadMerchant) + journalEffect;
 
       case 'ACCOUNTS_RECEIVABLE':
         return totalCustomerDue + journalEffect;
@@ -7840,7 +7858,14 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             const matched = resolveExpenseAccount(e, chartAccounts);
             return matched && (matched.id === acc.id || matched.code === acc.code);
           }).reduce((sum, e) => sum + (e.amount || 0), 0);
-          return opening + assetExpenses + journalEffect;
+          
+          // Deduct vendor payments targeting this asset account
+          const vendorPaymentsForAcc = data.payments.filter(p => {
+            const cfg = getMethodConfig(p.method);
+            return cfg?.ledgerAccountId === acc.code || cfg?.ledgerAccountId === acc.id;
+          }).reduce((sum, p) => sum + (p.amount || 0), 0);
+
+          return opening + assetExpenses - vendorPaymentsForAcc + journalEffect;
         }
         return opening + journalEffect;
     }
