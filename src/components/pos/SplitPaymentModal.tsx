@@ -35,6 +35,7 @@ export const SplitPaymentModal: React.FC = () => {
 
   const [splitAmounts, setSplitAmounts] = useState<Record<string, number>>({});
   const [advanceInputAmt, setAdvanceInputAmt] = useState<number>(0);
+  const [cashNoteMode, setCashNoteMode] = useState<'set' | 'add'>('set');
   const [isCustomCustomerInput, setIsCustomCustomerInput] = useState<boolean>(false);
   const [selectedWaiter, setSelectedWaiter] = useState<string>(
     activeSettlingTable?.waiter && activeSettlingTable.waiter !== 'Staff' && activeSettlingTable.waiter !== 'N/A'
@@ -121,6 +122,38 @@ export const SplitPaymentModal: React.FC = () => {
 
   const creditMethod = paymentMethods.find(m => m.type === 'CREDIT');
   const creditEntered = creditMethod ? (splitAmounts[creditMethod.id] || 0) : 0;
+
+  const cashMethod = paymentMethods.find(m => m.type === 'CASH') || paymentMethods[0];
+
+  const handleCashDenomination = (amt: number) => {
+    if (!cashMethod) return;
+    setSplitAmounts(prev => {
+      const current = Number(prev[cashMethod.id]) || 0;
+      const nextVal = cashNoteMode === 'add' ? current + amt : amt;
+      return {
+        ...prev,
+        [cashMethod.id]: nextVal
+      };
+    });
+  };
+
+  const handleResetCash = () => {
+    if (!cashMethod) return;
+    setSplitAmounts(prev => ({
+      ...prev,
+      [cashMethod.id]: 0
+    }));
+  };
+
+  const handleExactCash = () => {
+    if (!cashMethod) return;
+    const otherSum = paymentMethods.filter(m => m.id !== cashMethod.id).reduce((s, m) => s + (Number(splitAmounts[m.id]) || 0), 0) + advanceInputAmt;
+    const exactNeed = Math.max(0, netTotal - otherSum);
+    setSplitAmounts(prev => ({
+      ...prev,
+      [cashMethod.id]: exactNeed
+    }));
+  };
 
   const handleSettle = (e: React.FormEvent) => {
     e.preventDefault();
@@ -421,6 +454,88 @@ export const SplitPaymentModal: React.FC = () => {
             })}
           </div>
         </div>
+
+        {/* Quick Cash Tender Notes (দ্রুত নগদ নোট শর্টকাট) */}
+        {cashMethod && (
+          <div className="mb-4 p-3 bg-gradient-to-r from-emerald-50/70 via-slate-50 to-emerald-50/70 border border-emerald-200/80 rounded-xl shadow-2xs">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-1.5">
+                <Banknote className="w-4 h-4 text-emerald-700" />
+                <span className="text-xs font-extrabold text-slate-800">Quick Cash Tender (নোট শর্টকাট)</span>
+                <span className="text-[10px] text-emerald-850 bg-emerald-100 font-bold px-1.5 py-0.2 rounded-full border border-emerald-200">
+                  {cashNoteMode === 'set' ? 'নোট সিলেক্ট' : '+ যোগ মোড'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="bg-slate-200 p-0.5 rounded-lg flex items-center text-[10px] font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setCashNoteMode('set')}
+                    className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
+                      cashNoteMode === 'set'
+                        ? 'bg-white text-emerald-900 shadow-2xs font-black'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                    title="ক্লিক করলে সরাসরি এই নোটের টাকা বসবে"
+                  >
+                    Set Note
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCashNoteMode('add')}
+                    className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
+                      cashNoteMode === 'add'
+                        ? 'bg-white text-emerald-900 shadow-2xs font-black'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                    title="ক্লিক করলে আগের টাকার সাথে এই নোট যোগ হবে"
+                  >
+                    + Add
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleExactCash}
+                  className="px-2 py-1 text-[10px] font-black bg-emerald-100 hover:bg-emerald-200 text-emerald-900 rounded-md border border-emerald-300 transition cursor-pointer shadow-2xs"
+                  title="বিল সমপরিমাণ ক্যাশ বসান"
+                >
+                  Exact (৳{netTotal.toLocaleString()})
+                </button>
+                {(Number(splitAmounts[cashMethod.id]) || 0) > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleResetCash}
+                    className="px-2 py-1 text-[10px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-md border border-rose-200 transition cursor-pointer"
+                    title="ক্যাশ ক্লিয়ার করুন"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
+              {[10, 20, 50, 100, 150, 200, 500, 1000].map(amt => {
+                const isSelected = (Number(splitAmounts[cashMethod.id]) || 0) === amt;
+                return (
+                  <button
+                    key={amt}
+                    type="button"
+                    id={`quick-tender-${amt}`}
+                    onClick={() => handleCashDenomination(amt)}
+                    className={`py-2 px-1 rounded-xl text-xs font-black transition cursor-pointer flex flex-col items-center justify-center border shadow-2xs ${
+                      isSelected
+                        ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-400 scale-[1.03]'
+                        : 'bg-white hover:bg-emerald-50 text-slate-800 hover:text-emerald-800 border-slate-300 hover:border-emerald-400 active:scale-95'
+                    }`}
+                  >
+                    <span className="font-mono">{cashNoteMode === 'add' ? `+৳${amt}` : `৳${amt}`}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Multi-Split Payment Form */}
         <form onSubmit={handleSettle} className="space-y-3">
