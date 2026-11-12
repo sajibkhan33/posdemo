@@ -35,6 +35,7 @@ import {
   WaiterShiftRecord,
   RestaurantProfile,
   PrinterConfig,
+  SerialNumberConfig,
   PrintTemplate,
   PaymentMethodConfig,
   Employee,
@@ -7007,7 +7008,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       // Check overall received quantities against ordered quantities
       const allReceivedMap = new Map<number, number>();
       [...prevHistory, newHistoryEntry].forEach(hist => {
-        hist.items.forEach(hi => {
+        hist.items.forEach((hi: any) => {
           allReceivedMap.set(hi.itemId, (allReceivedMap.get(hi.itemId) || 0) + (hi.qty || 0));
         });
       });
@@ -7184,7 +7185,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     });
   };
 
-  const addCustomHead = (type: 'vendor' | 'rawCategory' | 'waiter' | 'department' | 'menuCat' | 'expense' | 'customer', val: string) => {
+  const addCustomHead = (type: 'vendor' | 'rawCategory' | 'waiter' | 'department' | 'menuCat' | 'expense' | 'customer' | 'tableZone', val: string) => {
     const keyMap = {
       vendor: 'vendors',
       rawCategory: 'purchaseCategories',

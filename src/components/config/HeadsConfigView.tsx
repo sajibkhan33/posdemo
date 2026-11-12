@@ -76,7 +76,7 @@ export const HeadsConfigView: React.FC = () => {
     t
   } = useRestaurant();
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'heads' | 'coa' | 'agents' | 'printers' | 'templates' | 'payments' | 'vat'>(() => {
+  const [activeTab, setActiveTab] = useState<'profile' | 'heads' | 'coa' | 'agents' | 'printers' | 'templates' | 'payments' | 'vat' | 'serials'>(() => {
     if (activeSubNav === 'coa' || activeSubNav === 'chart-of-accounts') return 'coa';
     if (activeSubNav === 'payments' || activeSubNav === 'payment-methods') return 'payments';
     if (activeSubNav === 'heads') return 'heads';

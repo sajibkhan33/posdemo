@@ -119,7 +119,7 @@ export const SerialConfigView: React.FC = () => {
     }
   };
 
-  const isSuperAdminOrAdmin = currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'ADMIN';
+  const isSuperAdminOrAdmin = (currentUser?.role as string) === 'SUPER_ADMIN' || currentUser?.role === 'ADMIN';
 
   return (
     <div className="space-y-6">

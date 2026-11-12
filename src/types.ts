@@ -79,6 +79,8 @@ export interface PrinterConfig {
   paperWidth: ThermalPaperWidth; // 80mm or 58mm
   departments: string[]; // Dept routing e.g. ["Main Kitchen", "Rooftop Grill & BBQ"]
   categories: string[]; // Category routing e.g. ["Steak & BBQ", "Rice & Biryani"]
+  printOnBill?: boolean;
+  printOnSettle?: boolean;
   isDefault?: boolean;
   isActive: boolean;
   notes?: string;
@@ -451,6 +453,7 @@ export interface SaleRecord {
   nagad: number;
   dueGiven: number;
   dueCustomer?: string;
+  customer?: string;
   dueCollected: number;
   dueCollectedFrom?: string;
   advanceAdjusted?: number;
