@@ -40,7 +40,6 @@ export const JournalEntryView: React.FC = () => {
     addJournalEntry, 
     editJournalEntry, 
     deleteJournalEntry, 
-    saveExpense,
     deleteExpense,
     deleteVendorPayment
   } = useRestaurant();
@@ -61,7 +60,6 @@ export const JournalEntryView: React.FC = () => {
   const [printingJvEntry, setPrintingJvEntry] = useState<JournalEntry | null>(null);
 
   const [isCapitalModalOpen, setIsCapitalModalOpen] = useState(false);
-  const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
 
   const coa = useMemo(() => {
     return [...(data.chartOfAccounts || [])].sort((a, b) =>
@@ -361,45 +359,6 @@ export const JournalEntryView: React.FC = () => {
     setIsCapitalModalOpen(false);
   };
 
-  // =================== QUICK OPERATING EXPENSE MODAL =================== //
-  const expenseHeadsList = (data.expenseHeads || []).sort((a, b) => a.localeCompare(b));
-  const [expenseForm, setExpenseForm] = useState({
-    head: expenseHeadsList[0] || 'Utility / Electricity',
-    amount: 500,
-    paymentMethod: 'Cash in Hand',
-    date: new Date().toISOString().split('T')[0],
-    note: 'Office daily operational payment'
-  });
-
-  const handleOpenExpenseModal = () => {
-    setExpenseForm({
-      head: expenseHeadsList[0] || 'Utility / Electricity',
-      amount: 500,
-      paymentMethod: 'Cash in Hand',
-      date: new Date().toISOString().split('T')[0],
-      note: 'Office daily operational payment'
-    });
-    setIsExpenseModalOpen(true);
-  };
-
-  const handleSaveExpense = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (expenseForm.amount <= 0) {
-      alert('Expense amount must be greater than 0');
-      return;
-    }
-
-    saveExpense({
-      date: expenseForm.date,
-      head: expenseForm.head,
-      amount: Number(expenseForm.amount),
-      paymentMethod: expenseForm.paymentMethod,
-      note: expenseForm.note,
-      category: 'Operating Expenses'
-    });
-    setIsExpenseModalOpen(false);
-  };
-
   return (
     <div className="space-y-5">
       {/* ================= 1. HEADER ================= */}
@@ -432,16 +391,6 @@ export const JournalEntryView: React.FC = () => {
           >
             <DollarSign className="w-4 h-4 text-emerald-600" />
             <span>+ Owner Capital</span>
-          </button>
-
-          {/* Record Expense Button */}
-          <button
-            onClick={handleOpenExpenseModal}
-            className="px-3.5 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs transition cursor-pointer"
-            title="Record direct operating expense"
-          >
-            <ArrowDownRight className="w-4 h-4 text-rose-600" />
-            <span>+ Record Expense</span>
           </button>
 
           {/* New Journal Voucher Button (Green) */}
@@ -1118,104 +1067,7 @@ export const JournalEntryView: React.FC = () => {
         </div>
       )}
 
-      {/* ================= MODAL: RECORD QUICK EXPENSE ================= */}
-      {isExpenseModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/70 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <ArrowDownRight className="w-5 h-5 text-rose-600" />
-                <h3 className="font-extrabold text-slate-900 text-base">Record Operating Expense</h3>
-              </div>
-              <button onClick={() => setIsExpenseModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <form onSubmit={handleSaveExpense} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Expense Head *</label>
-                <select
-                  value={expenseForm.head}
-                  onChange={e => setExpenseForm({ ...expenseForm, head: e.target.value })}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-900"
-                >
-                  {expenseHeadsList.map((h, i) => (
-                    <option key={i} value={h}>{h}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Amount (৳) *</label>
-                  <input
-                    type="number"
-                    required
-                    min="1"
-                    value={expenseForm.amount}
-                    onChange={e => setExpenseForm({ ...expenseForm, amount: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-black font-mono text-rose-700"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Date *</label>
-                  <input
-                    type="date"
-                    required
-                    value={expenseForm.date}
-                    onChange={e => setExpenseForm({ ...expenseForm, date: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Payment Method *</label>
-                <select
-                  value={expenseForm.paymentMethod}
-                  onChange={e => setExpenseForm({ ...expenseForm, paymentMethod: e.target.value })}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-900"
-                >
-                  <option value="Cash in Hand">Cash in Hand</option>
-                  <option value="Bank Account">Bank Account</option>
-                  <option value="bKash Merchant">bKash Merchant</option>
-                  <option value="Nagad Merchant">Nagad Merchant</option>
-                  <option value="Petty Cash">Petty Cash</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Note / Description</label>
-                <input
-                  type="text"
-                  value={expenseForm.note}
-                  onChange={e => setExpenseForm({ ...expenseForm, note: e.target.value })}
-                  placeholder="e.g. November electricity bill"
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
-                />
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsExpenseModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-rose-600 text-white font-extrabold text-xs rounded-xl hover:bg-rose-700 shadow-md shadow-rose-500/20 flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Check className="w-4 h-4" /> Save Expense
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* ================= MODAL: PRINTABLE JV VOUCHER SLIP ================= */}
       {printingJvEntry && (
