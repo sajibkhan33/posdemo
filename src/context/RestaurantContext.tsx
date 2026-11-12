@@ -1568,7 +1568,9 @@ interface RestaurantContextType {
     billNo: string,
     paymentType: PurchasePaymentType,
     receiveDate?: string,
-    updateMasterRates?: boolean
+    updateMasterRates?: boolean,
+    partialPaidAmount?: number,
+    partialPaymentMethod?: string
   ) => void;
   savePurchaseReturn: (returnRecord: Partial<PurchaseReturn> & { id?: number }) => void;
   deletePurchaseReturn: (id: number) => void;
@@ -6811,10 +6813,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         });
       }
 
-      // Auto-create VendorPayment if direct bill is marked as paid immediately
+      // Auto-create VendorPayment if direct bill is marked as paid immediately or partially
       let updatedPayments = prev.payments || [];
       const isPaidImmediately = voucher.paymentType && voucher.paymentType !== 'CREDIT';
-      if (isPaidImmediately && voucher.status === 'FINAL' && voucher.total > 0) {
+      const voucherPaid = voucher.paid !== undefined ? voucher.paid : (isPaidImmediately ? voucher.total : 0);
+      if (voucherPaid > 0 && voucher.status === 'FINAL') {
         const hasPayment = updatedPayments.some(
           p => p.billNo && voucher.billNo && p.billNo.trim().toLowerCase() === voucher.billNo.trim().toLowerCase()
         );
@@ -6825,9 +6828,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             date: voucher.date,
             vendor: voucher.vendor,
             billNo: voucher.billNo,
-            amount: voucher.paid || voucher.total,
+            amount: voucherPaid,
             method: payMethodName,
-            note: `Payment for Purchase Bill #${voucher.billNo} (Paid) - Supplier: ${voucher.vendor}`
+            note: (voucherPaid < voucher.total)
+              ? `Partial Payment for Purchase Bill #${voucher.billNo} (Paid ৳${voucherPaid}, Due ৳${voucher.total - voucherPaid}) - Supplier: ${voucher.vendor}`
+              : `Payment for Purchase Bill #${voucher.billNo} (Paid) - Supplier: ${voucher.vendor}`
           };
           updatedPayments = [newPayment, ...updatedPayments];
         }
@@ -6909,7 +6914,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     billNo: string,
     paymentType: PurchasePaymentType,
     receiveDate?: string,
-    updateMasterRates: boolean = true
+    updateMasterRates: boolean = true,
+    partialPaidAmount?: number,
+    partialPaymentMethod?: string
   ) => {
     if (!receivedItems || receivedItems.length === 0) return;
 
@@ -6924,32 +6931,45 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const generatedBillNo = billNo.trim() || (`INV-${Date.now().toString().slice(-4)}`);
 
       // 1. Create Purchase Voucher (Bill)
-      const isPaidImmediately = paymentType && paymentType !== 'CREDIT';
-      const payMethodName = isPaidImmediately ? (paymentType === 'CASH' ? 'Cash in Hand' : paymentType) : undefined;
+      const isPartial = paymentType === 'PARTIAL';
+      const isPaidImmediately = !isPartial && paymentType && paymentType !== 'CREDIT';
+      const actualPaid = isPartial 
+        ? Math.min(totalReceivedVal, Math.max(0, Number(partialPaidAmount) || 0))
+        : (isPaidImmediately ? totalReceivedVal : 0);
+      const payMethodName = isPartial 
+        ? (partialPaymentMethod || 'Cash in Hand')
+        : (isPaidImmediately ? (paymentType === 'CASH' ? 'Cash in Hand' : paymentType) : undefined);
+
+      const effectivePaymentType = isPartial 
+        ? (actualPaid >= totalReceivedVal ? (partialPaymentMethod || 'CASH') : 'CREDIT')
+        : (paymentType || 'CREDIT');
+
       const newVoucher: PurchaseVoucher = {
         id: Date.now(),
         date: dateStr,
         vendor: targetPO.vendor,
         billNo: generatedBillNo,
-        paymentType: paymentType || 'CREDIT',
+        paymentType: effectivePaymentType,
         paymentMethod: payMethodName,
         status: 'FINAL',
         total: totalReceivedVal,
-        paid: isPaidImmediately ? totalReceivedVal : 0,
+        paid: actualPaid,
         items: JSON.parse(JSON.stringify(receivedItems))
       };
 
-      // 1b. Auto-create VendorPayment if paid immediately
+      // 1b. Auto-create VendorPayment if paid immediately or partially
       let updatedPayments = prev.payments || [];
-      if (isPaidImmediately && totalReceivedVal > 0) {
+      if (actualPaid > 0) {
         const newPayment: VendorPayment = {
           id: Date.now() + 1,
           date: dateStr,
           vendor: targetPO.vendor,
           billNo: generatedBillNo,
-          amount: totalReceivedVal,
+          amount: actualPaid,
           method: payMethodName || 'Cash in Hand',
-          note: `Payment for Purchase Order ${targetPO.poNo} (Paid) - Supplier: ${targetPO.vendor}`
+          note: isPartial
+            ? `Partial Payment (Paid ৳${actualPaid}, Due ৳${Math.max(0, totalReceivedVal - actualPaid)}) for PO ${targetPO.poNo} - Supplier: ${targetPO.vendor}`
+            : `Payment for Purchase Order ${targetPO.poNo} (Paid) - Supplier: ${targetPO.vendor}`
         };
         updatedPayments = [newPayment, ...updatedPayments];
       }

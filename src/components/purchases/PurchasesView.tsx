@@ -73,6 +73,8 @@ export const PurchasesView: React.FC = () => {
   const [voucherVendor, setVoucherVendor] = useState(data.vendors[0] || 'Kader Meat Supply');
   const [voucherBillNo, setVoucherBillNo] = useState('');
   const [voucherPaymentType, setVoucherPaymentType] = useState<PurchasePaymentType>('CREDIT');
+  const [voucherPartialPaid, setVoucherPartialPaid] = useState<number>(0);
+  const [voucherPartialMethod, setVoucherPartialMethod] = useState<string>('Cash in Hand');
   const [voucherStatus, setVoucherStatus] = useState<PurchaseStatus>('FINAL');
   const [voucherItems, setVoucherItems] = useState<PurchaseItem[]>([]);
 
@@ -94,6 +96,8 @@ export const PurchasesView: React.FC = () => {
   const [receivingPo, setReceivingPo] = useState<PurchaseOrder | null>(null);
   const [receiveBillNo, setReceiveBillNo] = useState('');
   const [receivePaymentType, setReceivePaymentType] = useState<PurchasePaymentType>('CREDIT');
+  const [receivePartialPaid, setReceivePartialPaid] = useState<number>(0);
+  const [receivePartialMethod, setReceivePartialMethod] = useState<string>('Cash in Hand');
   const [receiveDate, setReceiveDate] = useState(new Date().toISOString().split('T')[0]);
   const [receiveItemsList, setReceiveItemsList] = useState<{
     itemId: number;
@@ -200,6 +204,8 @@ export const PurchasesView: React.FC = () => {
     setVoucherVendor(data.vendors[0] || 'Kader Meat Supply');
     setVoucherBillNo('BILL-' + Date.now().toString().slice(-4));
     setVoucherPaymentType('CREDIT');
+    setVoucherPartialPaid(0);
+    setVoucherPartialMethod(activeFundMethods[0]?.name || 'Cash in Hand');
     setVoucherStatus('FINAL');
     
     if (data.masterItems.length > 0) {
@@ -281,18 +287,28 @@ export const PurchasesView: React.FC = () => {
       return;
     }
 
-    const isPaid = voucherPaymentType !== 'CREDIT';
-    const payMethodName = isPaid ? (voucherPaymentType === 'CASH' ? 'Cash in Hand' : voucherPaymentType) : undefined;
+    const isPartial = voucherPaymentType === 'PARTIAL';
+    const isPaid = !isPartial && voucherPaymentType !== 'CREDIT';
+    const actualPaid = isPartial 
+      ? Math.min(totalVoucherAmount, Math.max(0, Number(voucherPartialPaid) || 0))
+      : (isPaid ? totalVoucherAmount : 0);
+    const payMethodName = isPartial 
+      ? voucherPartialMethod 
+      : (isPaid ? (voucherPaymentType === 'CASH' ? 'Cash in Hand' : voucherPaymentType) : undefined);
+    const effectivePaymentType = isPartial
+      ? (actualPaid >= totalVoucherAmount ? (voucherPartialMethod || 'CASH') : 'CREDIT')
+      : voucherPaymentType;
+
     const newVoucher: PurchaseVoucher = {
       id: Date.now(),
       date: voucherDate,
       vendor: voucherVendor,
       billNo: voucherBillNo.trim() || ('BILL-' + Date.now().toString().slice(-4)),
-      paymentType: voucherPaymentType,
+      paymentType: effectivePaymentType,
       paymentMethod: payMethodName,
       status: voucherStatus,
       total: totalVoucherAmount,
-      paid: isPaid ? totalVoucherAmount : 0,
+      paid: actualPaid,
       items: JSON.parse(JSON.stringify(voucherItems))
     };
 
@@ -410,6 +426,8 @@ export const PurchasesView: React.FC = () => {
     setReceivingPo(po);
     setReceiveBillNo('INV-' + Math.floor(1000 + Math.random() * 9000));
     setReceivePaymentType('CREDIT');
+    setReceivePartialPaid(0);
+    setReceivePartialMethod(activeFundMethods[0]?.name || 'Cash in Hand');
     setReceiveDate(new Date().toISOString().split('T')[0]);
 
     // Calculate already received quantities
@@ -495,7 +513,9 @@ export const PurchasesView: React.FC = () => {
       receiveBillNo,
       receivePaymentType,
       receiveDate,
-      receiveUpdateMasterRates
+      receiveUpdateMasterRates,
+      receivePartialPaid,
+      receivePartialMethod
     );
 
     setReceivingPo(null);
@@ -1061,7 +1081,18 @@ export const PurchasesView: React.FC = () => {
                   </tr>
                 ) : (
                   filteredVouchers.map(voucher => {
-                    const paid = voucher.paid !== undefined ? voucher.paid : (voucher.paymentType === 'CASH' ? voucher.total : 0);
+                    const linkedPayments = (data.payments || []).filter(pay => 
+                      pay.billNo && voucher.billNo && (
+                        pay.billNo.trim().toLowerCase() === voucher.billNo.trim().toLowerCase() ||
+                        pay.billNo.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === voucher.billNo.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+                      )
+                    );
+                    const linkedPaymentsTotal = linkedPayments.reduce((sum, pay) => sum + (pay.amount || 0), 0);
+                    const paid = Math.max(
+                      voucher.paid !== undefined ? voucher.paid : 0,
+                      linkedPaymentsTotal,
+                      voucher.paymentType === 'CASH' ? voucher.total : 0
+                    );
                     const matchingReturns = purchaseReturns.filter(r => 
                       r.refundStatus === 'ADJUSTED' && 
                       r.vendor === voucher.vendor && 
@@ -1070,6 +1101,8 @@ export const PurchasesView: React.FC = () => {
                     );
                     const billAdjustedReturn = matchingReturns.reduce((sum, r) => sum + r.total, 0);
                     const due = Math.max(0, voucher.total - paid - billAdjustedReturn);
+                    const isFullyPaid = due === 0;
+                    const isPartiallyPaid = paid > 0 && due > 0;
 
                     return (
                       <tr 
@@ -1082,15 +1115,28 @@ export const PurchasesView: React.FC = () => {
                         <td className="py-3 px-4 font-mono font-bold text-slate-900">{voucher.billNo}</td>
                         <td className="py-3 px-4 font-extrabold text-slate-900">{voucher.vendor}</td>
                         <td className="py-3 px-4">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
-                            voucher.paymentType === 'CREDIT' 
-                              ? (due === 0 ? 'bg-emerald-100 text-emerald-900' : 'bg-amber-100 text-amber-900') 
-                              : 'bg-emerald-100 text-emerald-900'
-                          }`}>
-                            {voucher.paymentType === 'CREDIT' 
-                              ? (due === 0 ? 'Credit (Settled)' : 'Credit (Due)') 
-                              : (voucher.paymentMethod || voucher.paymentType || 'Cash Paid')}
-                          </span>
+                          {voucher.paymentType === 'CREDIT' ? (
+                            isFullyPaid ? (
+                              <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1 shadow-2xs">
+                                <Check className="w-3 h-3 text-emerald-600" />
+                                Credit (Settled)
+                              </span>
+                            ) : isPartiallyPaid ? (
+                              <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-blue-100 text-blue-800 border border-blue-300 inline-flex items-center gap-1.5 shadow-2xs">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
+                                Partial Paid (Due: ৳{due.toLocaleString()})
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs">
+                                Credit (Due)
+                              </span>
+                            )
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1 shadow-2xs">
+                              <Check className="w-3 h-3 text-emerald-600" />
+                              {voucher.paymentMethod || voucher.paymentType || 'Cash Paid'}
+                            </span>
+                          )}
                         </td>
                         <td className="py-3 px-4 text-center">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
@@ -1103,9 +1149,17 @@ export const PurchasesView: React.FC = () => {
                           {voucher.items.map(i => `${i.item} (${i.qty} ${i.uom})`).join(', ')}
                         </td>
                         <td className="py-3 px-4 text-right whitespace-nowrap">
-                          <div className="font-extrabold text-blue-700 text-sm">৳ {voucher.total.toLocaleString()}</div>
+                          <div className="font-black text-slate-900 text-sm font-mono">৳ {voucher.total.toLocaleString()}</div>
+                          {voucher.paymentType === 'CREDIT' && (
+                            <div className="text-[10px] font-mono mt-0.5">
+                              <span className="text-emerald-700 font-bold">Paid: ৳{paid.toLocaleString()}</span>
+                              {due > 0 && (
+                                <span className="text-rose-700 font-black ml-1.5">Due: ৳{due.toLocaleString()}</span>
+                              )}
+                            </div>
+                          )}
                           {billAdjustedReturn > 0 && (
-                            <div className="text-[10px] text-rose-600 font-extrabold" title={`Adjusted return for bill #${voucher.billNo}`}>
+                            <div className="text-[10px] text-purple-700 font-extrabold mt-0.5" title={`Adjusted return for bill #${voucher.billNo}`}>
                               Ret Adj: -৳{billAdjustedReturn.toLocaleString()}
                             </div>
                           )}
@@ -1130,11 +1184,15 @@ export const PurchasesView: React.FC = () => {
                                   });
                                   setPayAmount(due);
                                 }}
-                                className="p-1 px-2.5 text-[10px] bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold rounded-lg shadow-2xs transition cursor-pointer flex items-center gap-1"
-                                title="Pay Bill"
+                                className={`p-1 px-2.5 text-[10px] font-extrabold rounded-lg shadow-2xs transition cursor-pointer flex items-center gap-1 ${
+                                  isPartiallyPaid 
+                                    ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                                    : 'bg-amber-500 hover:bg-amber-600 text-slate-950'
+                                }`}
+                                title={`Pay Bill #${voucher.billNo} - Remaining Due: ৳${due.toLocaleString()}`}
                               >
                                 <CreditCard className="w-3 h-3" />
-                                <span>Pay Bill</span>
+                                <span>{isPartiallyPaid ? `Pay Due (৳${due.toLocaleString()})` : 'Pay Bill'}</span>
                               </button>
                             )}
                             <button
@@ -2012,18 +2070,72 @@ export const PurchasesView: React.FC = () => {
                     onChange={e => setVoucherPaymentType(e.target.value as any)}
                     className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900"
                   >
-                    <option value="CREDIT">Credit (Accounts Due)</option>
+                    <option value="CREDIT">Credit (Full Due)</option>
+                    <option value="PARTIAL">Partial Payment (Pay Part Now, Rest as Due)</option>
                     {activeFundMethods.map(m => {
                       const bal = getMethodLiveBalance(m);
                       return (
                         <option key={m.id} value={m.name}>
-                          {m.name} (Available: ৳{bal.toLocaleString()})
+                          Full Payment via {m.name} (Available: ৳{bal.toLocaleString()})
                         </option>
                       );
                     })}
                   </select>
                 </div>
               </div>
+
+              {voucherPaymentType === 'PARTIAL' && (
+                <div className="bg-blue-50/90 border border-blue-200 rounded-xl p-3.5 space-y-2.5 animate-fadeIn">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-blue-900 flex items-center gap-1.5">
+                      <CreditCard className="w-4 h-4 text-blue-600" />
+                      Partial Payment Breakdown
+                    </span>
+                    <span className="text-xs font-bold text-slate-600">
+                      Total Bill Amount: <strong className="text-slate-900 font-mono">৳{totalVoucherAmount.toLocaleString()}</strong>
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-blue-900 mb-1">Pay Now Amount (৳) *</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max={totalVoucherAmount}
+                        step="any"
+                        value={voucherPartialPaid || ''}
+                        onChange={e => setVoucherPartialPaid(Math.max(0, Math.min(totalVoucherAmount, parseFloat(e.target.value) || 0)))}
+                        className="w-full px-2.5 py-1.5 bg-white border border-blue-300 rounded-lg text-xs font-black text-blue-900"
+                        placeholder="e.g. 50"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-blue-900 mb-1">Paid From Account *</label>
+                      <select
+                        value={voucherPartialMethod}
+                        onChange={e => setVoucherPartialMethod(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-blue-300 rounded-lg text-xs font-bold text-slate-900"
+                      >
+                        {activeFundMethods.map(m => {
+                          const bal = getMethodLiveBalance(m);
+                          return (
+                            <option key={m.id} value={m.name}>
+                              {m.name} (৳{bal.toLocaleString()})
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-rose-900 mb-1">Remaining Due (৳)</label>
+                      <div className="w-full px-2.5 py-1.5 bg-rose-50 border border-rose-200 rounded-lg text-xs font-black text-rose-700 flex items-center justify-between">
+                        <span>৳{Math.max(0, totalVoucherAmount - voucherPartialPaid).toLocaleString()}</span>
+                        <span className="text-[10px] font-bold text-rose-600">Payable Later</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Status Radio / Badge */}
               <div className="flex flex-wrap items-center gap-4 px-1 text-xs font-bold">
@@ -2427,17 +2539,71 @@ export const PurchasesView: React.FC = () => {
                     className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900"
                   >
                     <option value="CREDIT">Credit (Add to Vendor Payable Due)</option>
+                    <option value="PARTIAL">Partial Payment (Pay Part Now, Rest as Due)</option>
                     {activeFundMethods.map(m => {
                       const bal = getMethodLiveBalance(m);
                       return (
                         <option key={m.id} value={m.name}>
-                          {m.name} (Available: ৳{bal.toLocaleString()})
+                          Full Payment via {m.name} (Available: ৳{bal.toLocaleString()})
                         </option>
                       );
                     })}
                   </select>
                 </div>
               </div>
+
+              {receivePaymentType === 'PARTIAL' && (
+                <div className="bg-blue-50/90 border border-blue-200 rounded-xl p-3.5 space-y-2.5 animate-fadeIn">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-blue-900 flex items-center gap-1.5">
+                      <CreditCard className="w-4 h-4 text-blue-600" />
+                      Partial Payment Breakdown
+                    </span>
+                    <span className="text-xs font-bold text-slate-600">
+                      Total Inward Amount: <strong className="text-slate-900 font-mono">৳{totalReceiveBillAmount.toLocaleString()}</strong>
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-blue-900 mb-1">Pay Now Amount (৳) *</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max={totalReceiveBillAmount}
+                        step="any"
+                        value={receivePartialPaid || ''}
+                        onChange={e => setReceivePartialPaid(Math.max(0, Math.min(totalReceiveBillAmount, parseFloat(e.target.value) || 0)))}
+                        className="w-full px-2.5 py-1.5 bg-white border border-blue-300 rounded-lg text-xs font-black text-blue-900"
+                        placeholder="e.g. 50"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-blue-900 mb-1">Paid From Account *</label>
+                      <select
+                        value={receivePartialMethod}
+                        onChange={e => setReceivePartialMethod(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-blue-300 rounded-lg text-xs font-bold text-slate-900"
+                      >
+                        {activeFundMethods.map(m => {
+                          const bal = getMethodLiveBalance(m);
+                          return (
+                            <option key={m.id} value={m.name}>
+                              {m.name} (৳{bal.toLocaleString()})
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-rose-900 mb-1">Remaining Due (৳)</label>
+                      <div className="w-full px-2.5 py-1.5 bg-rose-50 border border-rose-200 rounded-lg text-xs font-black text-rose-700 flex items-center justify-between">
+                        <span>৳{Math.max(0, totalReceiveBillAmount - receivePartialPaid).toLocaleString()}</span>
+                        <span className="text-[10px] font-bold text-rose-600">Supplier Payable Due</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Items Receiving Matrix */}
               <div>
@@ -3037,10 +3203,45 @@ export const PurchasesView: React.FC = () => {
                 </table>
               </div>
 
-              <div className="pt-2 flex justify-between font-extrabold text-sm text-slate-900">
-                <span>Grand Total:</span>
-                <span className="text-blue-700">৳ {viewingVoucher.total.toLocaleString()}</span>
-              </div>
+              {(() => {
+                const memoPayments = (data.payments || []).filter(pay => 
+                  pay.billNo && viewingVoucher.billNo && (
+                    pay.billNo.trim().toLowerCase() === viewingVoucher.billNo.trim().toLowerCase() ||
+                    pay.billNo.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === viewingVoucher.billNo.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+                  )
+                );
+                const memoPaid = Math.max(
+                  viewingVoucher.paid !== undefined ? viewingVoucher.paid : 0,
+                  memoPayments.reduce((s, p) => s + (p.amount || 0), 0),
+                  viewingVoucher.paymentType === 'CASH' ? viewingVoucher.total : 0
+                );
+                const memoDue = Math.max(0, viewingVoucher.total - memoPaid);
+                return (
+                  <div className="pt-3 border-t border-slate-100 space-y-1.5">
+                    <div className="flex justify-between font-black text-sm text-slate-900">
+                      <span>Grand Total:</span>
+                      <span className="text-blue-700 font-mono">৳ {viewingVoucher.total.toLocaleString()}</span>
+                    </div>
+                    {viewingVoucher.paymentType === 'CREDIT' && (
+                      <div className="flex justify-between text-xs font-bold pt-0.5">
+                        <span className="text-emerald-700">Total Settled / Paid:</span>
+                        <span className="text-emerald-700 font-mono">৳ {memoPaid.toLocaleString()}</span>
+                      </div>
+                    )}
+                    {viewingVoucher.paymentType === 'CREDIT' && memoDue > 0 && (
+                      <div className="flex justify-between text-xs font-black pt-0.5">
+                        <span className="text-rose-700">Remaining Balance Due:</span>
+                        <span className="text-rose-700 font-mono">৳ {memoDue.toLocaleString()}</span>
+                      </div>
+                    )}
+                    {viewingVoucher.paymentType === 'CREDIT' && memoDue === 0 && (
+                      <div className="text-right text-xs font-extrabold text-emerald-700 pt-0.5">
+                        ✓ Bill Fully Settled
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="pt-3">
