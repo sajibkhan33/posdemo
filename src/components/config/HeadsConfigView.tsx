@@ -299,11 +299,25 @@ export const HeadsConfigView: React.FC = () => {
     const secObj = sections.find(s => s.id === type);
     const secTitle = secObj?.title || type;
 
-    // Duplicate check across existing items in this section
-    const currentItems = secObj?.items || [];
-    if (currentItems.some(i => i.toLowerCase().trim() === val.toLowerCase().trim())) {
-      alert(language === 'bn' ? `"${val}" ইতিমধ্যে "${secTitle}"-এ রয়েছে!` : `"${val}" already exists in ${secTitle}!`);
-      return;
+    // Duplicate check across existing items in this section (Tables are validated per floor zone)
+    if (type === 'tables') {
+      const targetZone = selectedZoneForNewTable || allZones[0] || 'Floor 1';
+      const isDuplicateInZone = (data.tables || []).some(
+        t => t.name.toLowerCase().trim() === val.toLowerCase().trim() &&
+             (t.zone || '').toLowerCase().trim() === targetZone.toLowerCase().trim()
+      );
+      if (isDuplicateInZone) {
+        alert(language === 'bn' 
+          ? `"${targetZone}"-এ ইতিমধ্যে "${val}" টেবিলটি রয়েছে!` 
+          : `Table "${val}" already exists in ${targetZone}!`);
+        return;
+      }
+    } else {
+      const currentItems = secObj?.items || [];
+      if (currentItems.some(i => i.toLowerCase().trim() === val.toLowerCase().trim())) {
+        alert(language === 'bn' ? `"${val}" ইতিমধ্যে "${secTitle}"-এ রয়েছে!` : `"${val}" already exists in ${secTitle}!`);
+        return;
+      }
     }
 
     let success: boolean | void = false;
@@ -328,13 +342,27 @@ export const HeadsConfigView: React.FC = () => {
 
   const handleSaveEdit = () => {
     if (!editingItem || !editingItem.text.trim()) return;
+    const trimmedVal = editingItem.text.trim();
+
     if (editingItem.sectionId === 'tables') {
-      editCustomTable(editingItem.index, editingItem.text.trim(), editingItem.extraZone);
+      const targetZone = editingItem.extraZone || allZones[0] || 'Floor 1';
+      const isDuplicateInZone = (data.tables || []).some(
+        (t, idx) => idx !== editingItem.index &&
+                    t.name.toLowerCase().trim() === trimmedVal.toLowerCase().trim() &&
+                    (t.zone || '').toLowerCase().trim() === targetZone.toLowerCase().trim()
+      );
+      if (isDuplicateInZone) {
+        alert(language === 'bn' 
+          ? `"${targetZone}"-এ ইতিমধ্যে "${trimmedVal}" টেবিলটি রয়েছে!` 
+          : `Table "${trimmedVal}" already exists in ${targetZone}!`);
+        return;
+      }
+      editCustomTable(editingItem.index, trimmedVal, editingItem.extraZone);
     } else if (editingItem.sectionId === 'tableZones') {
       const oldZone = (data.tableZones || [])[editingItem.index];
-      if (oldZone) editTableZone(oldZone, editingItem.text.trim());
+      if (oldZone) editTableZone(oldZone, trimmedVal);
     } else {
-      editConfigItem(editingItem.sectionId as any, editingItem.index, editingItem.text.trim());
+      editConfigItem(editingItem.sectionId as any, editingItem.index, trimmedVal);
     }
     setEditingItem(null);
   };

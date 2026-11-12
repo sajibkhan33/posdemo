@@ -7292,12 +7292,16 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     let added = false;
     setData(prev => {
       const tables = prev.tables || [];
-      if (tables.some(t => t.name.toLowerCase().trim() === trimmed.toLowerCase())) {
+      const assignedZone = zone?.trim() || (prev.tableZones && prev.tableZones.length > 0 ? prev.tableZones[0] : 'Floor 1');
+      // Only block duplicates within the SAME floor zone
+      if (tables.some(t => 
+        t.name.toLowerCase().trim() === trimmed.toLowerCase() &&
+        (t.zone || '').toLowerCase().trim() === assignedZone.toLowerCase()
+      )) {
         return prev;
       }
       added = true;
       const id = 'T-' + (tables.length + 1).toString().padStart(2, '0');
-      const assignedZone = zone?.trim() || (prev.tableZones && prev.tableZones.length > 0 ? prev.tableZones[0] : 'Floor 1');
       return {
         ...prev,
         tables: [...tables, {
@@ -7322,6 +7326,15 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     lastLocalEditTimeRef.current = Date.now();
     setData(prev => {
       const arr = [...(prev.tables || [])];
+      const targetZone = (newZone?.trim() || arr[index]?.zone || 'Floor 1').toLowerCase();
+      // Block duplicate only if another table already has this name in the same zone
+      if (arr.some((t, i) => 
+        i !== index && 
+        t.name.toLowerCase().trim() === trimmed.toLowerCase() && 
+        (t.zone || '').toLowerCase().trim() === targetZone
+      )) {
+        return prev;
+      }
       if (arr[index]) {
         arr[index] = { 
           ...arr[index], 
