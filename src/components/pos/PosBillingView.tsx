@@ -577,11 +577,14 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
 
 
   // Filtered menu items (Memoized to eliminate main-thread lag during rapid typing/clicks)
+  // SMART SEARCH: When search is active, ignore category filter and search globally
   const filteredMenuItems = useMemo(() => {
+    const hasSearch = searchQuery.trim().length > 0;
     return data.menuItems.filter(item => {
       if (selectedDept !== 'ALL' && item.department !== selectedDept) return false;
-      if (selectedCategory !== 'ALL' && item.category !== selectedCategory) return false;
-      if (searchQuery.trim()) {
+      // When searching, bypass category filter for global search across all categories
+      if (!hasSearch && selectedCategory !== 'ALL' && item.category !== selectedCategory) return false;
+      if (hasSearch) {
         const q = searchQuery.toLowerCase().trim();
         const matchName = item.name.toLowerCase().includes(q);
         const matchCat = item.category.toLowerCase().includes(q);
@@ -1130,9 +1133,21 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
                 id="search-pos-menu"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search dish..."
-                className="w-full pl-7 pr-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:bg-white focus:ring-1 focus:ring-[#004b9b] focus:outline-none"
+                placeholder="Search all dishes..."
+                className={`w-full pl-7 ${searchQuery ? 'pr-7' : 'pr-2.5'} py-1 bg-slate-50 border rounded-lg text-xs font-medium text-slate-900 focus:bg-white focus:ring-1 focus:ring-[#004b9b] focus:outline-none ${
+                  searchQuery ? 'border-[#004b9b] bg-blue-50/50 font-bold' : 'border-slate-200'
+                }`}
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-slate-300 hover:bg-rose-500 text-white flex items-center justify-center transition cursor-pointer"
+                  title="Clear search"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
             </div>
 
             {/* Desktop Category Navigation with Mouse Wheel + Drag + Arrows */}
@@ -1165,6 +1180,7 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
                   onClick={() => {
                     if (categoryHasDragged.current) return;
                     setSelectedCategory('ALL');
+                    setSearchQuery('');
                   }}
                   className={`px-2.5 py-1 rounded-lg text-xs font-bold shrink-0 transition cursor-pointer select-none ${
                     selectedCategory === 'ALL'
@@ -1181,6 +1197,7 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
                     onClick={() => {
                       if (categoryHasDragged.current) return;
                       setSelectedCategory(cat);
+                      setSearchQuery('');
                     }}
                     className={`px-2.5 py-1 rounded-lg text-xs font-bold shrink-0 transition cursor-pointer select-none ${
                       selectedCategory === cat
@@ -1210,7 +1227,7 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
           {/* Desktop Menu Items Grid */}
           <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar min-h-0">
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5 auto-rows-max">
-              {filteredMenuItems.map(dish => {
+                            {filteredMenuItems.map(dish => {
                 const inCart = activeTable?.cart?.find(c => c.id === dish.id);
                 const hasOptions = (dish.variations && dish.variations.length > 0) || (dish.addons && dish.addons.length > 0);
 
@@ -1280,6 +1297,35 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
                   </button>
                 );
               })}
+
+              {/* Empty State when no dishes match search */}
+              {filteredMenuItems.length === 0 && (
+                <div className="col-span-full flex flex-col items-center justify-center py-16 text-center">
+                  <Search className="w-10 h-10 text-slate-300 mb-3" />
+                  <h3 className="text-sm font-extrabold text-slate-500 mb-1">
+                    {searchQuery ? `"${searchQuery}" — কোনো খাবার পাওয়া যায়নি` : 'এই ক্যাটাগরিতে কোনো আইটেম নেই'}
+                  </h3>
+                  <p className="text-xs text-slate-400 mb-3">
+                    {searchQuery 
+                      ? 'বানান ঠিক আছে কিনা দেখুন, অথবা অন্যভাবে সার্চ করুন' 
+                      : 'অন্য একটি ক্যাটাগরি বেছে নিন'
+                    }
+                  </p>
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery('');
+                        setSelectedCategory('ALL');
+                      }}
+                      className="px-4 py-1.5 bg-[#004b9b] text-white rounded-lg text-xs font-bold hover:bg-[#003a7a] transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Reset Search & Show All</span>
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1292,7 +1338,7 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
               {/* All Option */}
               <button
                 type="button"
-                onClick={() => setSelectedCategory('ALL')}
+                onClick={() => { setSelectedCategory('ALL'); setSearchQuery(''); }}
                 className={`w-full py-2.5 px-1 text-center transition cursor-pointer relative flex flex-col items-center justify-center gap-0.5 ${
                   selectedCategory === 'ALL'
                     ? 'bg-emerald-50 text-emerald-900 font-black border-l-4 border-emerald-600'
@@ -1317,7 +1363,7 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
                   <button
                     key={cat}
                     type="button"
-                    onClick={() => setSelectedCategory(cat)}
+                    onClick={() => { setSelectedCategory(cat); setSearchQuery(''); }}
                     className={`w-full py-2.5 px-1 text-center transition cursor-pointer relative flex flex-col items-center justify-center gap-0.5 ${
                       isSelected
                         ? 'bg-emerald-50 text-emerald-900 font-black border-l-4 border-emerald-600'
@@ -1366,7 +1412,7 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
             {/* 3-Column Menu Grid */}
             <div className="flex-1 overflow-y-auto pr-0.5 custom-scrollbar min-h-0">
               <div className="grid grid-cols-3 gap-1.5 auto-rows-max pb-1">
-                {filteredMenuItems.map(dish => {
+                              {filteredMenuItems.map(dish => {
                   const inCart = activeTable?.cart?.find(c => c.id === dish.id);
                   const hasOptions = (dish.variations && dish.variations.length > 0) || (dish.addons && dish.addons.length > 0);
 
@@ -2411,6 +2457,7 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
                     type="button"
                     onClick={() => {
                       setSelectedCategory('ALL');
+                      setSearchQuery('');
                       setIsMobileCategoryDrawerOpen(false);
                     }}
                     className={`w-full px-3 py-2.5 rounded-xl text-left font-bold text-xs transition flex items-center justify-between cursor-pointer ${
@@ -2447,6 +2494,7 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
                     type="button"
                     onClick={() => {
                       setSelectedCategory(cat);
+                      setSearchQuery('');
                       setIsMobileCategoryDrawerOpen(false);
                     }}
                     className={`w-full px-3 py-2.5 rounded-xl text-left font-bold text-xs transition flex items-center justify-between cursor-pointer ${
@@ -2476,6 +2524,7 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
                   type="button"
                   onClick={() => {
                     setSelectedCategory('ALL');
+                    setSearchQuery('');
                     setIsMobileCategoryDrawerOpen(false);
                   }}
                   className="w-full py-2.5 px-3 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"

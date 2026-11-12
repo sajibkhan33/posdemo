@@ -7,12 +7,12 @@
       "posInvoiceIncludeDate": false,
       "posInvoiceResetCycle": "NEVER",
       "kotPrefix": "KOT-",
-      "kotNextNumber": 15,
+      "kotNextNumber": 16,
       "kotPadding": 4,
       "kotIncludeDate": false,
       "kotResetCycle": "NEVER",
       "orderRefPrefix": "ORD-",
-      "orderRefNextNumber": 16,
+      "orderRefNextNumber": 17,
       "orderRefPadding": 4,
       "orderRefResetCycle": "NEVER",
       "lastResetDate": "2026-11-12",
@@ -4015,5 +4015,5 @@
       "CHEF": false
     }
   },
-  "timestamp": 1794479707450
+  "timestamp": 1794483043101
 }
