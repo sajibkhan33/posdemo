@@ -16,6 +16,7 @@ import {
   Layers, 
   Check, 
   Sparkles,
+  ChevronLeft,
   ChevronRight,
   ChefHat,
   MapPin,
@@ -492,6 +493,82 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [isMobileCategoryDrawerOpen, setIsMobileCategoryDrawerOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Desktop Category Horizontal Scroll Handlers (Mouse Wheel, Drag & Buttons)
+  const categoryScrollRef = useRef<HTMLDivElement>(null);
+  const isCategoryDragging = useRef(false);
+  const categoryStartX = useRef(0);
+  const categoryScrollLeft = useRef(0);
+  const categoryHasDragged = useRef(false);
+
+  const [canScrollCatLeft, setCanScrollCatLeft] = useState(false);
+  const [canScrollCatRight, setCanScrollCatRight] = useState(false);
+
+  const checkCategoryScroll = () => {
+    const el = categoryScrollRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    setCanScrollCatLeft(scrollLeft > 2);
+    setCanScrollCatRight(scrollLeft + clientWidth < scrollWidth - 2);
+  };
+
+  useEffect(() => {
+    checkCategoryScroll();
+    const el = categoryScrollRef.current;
+    if (!el) return;
+    window.addEventListener('resize', checkCategoryScroll);
+    return () => window.removeEventListener('resize', checkCategoryScroll);
+  }, [data.menuCategories]);
+
+  const handleCategoryWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    const el = categoryScrollRef.current;
+    if (!el) return;
+    if (e.deltaY !== 0) {
+      el.scrollLeft += e.deltaY;
+      checkCategoryScroll();
+    }
+  };
+
+  const handleCategoryMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = categoryScrollRef.current;
+    if (!el) return;
+    isCategoryDragging.current = true;
+    categoryStartX.current = e.pageX - el.offsetLeft;
+    categoryScrollLeft.current = el.scrollLeft;
+    categoryHasDragged.current = false;
+  };
+
+  const handleCategoryMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isCategoryDragging.current) return;
+    const el = categoryScrollRef.current;
+    if (!el) return;
+    const x = e.pageX - el.offsetLeft;
+    const walk = (x - categoryStartX.current);
+    if (Math.abs(walk) > 5) {
+      categoryHasDragged.current = true;
+    }
+    el.scrollLeft = categoryScrollLeft.current - walk;
+    checkCategoryScroll();
+  };
+
+  const handleCategoryMouseUp = () => {
+    isCategoryDragging.current = false;
+  };
+
+  const handleCategoryMouseLeave = () => {
+    isCategoryDragging.current = false;
+  };
+
+  const handleScrollCat = (direction: 'left' | 'right') => {
+    const el = categoryScrollRef.current;
+    if (!el) return;
+    const scrollAmount = 180;
+    el.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth'
+    });
+    setTimeout(checkCategoryScroll, 300);
+  };
 
   const allZones = data.tableZones && data.tableZones.length > 0 
     ? data.tableZones 
@@ -1058,30 +1135,75 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
               />
             </div>
 
-            <div className="flex-1 flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden py-0.5">
-              <button
-                onClick={() => setSelectedCategory('ALL')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold shrink-0 transition cursor-pointer ${
-                  selectedCategory === 'ALL'
-                    ? 'bg-[#004b9b] text-white font-black shadow-xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                All Categories
-              </button>
-              {data.menuCategories.map(cat => (
+            {/* Desktop Category Navigation with Mouse Wheel + Drag + Arrows */}
+            <div className="flex-1 min-w-0 relative flex items-center group">
+              {/* Left Scroll Chevron Button */}
+              {canScrollCatLeft && (
                 <button
-                  key={cat}
-                  onClick={() => setSelectedCategory(cat)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold shrink-0 transition cursor-pointer ${
-                    selectedCategory === cat
+                  type="button"
+                  onClick={() => handleScrollCat('left')}
+                  className="absolute left-0 z-10 w-6 h-6 rounded-full bg-white/95 border border-slate-300 text-slate-700 hover:text-[#004b9b] hover:bg-slate-100 shadow-md transition flex items-center justify-center cursor-pointer -ml-1"
+                  title="Scroll left (or roll mouse wheel)"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+              )}
+
+              {/* Scrollable Container with Mouse Wheel + Drag + Smooth Touch */}
+              <div
+                ref={categoryScrollRef}
+                onWheel={handleCategoryWheel}
+                onMouseDown={handleCategoryMouseDown}
+                onMouseMove={handleCategoryMouseMove}
+                onMouseUp={handleCategoryMouseUp}
+                onMouseLeave={handleCategoryMouseLeave}
+                onScroll={checkCategoryScroll}
+                className="flex-1 flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden py-0.5 cursor-grab active:cursor-grabbing select-none scroll-smooth px-0.5"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (categoryHasDragged.current) return;
+                    setSelectedCategory('ALL');
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold shrink-0 transition cursor-pointer select-none ${
+                    selectedCategory === 'ALL'
                       ? 'bg-[#004b9b] text-white font-black shadow-xs'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
-                  {cat}
+                  All Categories
                 </button>
-              ))}
+                {data.menuCategories.map(cat => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => {
+                      if (categoryHasDragged.current) return;
+                      setSelectedCategory(cat);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold shrink-0 transition cursor-pointer select-none ${
+                      selectedCategory === cat
+                        ? 'bg-[#004b9b] text-white font-black shadow-xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+
+              {/* Right Scroll Chevron Button */}
+              {canScrollCatRight && (
+                <button
+                  type="button"
+                  onClick={() => handleScrollCat('right')}
+                  className="absolute right-0 z-10 w-6 h-6 rounded-full bg-white/95 border border-slate-300 text-slate-700 hover:text-[#004b9b] hover:bg-slate-100 shadow-md transition flex items-center justify-center cursor-pointer -mr-1"
+                  title="Scroll right (or roll mouse wheel)"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
 

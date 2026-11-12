@@ -2,17 +2,17 @@
   "data": {
     "serialConfig": {
       "posInvoicePrefix": "POS-",
-      "posInvoiceNextNumber": 10,
+      "posInvoiceNextNumber": 11,
       "posInvoicePadding": 4,
       "posInvoiceIncludeDate": false,
       "posInvoiceResetCycle": "NEVER",
       "kotPrefix": "KOT-",
-      "kotNextNumber": 11,
+      "kotNextNumber": 15,
       "kotPadding": 4,
       "kotIncludeDate": false,
       "kotResetCycle": "NEVER",
       "orderRefPrefix": "ORD-",
-      "orderRefNextNumber": 12,
+      "orderRefNextNumber": 16,
       "orderRefPadding": 4,
       "orderRefResetCycle": "NEVER",
       "lastResetDate": "2026-11-12",
@@ -3907,7 +3907,66 @@
         ]
       }
     ],
-    "sales": [],
+    "sales": [
+      {
+        "id": 1794474346813,
+        "date": "2026-11-12",
+        "invoiceNo": "POS-0010",
+        "orderRef": "ORD-0012",
+        "tableId": "T-01",
+        "table": "T 1",
+        "subtotal": 130,
+        "discountVal": 0,
+        "discountType": "taka",
+        "vatVal": 0,
+        "vatPercent": 0,
+        "vatMode": "inclusive",
+        "details": "T 1 [Zone: Floor 1] (W: N/A, Ref: ORD-0012): Beef Bhuna (1)",
+        "items": [
+          {
+            "id": 1790766956012,
+            "cartItemId": "1790766956012-std--",
+            "name": "Beef Bhuna",
+            "department": "Bangla Kitchen",
+            "category": "Bangla Items",
+            "basePrice": 130,
+            "price": 130,
+            "qty": 1,
+            "addedAt": 1794474331174,
+            "addedAtTime": "3:05 PM"
+          }
+        ],
+        "cash": 130,
+        "card": 0,
+        "bkash": 0,
+        "nagad": 0,
+        "dueGiven": 0,
+        "dueCustomer": "",
+        "dueCollected": 0,
+        "advanceAdjusted": 0,
+        "paymentBreakdown": {
+          "cash": 130,
+          "Cash": 130
+        },
+        "change": 0,
+        "total": 130,
+        "channelCommissionPercent": 0,
+        "channelCommissionAmount": 0,
+        "netRestaurantRevenue": 130,
+        "sessionId": "SES-20261112-0886",
+        "waiterName": "Staff",
+        "cashierName": "Super Admin",
+        "cashierRole": "ADMIN",
+        "cashierId": "USR-01",
+        "sellerName": "Super Admin",
+        "sellerRole": "ADMIN",
+        "sellerId": "USR-01",
+        "orderCreatedBy": "Super Admin",
+        "orderCreatedRole": "ADMIN",
+        "shift": "Shift 1",
+        "createdAt": 1794474346813
+      }
+    ],
     "expenses": [],
     "payments": [
       {
@@ -3956,5 +4015,5 @@
       "CHEF": false
     }
   },
-  "timestamp": 1794474113302
+  "timestamp": 1794479707450
 }
