@@ -2364,27 +2364,35 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           const lt = localTables.find(l => l.id === t.id);
 
           // 1. If table was freed locally within the last 30 seconds, protect it against stale pulse resurrection
+          // (Only if the server table does NOT have a newer order created after the free time!)
           const freedTime = recentlyFreedTablesRef.current.get(t.id);
-          if (freedTime && (now - freedTime < 30000)) {
+          if (freedTime && (now - freedTime < 30000) && (!t.orderCreatedAt || t.orderCreatedAt <= freedTime)) {
             if (lt && lt.status === 'free') return lt;
           }
 
-          // 2. If table's orderRef is already settled in sales, force it to stay free
+          // 2. If table's orderRef is already settled in sales
           if (t.orderRef && settledOrderRefs.has(t.orderRef) && !t.isPaidOrder && !t.linkedSaleId) {
-            return {
-              ...t,
-              status: 'free' as const,
-              waiter: '',
-              customer: 'Walk-in Customer',
-              channelOrAgentId: 'dine_in',
-              discountVal: 0,
-              cart: [],
-              orderRef: undefined,
-              kotCount: 0,
-              billCount: 0,
-              billedAt: undefined,
-              billedAtTime: undefined
-            };
+            if (t.cart && t.cart.length > 0) {
+              t = {
+                ...t,
+                orderRef: `ORD-${Date.now().toString().slice(-6)}`
+              };
+            } else {
+              return {
+                ...t,
+                status: 'free' as const,
+                waiter: '',
+                customer: 'Walk-in Customer',
+                channelOrAgentId: 'dine_in',
+                discountVal: 0,
+                cart: [],
+                orderRef: undefined,
+                kotCount: 0,
+                billCount: 0,
+                billedAt: undefined,
+                billedAtTime: undefined
+              };
+            }
           }
 
           if (!lt) return t;
@@ -2477,9 +2485,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const isRecentlyEditedLocally = (Date.now() - (lastLocalEditTimeRef.current || 0)) < 2500;
     const isServerAhead = Boolean(serverTimestamp && serverTimestamp >= (lastLocalEditTimeRef.current || 0));
     if (isRecentlyEditedLocally && !isServerAhead) {
-      if (serverTimestamp && serverTimestamp > (lastSyncedTimestampRef.current || 0)) {
-        lastSyncedTimestampRef.current = serverTimestamp;
-      }
+      // Do NOT advance lastSyncedTimestampRef so subsequent pulses can still deliver the server update once local editing is complete
       return;
     }
 
@@ -2503,8 +2509,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const lt = currentLocalTables.find(l => l.id === st.id);
 
       // 1. If this table was freed locally within the last 30 seconds, protect it from being resurrected by stale pulse
+      // (Only if the server table does NOT have a newer order created after the free time!)
       const freedTime = recentlyFreedTablesRef.current.get(st.id);
-      if (freedTime && (now - freedTime < 30000)) {
+      if (freedTime && (now - freedTime < 30000) && (!st.orderCreatedAt || st.orderCreatedAt <= freedTime)) {
         if (lt && lt.status === 'free') {
           return lt;
         }

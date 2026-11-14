@@ -222,6 +222,13 @@ function mergeTablesSafely(
       return st;
     }
 
+    // 6. Protection: If server table has an active order (hold or billed) with items, NEVER let a generic background sync from another client wipe it to free!
+    const isExplicitSettleOrRelease = (action === 'TABLE_SETTLE' || action === 'TABLE_RELEASE' || action === 'CART_CLEAR' || action === 'ORDER_CANCEL_DRAFT') && 
+      (modifiedTableId ? it.id === modifiedTableId : true);
+    if ((st.status === 'hold' || st.status === 'billed') && (st.cart?.length || 0) > 0 && (it.status === 'free' || !it.cart || it.cart.length === 0) && !isExplicitSettleOrRelease) {
+      return st; // Keep server's active hold/billed order authoritative!
+    }
+
     // Otherwise accept updated table
     return it;
   });
