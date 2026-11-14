@@ -148,7 +148,8 @@ export const HeadsConfigView: React.FC = () => {
     currencySymbol: data.restaurantProfile?.currencySymbol || '৳',
     vatPercent: data.restaurantProfile?.vatPercent ?? 5,
     vatMode: data.restaurantProfile?.vatMode || 'inclusive',
-    enableVat: data.restaurantProfile?.enableVat ?? true
+    enableVat: data.restaurantProfile?.enableVat ?? true,
+    tableHoldSyncMode: data.restaurantProfile?.tableHoldSyncMode || 'instant'
   });
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [vatSavedSuccess, setVatSavedSuccess] = useState(false);
@@ -169,7 +170,8 @@ export const HeadsConfigView: React.FC = () => {
         currencySymbol: data.restaurantProfile?.currencySymbol || prev.currencySymbol,
         vatPercent: data.restaurantProfile?.vatPercent ?? prev.vatPercent,
         vatMode: data.restaurantProfile?.vatMode || prev.vatMode,
-        enableVat: data.restaurantProfile?.enableVat ?? prev.enableVat
+        enableVat: data.restaurantProfile?.enableVat ?? prev.enableVat,
+        tableHoldSyncMode: data.restaurantProfile?.tableHoldSyncMode || prev.tableHoldSyncMode || 'instant'
       }));
     }
   }, [data.restaurantProfile]);
@@ -1165,6 +1167,82 @@ export const HeadsConfigView: React.FC = () => {
                         placeholder="৳"
                         className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-900 focus:bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
                       />
+                    </div>
+                  </div>
+
+                  {/* Table Live Sync Mode Option */}
+                  <div className="sm:col-span-2 pt-3 border-t border-slate-200">
+                    <label className="block text-xs font-black text-slate-900 mb-1 flex items-center gap-1.5">
+                      <Sliders className="w-4 h-4 text-blue-600" />
+                      <span>{language === 'bn' ? 'টেবিল লাইভ সিঙ্ক মোড (Table Live Hold Sync)' : 'Table Live Hold Sync Mode'}</span>
+                    </label>
+                    <p className="text-[11px] text-slate-500 mb-3">
+                      {language === 'bn' 
+                        ? 'খাবার সিলেক্ট করলে অন্য ডিভাইসগুলোতে টেবিল কখন নীল (Hold) দেখাবে তা নির্ধারণ করুন।' 
+                        : 'Choose when tables transition to Hold status across other terminals.'}
+                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Option 1: Instant */}
+                      <div 
+                        onClick={() => setProfileForm(prev => ({ ...prev, tableHoldSyncMode: 'instant' }))}
+                        className={`p-3.5 rounded-xl border-2 cursor-pointer transition flex flex-col justify-between ${
+                          (profileForm.tableHoldSyncMode || 'instant') === 'instant'
+                            ? 'border-blue-600 bg-blue-50/70 ring-2 ring-blue-500/20'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <div className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                            (profileForm.tableHoldSyncMode || 'instant') === 'instant'
+                              ? 'border-blue-600 bg-blue-600 text-white'
+                              : 'border-slate-300'
+                          }`}>
+                            {(profileForm.tableHoldSyncMode || 'instant') === 'instant' && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
+                          </div>
+                          <div>
+                            <div className="text-xs font-black text-slate-900 flex items-center gap-1">
+                              <span>{language === 'bn' ? 'তাৎক্ষণিক লাইভ সিঙ্ক (Instant)' : 'Instant Real-Time Hold'}</span>
+                              <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-100 text-blue-800 font-extrabold">Default</span>
+                            </div>
+                            <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                              {language === 'bn'
+                                ? 'খাবার সিলেক্ট করা শুরু করলেই সমস্ত স্ক্রিনে টেবিল নীল (Hold) হয়ে যাবে।'
+                                : 'Show table as Hold on all screens immediately when items are added to cart.'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Option 2: On KOT Only */}
+                      <div 
+                        onClick={() => setProfileForm(prev => ({ ...prev, tableHoldSyncMode: 'on_kot' }))}
+                        className={`p-3.5 rounded-xl border-2 cursor-pointer transition flex flex-col justify-between ${
+                          profileForm.tableHoldSyncMode === 'on_kot'
+                            ? 'border-emerald-600 bg-emerald-50/70 ring-2 ring-emerald-500/20'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <div className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                            profileForm.tableHoldSyncMode === 'on_kot'
+                              ? 'border-emerald-600 bg-emerald-600 text-white'
+                              : 'border-slate-300'
+                          }`}>
+                            {profileForm.tableHoldSyncMode === 'on_kot' && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
+                          </div>
+                          <div>
+                            <div className="text-xs font-black text-slate-900 flex items-center gap-1">
+                              <span>{language === 'bn' ? 'শুধুমাত্র KOT সাবমিটের পর' : 'Hold on KOT Submit Only'}</span>
+                            </div>
+                            <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                              {language === 'bn'
+                                ? 'KOT প্রিন্ট বা কিচেনে পাঠানোর পর কেবল অন্য স্ক্রিনে নীল হবে, তার আগ পর্যন্ত সবুজ (Free) থাকবে।'
+                                : 'Keep table Green (Free) on other screens until waiter submits order to kitchen.'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

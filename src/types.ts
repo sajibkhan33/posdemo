@@ -708,6 +708,7 @@ export interface RestaurantProfile {
   vatPercent?: number; // Dynamic VAT rate (e.g. 5, 7.5, 10, 15, 0)
   vatMode?: 'inclusive' | 'exclusive'; // default 'inclusive'
   enableVat?: boolean; // toggle auto-VAT on/off
+  tableHoldSyncMode?: 'instant' | 'on_kot'; // 'instant': live draft sync across terminals; 'on_kot': hold table only after KOT print
 }
 
 export type SerialResetCycle = 'NEVER' | 'DAILY' | 'YEARLY';

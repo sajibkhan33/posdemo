@@ -792,7 +792,8 @@ export const DEFAULT_RESTAURANT_PROFILE: RestaurantProfile = {
   outletSecurityKey: "BDHOSTT-2026",
   vatPercent: 5,
   vatMode: "inclusive",
-  enableVat: true
+  enableVat: true,
+  tableHoldSyncMode: "instant"
 };
 
 export const DEFAULT_EMPLOYEES: Employee[] = [
@@ -2359,7 +2360,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
           // If active table edited recently in this tab (< 2500ms), preserve local in-flight draft
           const isActiveAndRecentlyEdited = (t.id === activeTableIdRef.current) && ((now - (lastLocalEditTimeRef.current || 0)) < 2500);
-          if (isActiveAndRecentlyEdited) {
+          const isHoldSyncOnKotOnly = (dataRef.current?.restaurantProfile?.tableHoldSyncMode || data.restaurantProfile?.tableHoldSyncMode) === 'on_kot';
+          const isUnprintedDraftOnActiveTable = isHoldSyncOnKotOnly && (t.id === activeTableIdRef.current) && ((lt.cart?.length || 0) > 0) && ((t.cart?.length || 0) === 0);
+          if (isActiveAndRecentlyEdited || isUnprintedDraftOnActiveTable) {
             return lt;
           }
 
@@ -2458,7 +2461,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       // If active table edited recently in this tab (< 2500ms), preserve local in-flight draft
       const isActiveAndRecentlyEdited = (st.id === activeTableIdRef.current) && ((now - (lastLocalEditTimeRef.current || 0)) < 2500);
-      if (isActiveAndRecentlyEdited) {
+      const isHoldSyncOnKotOnly = (dataRef.current?.restaurantProfile?.tableHoldSyncMode || data.restaurantProfile?.tableHoldSyncMode) === 'on_kot';
+      const isUnprintedDraftOnActiveTable = isHoldSyncOnKotOnly && (st.id === activeTableIdRef.current) && ((lt.cart?.length || 0) > 0) && ((st.cart?.length || 0) === 0);
+      if (isActiveAndRecentlyEdited || isUnprintedDraftOnActiveTable) {
         return lt;
       }
 
@@ -2497,13 +2502,33 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const now = Date.now();
     lastLocalEditTimeRef.current = now;
 
+    const syncMode = (dataRef.current?.restaurantProfile?.tableHoldSyncMode || data.restaurantProfile?.tableHoldSyncMode) || 'instant';
+    let tablesToBroadcast = tablesToSend;
+    if (syncMode === 'on_kot') {
+      tablesToBroadcast = tablesToSend.map(t => {
+        const isReallyEmpty = !t.cart || t.cart.length === 0;
+        const hasAnyKot = !isReallyEmpty && t.cart.some(item => (item.kotPrintedQty || 0) > 0 || item.kotPrinted);
+        const isBilled = t.status === 'billed';
+        if (!isReallyEmpty && !hasAnyKot && !isBilled) {
+          return {
+            ...t,
+            status: 'free' as const,
+            cart: [],
+            waiter: '',
+            discountVal: 0
+          };
+        }
+        return t;
+      });
+    }
+
     // 1. Instant zero-lag broadcast to sibling tabs in this browser (0ms)
     if (posBroadcastChannelRef.current) {
       try {
         posBroadcastChannelRef.current.postMessage({
           type: 'POS_TABLES_UPDATE',
           sender: tabClientIdRef.current,
-          tables: tablesToSend,
+          tables: tablesToBroadcast,
           newSale: newSaleToSend,
           serialConfig: serialConfigToSend,
           timestamp: now
@@ -2522,7 +2547,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         body: JSON.stringify({
           action,
           sender: tabClientIdRef.current,
-          tables: tablesToSend,
+          tables: tablesToBroadcast,
           newSale: newSaleToSend,
           serialConfig: serialConfigToSend
         })
