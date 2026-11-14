@@ -2224,7 +2224,11 @@ async function startServer() {
       if (Array.isArray(tables) && cachedState) {
         if (newSale && newSale.invoiceNo) {
           if (!Array.isArray(cachedState.sales)) cachedState.sales = [];
-          const exists = cachedState.sales.some((s: any) => s.invoiceNo === newSale.invoiceNo || (s.id && newSale.id && s.id === newSale.id));
+          const exists = cachedState.sales.some((s: any) => 
+            s.invoiceNo === newSale.invoiceNo || 
+            (s.id && newSale.id && s.id === newSale.id) ||
+            (s.orderRef && newSale.orderRef && s.orderRef === newSale.orderRef)
+          );
           if (!exists) {
             cachedState.sales.push(newSale);
           }
