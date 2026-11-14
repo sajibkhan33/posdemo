@@ -890,7 +890,12 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
                         setIsStartSessionModalOpen(true);
                         return;
                       }
-                      selectTable(table.id);
+                      const flow = data.restaurantProfile?.posTableOrderFlow || 'direct';
+                      if (flow === 'modal') {
+                        setAssigningTable(table);
+                      } else {
+                        selectTable(table.id);
+                      }
                     }
                   }}
                   className={`${cardPadding} border-2 transition-all duration-150 flex flex-col justify-between relative overflow-hidden group shadow-xs hover:shadow-md select-none ${

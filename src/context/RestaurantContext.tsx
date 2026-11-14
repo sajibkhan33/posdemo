@@ -793,7 +793,8 @@ export const DEFAULT_RESTAURANT_PROFILE: RestaurantProfile = {
   vatPercent: 5,
   vatMode: "inclusive",
   enableVat: true,
-  tableHoldSyncMode: "instant"
+  tableHoldSyncMode: "instant",
+  posTableOrderFlow: "direct"
 };
 
 export const DEFAULT_EMPLOYEES: Employee[] = [

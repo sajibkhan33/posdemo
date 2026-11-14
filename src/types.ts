@@ -709,6 +709,7 @@ export interface RestaurantProfile {
   vatMode?: 'inclusive' | 'exclusive'; // default 'inclusive'
   enableVat?: boolean; // toggle auto-VAT on/off
   tableHoldSyncMode?: 'instant' | 'on_kot'; // 'instant': live draft sync across terminals; 'on_kot': hold table only after KOT print
+  posTableOrderFlow?: 'modal' | 'direct'; // 'modal': Waiter/Customer dialog first; 'direct': 1-click direct POS order screen
 }
 
 export type SerialResetCycle = 'NEVER' | 'DAILY' | 'YEARLY';

@@ -76,7 +76,7 @@ export const HeadsConfigView: React.FC = () => {
     t
   } = useRestaurant();
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'heads' | 'coa' | 'agents' | 'printers' | 'templates' | 'payments' | 'vat' | 'serials'>(() => {
+  const [activeTab, setActiveTab] = useState<'profile' | 'heads' | 'coa' | 'agents' | 'printers' | 'templates' | 'payments' | 'vat' | 'serials' | 'orderFlow'>(() => {
     if (activeSubNav === 'coa' || activeSubNav === 'chart-of-accounts') return 'coa';
     if (activeSubNav === 'payments' || activeSubNav === 'payment-methods') return 'payments';
     if (activeSubNav === 'heads') return 'heads';
@@ -109,7 +109,7 @@ export const HeadsConfigView: React.FC = () => {
     }
   }, [activeSubNav]);
 
-  const switchTab = (tab: 'profile' | 'heads' | 'coa' | 'agents' | 'printers' | 'templates' | 'payments' | 'vat' | 'serials') => {
+  const switchTab = (tab: 'profile' | 'heads' | 'coa' | 'agents' | 'printers' | 'templates' | 'payments' | 'vat' | 'serials' | 'orderFlow') => {
     setActiveTab(tab);
     setActiveSubNav(tab);
   };
@@ -153,6 +153,24 @@ export const HeadsConfigView: React.FC = () => {
   });
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [vatSavedSuccess, setVatSavedSuccess] = useState(false);
+  const [selectedFlowMode, setSelectedFlowMode] = useState<'modal' | 'direct'>(() => data.restaurantProfile?.posTableOrderFlow || 'direct');
+  const [showModalMockup, setShowModalMockup] = useState(false);
+  const [showDirectMockup, setShowDirectMockup] = useState(false);
+  const [flowSavedSuccess, setFlowSavedSuccess] = useState(false);
+
+  React.useEffect(() => {
+    if (data.restaurantProfile?.posTableOrderFlow) {
+      setSelectedFlowMode(data.restaurantProfile.posTableOrderFlow);
+    }
+  }, [data.restaurantProfile?.posTableOrderFlow]);
+
+  const handleSaveWorkflow = (mode?: 'modal' | 'direct') => {
+    const targetMode = mode || selectedFlowMode;
+    setSelectedFlowMode(targetMode);
+    updateRestaurantProfile({ posTableOrderFlow: targetMode });
+    setFlowSavedSuccess(true);
+    setTimeout(() => setFlowSavedSuccess(false), 3000);
+  };
 
   React.useEffect(() => {
     if (data.restaurantProfile) {
@@ -875,6 +893,19 @@ export const HeadsConfigView: React.FC = () => {
             >
               <Percent className="w-3.5 h-3.5" />
               <span>VAT & Tax Configuration</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => switchTab('orderFlow')}
+              className={`px-4 py-2 text-xs font-bold rounded-lg transition cursor-pointer flex items-center gap-2 ${
+                activeTab === 'orderFlow'
+                  ? 'bg-[#004b9b] text-white shadow-xs font-black'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="Table Order Flow (2 Modes)"
+            >
+              <Utensils className="w-3.5 h-3.5" />
+              <span>Table Order Flow (2 Modes)</span>
             </button>
             <button
               type="button"
@@ -2081,6 +2112,306 @@ export const HeadsConfigView: React.FC = () => {
       {activeTab === 'serials' && (
         <div className="animate-in fade-in">
           <SerialConfigView />
+        </div>
+      )}
+
+      {/* Table Order Flow (2 Modes) Tab */}
+      {activeTab === 'orderFlow' && (
+        <div className="space-y-6 animate-in fade-in">
+          {/* Success Notification Banner */}
+          {flowSavedSuccess && (
+            <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center justify-between text-emerald-900 font-bold text-sm shadow-xs animate-in slide-in-from-top">
+              <div className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                <span>Workflow settings saved successfully! Active mode updated across all terminals.</span>
+              </div>
+              <button onClick={() => setFlowSavedSuccess(false)} className="text-emerald-700 hover:text-emerald-900 cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Main Container Card */}
+          <div className="bg-white border border-slate-200 rounded-3xl shadow-xs overflow-hidden">
+            {/* Top Header Card */}
+            <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-start gap-3.5">
+                <div className="p-3 bg-blue-50 text-[#004b9b] border border-blue-200 rounded-2xl shrink-0">
+                  <Utensils className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-black text-slate-900 tracking-tight">
+                    POS Table Click &amp; Order Taking Workflow
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Choose what happens when staff or cashier clicks on an empty / free table on the POS floor plan
+                  </p>
+                </div>
+              </div>
+
+              {/* Current Active Mode Badge */}
+              <div className="flex items-center gap-2 self-start md:self-auto">
+                <span className="text-xs font-bold text-slate-500">Current Mode:</span>
+                <span className={`px-3.5 py-1.5 rounded-xl text-xs font-black border flex items-center gap-1.5 shadow-2xs ${
+                  selectedFlowMode === 'modal'
+                    ? 'bg-blue-50 text-blue-900 border-blue-200'
+                    : 'bg-emerald-50 text-emerald-900 border-emerald-300'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${selectedFlowMode === 'modal' ? 'bg-blue-600' : 'bg-emerald-500'}`} />
+                  <span>{selectedFlowMode === 'modal' ? 'Option 1: Waiter Modal Dialog' : 'Option 2: Direct POS Screen'}</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Table of Workflow Modes */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-900 text-white text-[11px] font-black uppercase tracking-wider">
+                    <th className="py-3 px-4 w-12 text-center">#</th>
+                    <th className="py-3 px-4 min-w-[170px]">Workflow Mode</th>
+                    <th className="py-3 px-6 min-w-[320px]">Mode Name &amp; Workflow Description</th>
+                    <th className="py-3 px-4 min-w-[160px]">Service Category</th>
+                    <th className="py-3 px-4 min-w-[240px]">Order Flow / Step Sequence</th>
+                    <th className="py-3 px-4 text-center min-w-[110px]">Status</th>
+                    <th className="py-3 px-4 text-center min-w-[130px]">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs font-medium">
+                  {/* Option 1: Modal First */}
+                  <tr 
+                    onClick={() => setSelectedFlowMode('modal')}
+                    className={`transition-colors cursor-pointer ${
+                      selectedFlowMode === 'modal' ? 'bg-blue-50/60' : 'hover:bg-slate-50/80'
+                    }`}
+                  >
+                    <td className="py-5 px-4 text-center">
+                      <input
+                        type="radio"
+                        name="orderFlowMode"
+                        checked={selectedFlowMode === 'modal'}
+                        onChange={() => setSelectedFlowMode('modal')}
+                        className="w-4 h-4 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      />
+                    </td>
+                    <td className="py-5 px-4">
+                      <div className="space-y-1">
+                        <span className="inline-block px-2.5 py-1 rounded-lg bg-blue-100 text-blue-900 font-black text-[10px] tracking-wide border border-blue-200">
+                          OPTION 1 (MODAL FIRST)
+                        </span>
+                        <div className="text-[10px] font-mono text-slate-400">FLOW-MODAL</div>
+                      </div>
+                    </td>
+                    <td className="py-5 px-6">
+                      <div className="space-y-1">
+                        <div className="font-black text-slate-900 text-sm">
+                          1. Waiter &amp; Customer Modal Dialog (Popup First)
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Clicking a table opens a modal dialog to select Waiter and Customer/Channel first before navigating to the menu order screen.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setShowModalMockup(prev => !prev); }}
+                          className="text-[11px] font-bold text-blue-700 hover:text-blue-900 underline mt-1 flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>{showModalMockup ? '▲ Hide Visual Mockup' : '▼ View Visual Mockup'}</span>
+                        </button>
+                        {showModalMockup && (
+                          <div className="mt-2.5 p-3.5 bg-white border border-blue-200 rounded-xl shadow-xs text-[11px] space-y-2 animate-in fade-in">
+                            <div className="font-extrabold text-slate-900">Step-by-step Visual Mockup:</div>
+                            <div className="flex items-center gap-1.5 flex-wrap text-slate-700">
+                              <span className="px-2.5 py-1 bg-slate-100 rounded-lg font-bold">1. Click Table T-01</span>
+                              <span className="text-slate-400">➔</span>
+                              <span className="px-2.5 py-1 bg-amber-100 text-amber-900 rounded-lg font-black border border-amber-300">2. Popup: Tag Waiter &amp; Customer</span>
+                              <span className="text-slate-400">➔</span>
+                              <span className="px-2.5 py-1 bg-blue-100 text-blue-900 rounded-lg font-black border border-blue-300">3. Menu &amp; Cart Screen</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-5 px-4">
+                      <div className="space-y-1">
+                        <span className="inline-block px-2.5 py-1 rounded-lg bg-blue-50 text-blue-800 font-extrabold text-[11px] border border-blue-200">
+                          Standard Dine-In Service
+                        </span>
+                        <div className="text-[10px] text-slate-500">Formal table service</div>
+                      </div>
+                    </td>
+                    <td className="py-5 px-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1 text-[11px] font-bold text-slate-800 flex-wrap">
+                          <span>Table Click</span>
+                          <span className="text-slate-400">➔</span>
+                          <span className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-700 font-black">Popup Modal</span>
+                          <span className="text-slate-400">➔</span>
+                          <span>Menu &amp; Cart</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500">
+                          Staff prompted to tag Waiter &amp; Guest before food ordering
+                        </p>
+                      </div>
+                    </td>
+                    <td className="py-5 px-4 text-center">
+                      {selectedFlowMode === 'modal' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-black border border-emerald-300">
+                          <Check className="w-3 h-3 text-emerald-600" />
+                          <span>Active Mode</span>
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 font-bold text-xs">Inactive</span>
+                      )}
+                    </td>
+                    <td className="py-5 px-4 text-center">
+                      {selectedFlowMode === 'modal' ? (
+                        <button
+                          type="button"
+                          disabled
+                          className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-black shadow-xs flex items-center justify-center gap-1.5 w-full cursor-default"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Selected</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleSaveWorkflow('modal'); }}
+                          className="px-4 py-2 bg-[#004b9b] hover:bg-[#003b7a] text-white rounded-xl text-xs font-black shadow-xs transition flex items-center justify-center gap-1.5 w-full cursor-pointer"
+                        >
+                          <span>Select Mode</span>
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+
+                  {/* Option 2: Direct POS Screen */}
+                  <tr 
+                    onClick={() => setSelectedFlowMode('direct')}
+                    className={`transition-colors cursor-pointer ${
+                      selectedFlowMode === 'direct' ? 'bg-emerald-50/60' : 'hover:bg-slate-50/80'
+                    }`}
+                  >
+                    <td className="py-5 px-4 text-center">
+                      <input
+                        type="radio"
+                        name="orderFlowMode"
+                        checked={selectedFlowMode === 'direct'}
+                        onChange={() => setSelectedFlowMode('direct')}
+                        className="w-4 h-4 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                      />
+                    </td>
+                    <td className="py-5 px-4">
+                      <div className="space-y-1">
+                        <span className="inline-block px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-900 font-black text-[10px] tracking-wide border border-emerald-200">
+                          OPTION 2 (DIRECT POS)
+                        </span>
+                        <div className="text-[10px] font-mono text-slate-400">FLOW-DIRECT</div>
+                      </div>
+                    </td>
+                    <td className="py-5 px-6">
+                      <div className="space-y-1">
+                        <div className="font-black text-slate-900 text-sm">
+                          2. Direct 1-Click POS Order Screen (Instant Open)
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Clicking a table opens the POS order taking screen directly with menu and cart. Waiter can be assigned at any time via the "Assign Waiter" button inside.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setShowDirectMockup(prev => !prev); }}
+                          className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 underline mt-1 flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>{showDirectMockup ? '▲ Hide Visual Mockup' : '▼ View Visual Mockup'}</span>
+                        </button>
+                        {showDirectMockup && (
+                          <div className="mt-2.5 p-3.5 bg-white border border-emerald-200 rounded-xl shadow-xs text-[11px] space-y-2 animate-in fade-in">
+                            <div className="font-extrabold text-slate-900">Step-by-step Visual Mockup:</div>
+                            <div className="flex items-center gap-1.5 flex-wrap text-slate-700">
+                              <span className="px-2.5 py-1 bg-slate-100 rounded-lg font-bold">1. Click Table T-01</span>
+                              <span className="text-slate-400">➔</span>
+                              <span className="px-2.5 py-1 bg-emerald-100 text-emerald-900 rounded-lg font-black border border-emerald-300">2. Instant Direct POS Screen</span>
+                              <span className="text-slate-400">➔</span>
+                              <span className="px-2.5 py-1 bg-slate-100 rounded-lg font-semibold">3. Assign Waiter (Optional anytime)</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-5 px-4">
+                      <div className="space-y-1">
+                        <span className="inline-block px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 font-extrabold text-[11px] border border-emerald-200">
+                          Fast Counter &amp; Express Mode
+                        </span>
+                        <div className="text-[10px] text-slate-500">Express &amp; speed POS</div>
+                      </div>
+                    </td>
+                    <td className="py-5 px-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1 text-[11px] font-bold text-slate-800 flex-wrap">
+                          <span>Table Click</span>
+                          <span className="text-slate-400">➔</span>
+                          <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-900 rounded font-black">Direct POS Screen</span>
+                          <span className="text-slate-400">➔</span>
+                          <span>Assign Waiter (Optional)</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500">
+                          ⚡ 1-Click instant item addition without modal interruption
+                        </p>
+                      </div>
+                    </td>
+                    <td className="py-5 px-4 text-center">
+                      {selectedFlowMode === 'direct' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-black border border-emerald-300">
+                          <Check className="w-3 h-3 text-emerald-600" />
+                          <span>Active Mode</span>
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 font-bold text-xs">Inactive</span>
+                      )}
+                    </td>
+                    <td className="py-5 px-4 text-center">
+                      {selectedFlowMode === 'direct' ? (
+                        <button
+                          type="button"
+                          disabled
+                          className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-black shadow-xs flex items-center justify-center gap-1.5 w-full cursor-default"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Selected</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleSaveWorkflow('direct'); }}
+                          className="px-4 py-2 bg-[#004b9b] hover:bg-[#003b7a] text-white rounded-xl text-xs font-black shadow-xs transition flex items-center justify-center gap-1.5 w-full cursor-pointer"
+                        >
+                          <span>Select Mode</span>
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Card Footer: Tip & Save Button */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="text-xs text-slate-600 flex items-center gap-2">
+                <span className="text-amber-500 text-base">💡</span>
+                <span><strong>Tip:</strong> Click either row to toggle your preferred workflow. Changes sync immediately to MongoDB and across all active POS terminals.</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleSaveWorkflow()}
+                className="px-6 py-2.5 bg-[#004b9b] hover:bg-[#003b7a] text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md transition flex items-center gap-2 cursor-pointer shrink-0"
+              >
+                <Check className="w-4 h-4" />
+                <span>Save Workflow Settings</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
