@@ -7511,20 +7511,30 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         return prev;
       }
       added = true;
-      const id = 'T-' + (tables.length + 1).toString().padStart(2, '0');
+      const existingIds = new Set(tables.map(t => t.id));
+      let nextNum = 1;
+      while (existingIds.has('T-' + nextNum.toString().padStart(2, '0')) || existingIds.has('T-' + nextNum)) {
+        nextNum++;
+      }
+      const id = 'T-' + nextNum.toString().padStart(2, '0');
+      const newTable: Table = {
+        id,
+        name: trimmed,
+        zone: assignedZone,
+        status: 'free',
+        waiter: '',
+        customer: 'Walk-in Customer',
+        discountType: 'taka',
+        discountVal: 0,
+        cart: []
+      };
+      const updatedTables = [...tables, newTable];
+      dataRef.current = { ...prev, tables: updatedTables };
+      lastSyncedTablesStrRef.current = JSON.stringify(updatedTables);
+      syncPosTablesToServer(updatedTables, undefined, 'TABLES_CONFIG_UPDATE', undefined, id);
       return {
         ...prev,
-        tables: [...tables, {
-          id,
-          name: trimmed,
-          zone: assignedZone,
-          status: 'free',
-          waiter: '',
-          customer: 'Walk-in Customer',
-          discountType: 'taka',
-          discountVal: 0,
-          cart: []
-        }]
+        tables: updatedTables
       };
     });
     return added;
@@ -7552,16 +7562,27 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           ...(newZone ? { zone: newZone.trim() } : {})
         };
       }
+      dataRef.current = { ...prev, tables: arr };
+      lastSyncedTablesStrRef.current = JSON.stringify(arr);
+      syncPosTablesToServer(arr, undefined, 'TABLES_CONFIG_UPDATE', undefined, arr[index]?.id);
       return { ...prev, tables: arr };
     });
   };
 
   const deleteCustomTable = (index: number) => {
     lastLocalEditTimeRef.current = Date.now();
-    setData(prev => ({
-      ...prev,
-      tables: (prev.tables || []).filter((_, i) => i !== index)
-    }));
+    const tableToDelete = (dataRef.current?.tables || data.tables || [])[index];
+    const deletedId = tableToDelete?.id;
+    setData(prev => {
+      const updatedTables = (prev.tables || []).filter((_, i) => i !== index);
+      dataRef.current = { ...prev, tables: updatedTables };
+      lastSyncedTablesStrRef.current = JSON.stringify(updatedTables);
+      syncPosTablesToServer(updatedTables, undefined, 'TABLES_CONFIG_UPDATE', undefined, deletedId);
+      return {
+        ...prev,
+        tables: updatedTables
+      };
+    });
   };
 
   // Unified Config Item Handlers for all 9 Master Heads modules
@@ -7692,9 +7713,13 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           ? itemOrIndex 
           : prev.tables.findIndex(t => t.name === itemOrIndex);
         if (idx < 0) return prev;
+        const updatedTables = prev.tables.filter((_, i) => i !== idx);
+        dataRef.current = { ...prev, tables: updatedTables };
+        lastSyncedTablesStrRef.current = JSON.stringify(updatedTables);
+        syncPosTablesToServer(updatedTables, undefined, 'TABLES_CONFIG_UPDATE', undefined, prev.tables[idx]?.id);
         return {
           ...prev,
-          tables: prev.tables.filter((_, i) => i !== idx)
+          tables: updatedTables
         };
       });
     } else if (type === 'tableZones') {

@@ -128,8 +128,38 @@ function mergeTablesSafely(
   );
 
   const now = Date.now();
+  const serverTableMap = new Map((currentServerTables || []).map((t: any) => [t.id, t]));
+  const isConfigChange = (action === 'TABLES_CONFIG_UPDATE');
 
-  return currentServerTables.map(st => {
+  // If this is an explicit structural table configuration change (tables added/deleted/recreated dynamically)
+  if (isConfigChange) {
+    return incomingTables.map((it: any) => {
+      const st = serverTableMap.get(it.id);
+      if (!st) return it; // Brand new table dynamically created
+      // If surviving table already has active running orders on server, preserve them intact
+      if ((st.status === 'hold' || st.status === 'billed') && (st.cart?.length || 0) > 0) {
+        return {
+          ...it,
+          status: st.status,
+          cart: st.cart,
+          waiter: st.waiter,
+          customer: st.customer,
+          orderRef: st.orderRef,
+          kotCount: st.kotCount,
+          billCount: st.billCount,
+          billedAt: st.billedAt,
+          billedAtTime: st.billedAtTime,
+          linkedInvoiceNo: st.linkedInvoiceNo,
+          orderCreatedAt: st.orderCreatedAt,
+          orderCreatedBy: st.orderCreatedBy,
+          orderCreatedRole: st.orderCreatedRole
+        };
+      }
+      return it;
+    });
+  }
+
+  const updatedExisting = currentServerTables.map(st => {
     const it = incomingTables.find((t: any) => t.id === st.id);
     if (!it) return st;
 
@@ -232,6 +262,10 @@ function mergeTablesSafely(
     // Otherwise accept updated table
     return it;
   });
+
+  // Dynamically include any brand-new tables from client that server doesn't have yet!
+  const newTables = incomingTables.filter((it: any) => !serverTableMap.has(it.id));
+  return [...updatedExisting, ...newTables];
 }
 
 // Initialize MongoDB connection and synchronize state
@@ -2314,8 +2348,17 @@ async function startServer() {
         });
         const mergedSales = Array.from(salesMap.values());
 
-        // 2. Merge tables safely so settled/freed tables cannot be resurrected by a stale full sync
-        const mergedTables = mergeTablesSafely(cachedState?.tables || [], clientData.tables || [], mergedSales);
+        // 2. Merge tables safely: if table structure (count or IDs) was changed in config, use TABLES_CONFIG_UPDATE
+        const serverIds = (cachedState?.tables || []).map((t: any) => t.id).join(',');
+        const clientIds = (clientData.tables || []).map((t: any) => t.id).join(',');
+        const isTableStructureChanged = serverIds !== clientIds;
+
+        const mergedTables = mergeTablesSafely(
+          cachedState?.tables || [], 
+          clientData.tables || [], 
+          mergedSales,
+          isTableStructureChanged ? 'TABLES_CONFIG_UPDATE' : 'TABLES_UPDATE'
+        );
 
         cachedState = {
           ...cachedState,
