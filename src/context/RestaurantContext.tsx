@@ -2425,19 +2425,37 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           // CRITICAL: If incoming server table is 'free', accept it! NEVER restore an old cart if table is freed!
           if (t.status === 'free') {
             if (lt.status === 'free') return t;
-            const hasUnprintedLocalDraft = (lt.cart?.length || 0) > 0 && lt.cart.every(i => !i.kotPrinted);
+            const hasLocalCart = (lt.cart?.length || 0) > 0;
+            const hasUnprintedLocalDraft = hasLocalCart && lt.cart.some(i => !i.kotPrinted || (i.kotPrintedQty || 0) < i.qty);
             const thisTableEditTime = tableLocalEditTimeMapRef.current.get(t.id) || 0;
-            const isActivelyTyping = (t.id === activeTableIdRef.current) && ((now - thisTableEditTime) < 2500) && hasUnprintedLocalDraft;
-            if (isActivelyTyping) return lt;
+            const isLocalActive = (t.id === activeTableIdRef.current);
+            const isHoldSyncOnKotOnly = (dataRef.current?.restaurantProfile?.tableHoldSyncMode || data.restaurantProfile?.tableHoldSyncMode) === 'on_kot';
+
+            if (isLocalActive && hasLocalCart) return lt;
+            if (isHoldSyncOnKotOnly && hasUnprintedLocalDraft) return lt;
+            if (hasLocalCart && (now - thisTableEditTime < 30000)) return lt;
             return t;
           }
 
-          // If active table has genuine unprinted draft edited recently in this tab (< 2500ms), preserve local in-flight draft
-          const hasUnprintedLocalDraft = (lt.cart?.length || 0) > 0 && lt.cart.every(i => !i.kotPrinted);
+          // If active table or recently edited table has local draft, preserve it
+          const hasLocalCart = (lt.cart?.length || 0) > 0;
+          const hasUnprintedLocalDraft = hasLocalCart && lt.cart.some(i => !i.kotPrinted || (i.kotPrintedQty || 0) < i.qty);
           const thisTableEditTime = tableLocalEditTimeMapRef.current.get(t.id) || 0;
-          const isActiveAndRecentlyEdited = (t.id === activeTableIdRef.current) && ((now - thisTableEditTime) < 2500) && hasUnprintedLocalDraft;
-          if (isActiveAndRecentlyEdited) {
+          const isLocalActive = (t.id === activeTableIdRef.current);
+          const isHoldSyncOnKotOnly = (dataRef.current?.restaurantProfile?.tableHoldSyncMode || data.restaurantProfile?.tableHoldSyncMode) === 'on_kot';
+
+          if (isLocalActive && hasLocalCart) {
+            if ((t.cart?.length || 0) < (lt.cart?.length || 0) || (lt.status === 'billed' && t.status !== 'billed') || hasUnprintedLocalDraft) {
+              return lt;
+            }
+          }
+          if (isHoldSyncOnKotOnly && hasUnprintedLocalDraft) {
             return lt;
+          }
+          if (hasLocalCart && (now - thisTableEditTime < 30000)) {
+            if ((t.cart?.length || 0) < (lt.cart?.length || 0)) {
+              return lt;
+            }
           }
 
           return t;
@@ -2592,23 +2610,33 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       // CRITICAL: Protect against stale in-flight server pulse overwriting freshly submitted KOT / Bill / Order!
       // Check if THIS SPECIFIC TABLE was edited recently or is currently active in this tab
       const thisTableEditTime = tableLocalEditTimeMapRef.current.get(st.id) || 0;
-      const isThisTableRecentlyEdited = (now - thisTableEditTime) < 4000;
+      const isThisTableRecentlyEdited = (now - thisTableEditTime) < 30000;
       const hasLocalCart = (lt.cart?.length || 0) > 0;
       const isLocalActive = (st.id === activeTableIdRef.current);
+      const isHoldSyncOnKotOnly = (dataRef.current?.restaurantProfile?.tableHoldSyncMode || data.restaurantProfile?.tableHoldSyncMode) === 'on_kot';
+      const hasUnprintedDraft = hasLocalCart && lt.cart.some((item: any) => !item.kotPrinted || (item.kotPrintedQty || 0) < item.qty);
 
       if (st.status === 'free') {
         if (lt.status === 'free') return st;
-        // ONLY preserve local table if THIS table is actively open or was modified locally in the last 4s with a cart
-        if (isThisTableRecentlyEdited && hasLocalCart && isLocalActive) {
+        // 1. If actively open on this POS screen with items, NEVER wipe it to free!
+        if (isLocalActive && hasLocalCart) {
+          return lt;
+        }
+        // 2. In on_kot mode, local unprinted drafts are stripped on server by design. Preserve local draft!
+        if (isHoldSyncOnKotOnly && hasUnprintedDraft) {
+          return lt;
+        }
+        // 3. If edited recently locally, preserve it!
+        if (isThisTableRecentlyEdited && hasLocalCart) {
           return lt;
         }
         return st;
       }
 
-      // 3. If THIS specific table was edited recently in this tab, preserve local in-flight draft/cart state
-      if (isThisTableRecentlyEdited && hasLocalCart && isLocalActive) {
+      // 3. Preserve in-flight draft/cart state if active, recently edited, or unprinted
+      if (hasLocalCart && (isLocalActive || isThisTableRecentlyEdited || (isHoldSyncOnKotOnly && hasUnprintedDraft))) {
         // If local has more items or has billed status, keep local authoritative
-        if ((st.cart?.length || 0) < (lt.cart?.length || 0) || (lt.status === 'billed' && st.status !== 'billed')) {
+        if ((st.cart?.length || 0) < (lt.cart?.length || 0) || (lt.status === 'billed' && st.status !== 'billed') || hasUnprintedDraft) {
           return lt;
         }
       }
@@ -2825,7 +2853,33 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           applyIncomingTables(evt.data.tables, evt.data.newSale, evt.data.timestamp, evt.data.serialConfig);
         } else if (evt.data?.type === 'POS_TAB_SYNC' && evt.data?.data) {
           isUpdatingFromSync.current = true;
-          setData(evt.data.data);
+          setData(prev => {
+            const incomingData = evt.data.data;
+            if (!incomingData) return prev;
+            let mergedTables = incomingData.tables;
+            if (Array.isArray(incomingData.tables) && Array.isArray(prev.tables)) {
+              mergedTables = incomingData.tables.map((st: Table) => {
+                const lt = prev.tables.find(l => l.id === st.id);
+                if (!lt) return st;
+                const hasLocalCart = (lt.cart?.length || 0) > 0;
+                const isLocalActive = (st.id === activeTableIdRef.current);
+                if (st.status === 'free' && hasLocalCart && isLocalActive) {
+                  return lt;
+                }
+                const hasUnprintedDraft = hasLocalCart && lt.cart.some(i => !i.kotPrinted || (i.kotPrintedQty || 0) < i.qty);
+                if (hasUnprintedDraft) {
+                  return lt;
+                }
+                return st;
+              });
+            }
+            const next = {
+              ...incomingData,
+              tables: mergedTables
+            };
+            dataRef.current = next;
+            return next;
+          });
           lastSyncedStringRef.current = JSON.stringify(evt.data.data);
           setTimeout(() => {
             isUpdatingFromSync.current = false;
@@ -2860,7 +2914,13 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           const isRecentSettle = recentSale && (now - (recentSale.createdAt || recentSale.id || 0) < 5000);
           if (debounceTablesSyncTimerRef.current) clearTimeout(debounceTablesSyncTimerRef.current);
           debounceTablesSyncTimerRef.current = setTimeout(() => {
-            syncPosTablesToServer(dataRef.current.tables, isRecentSettle ? recentSale : undefined);
+            syncPosTablesToServer(
+              dataRef.current.tables, 
+              isRecentSettle ? recentSale : undefined,
+              'TABLES_UPDATE',
+              undefined,
+              activeTableIdRef.current || undefined
+            );
           }, 300);
         }
 
@@ -4087,7 +4147,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (!menuItem) return;
 
     const addQty = customQty && customQty > 0 ? customQty : 1;
-    lastLocalEditTimeRef.current = Date.now();
+    markTableEditedLocally(tableId);
 
     setData(prev => {
       const table = prev.tables.find(t => t.id === tableId);
@@ -4172,10 +4232,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       const updatedTables = prev.tables.map(t => {
         if (t.id !== tableId) return t;
+        const isStartingNewOrder = t.status === 'free' || !t.cart || t.cart.length === 0;
         const assignedWaiter = t.waiter || (currentUser?.role === 'WAITER' ? currentUser.name : '');
         
-        let orderRef = t.orderRef;
-        let kotBaseSerial = t.kotBaseSerial;
+        let orderRef = isStartingNewOrder ? undefined : t.orderRef;
+        let kotBaseSerial = isStartingNewOrder ? undefined : t.kotBaseSerial;
 
         const settledOrderRefs = new Set((prev.sales || []).map((s: any) => s.orderRef).filter(Boolean));
         if (!orderRef || settledOrderRefs.has(orderRef)) {
@@ -4211,10 +4272,10 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           waiter: assignedWaiter,
           orderRef,
           kotBaseSerial,
-          orderCreatedBy: t.orderCreatedBy || currentUser?.name || 'Cashier',
-          orderCreatedRole: t.orderCreatedRole || currentUser?.role || 'CASHIER',
-          orderCreatedId: t.orderCreatedId || currentUser?.id,
-          orderCreatedAt: t.orderCreatedAt || now
+          orderCreatedBy: isStartingNewOrder ? (currentUser?.name || 'Cashier') : (t.orderCreatedBy || currentUser?.name || 'Cashier'),
+          orderCreatedRole: isStartingNewOrder ? (currentUser?.role || 'CASHIER') : (t.orderCreatedRole || currentUser?.role || 'CASHIER'),
+          orderCreatedId: isStartingNewOrder ? currentUser?.id : (t.orderCreatedId || currentUser?.id),
+          orderCreatedAt: isStartingNewOrder ? now : (t.orderCreatedAt || now)
         };
       });
 
@@ -4233,7 +4294,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setIsStartSessionModalOpen(true);
       return;
     }
-    lastLocalEditTimeRef.current = Date.now();
+    markTableEditedLocally(tableId);
     setData(prev => {
       const updatedTables = prev.tables.map(table => {
         if (table.id !== tableId) return table;
@@ -4265,7 +4326,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setIsStartSessionModalOpen(true);
       return;
     }
-    lastLocalEditTimeRef.current = Date.now();
+    markTableEditedLocally(tableId);
     setData(prev => {
       const updatedTables = prev.tables.map(table => {
         if (table.id !== tableId) return table;
@@ -4319,7 +4380,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return;
     }
     const safeQty = Math.max(1, Math.floor(Number(newQty) || 1));
-    lastLocalEditTimeRef.current = Date.now();
+    markTableEditedLocally(tableId);
     setData(prev => {
       const updatedTables = prev.tables.map(table => {
         if (table.id !== tableId) return table;
@@ -4351,7 +4412,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const updateCartItemNotes = (tableId: string, cartItemIdOrIdx: string | number, notes: string) => {
-    lastLocalEditTimeRef.current = Date.now();
+    markTableEditedLocally(tableId);
     setData(prev => {
       const updatedTables = prev.tables.map(table => {
         if (table.id !== tableId) return table;
@@ -4377,7 +4438,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const removeCartItem = (tableId: string, cartItemIdOrIdx: string | number) => {
-    lastLocalEditTimeRef.current = Date.now();
+    markTableEditedLocally(tableId);
     setData(prev => {
       const updatedTables = prev.tables.map(table => {
         if (table.id !== tableId) return table;
@@ -4409,7 +4470,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const clearCart = (tableId: string) => {
-    lastLocalEditTimeRef.current = Date.now();
+    markTableEditedLocally(tableId);
+    recentlyFreedTablesRef.current.set(tableId, Date.now());
     setData(prev => {
       const updatedTables = prev.tables.map(t => t.id === tableId ? { 
         ...t, 
@@ -4437,6 +4499,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const setTableDiscount = (tableId: string, type: DiscountType, val: number) => {
+    markTableEditedLocally(tableId);
     setData(prev => ({
       ...prev,
       tables: prev.tables.map(t => t.id === tableId ? { ...t, discountType: type, discountVal: val } : t)
@@ -4444,7 +4507,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const setTableWaiter = (tableId: string, waiter: string) => {
-    lastLocalEditTimeRef.current = Date.now();
+    markTableEditedLocally(tableId);
     setData(prev => ({
       ...prev,
       tables: prev.tables.map(t => t.id === tableId ? { 
@@ -4459,7 +4522,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const setTableCustomer = (tableId: string, customer: string) => {
-    lastLocalEditTimeRef.current = Date.now();
+    markTableEditedLocally(tableId);
     const trimmed = (customer || '').trim();
     setData(prev => {
       const agents = prev.commissionAgents || DEFAULT_COMMISSION_AGENTS;
@@ -4595,6 +4658,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setIsStartSessionModalOpen(true);
       return;
     }
+    markTableEditedLocally(tableId);
     const currentTables = (dataRef.current?.tables && dataRef.current.tables.length > 0) ? dataRef.current.tables : data.tables;
     const table = currentTables.find(t => t.id === tableId) || data.tables.find(t => t.id === tableId);
     if (!table || table.cart.length === 0) {
@@ -4840,7 +4904,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const directSubmitKotAndHold = async (tableId: string) => {
-    lastLocalEditTimeRef.current = Date.now();
+    markTableEditedLocally(tableId);
     openPrintKot(tableId, false);
     setPosView('floor');
   };
@@ -5260,6 +5324,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setIsStartSessionModalOpen(true);
       return;
     }
+    markTableEditedLocally(tableId);
     const currentTables = (dataRef.current?.tables && dataRef.current.tables.length > 0) ? dataRef.current.tables : data.tables;
     const table = currentTables.find(t => t.id === tableId) || data.tables.find(t => t.id === tableId);
     if (!table || table.cart.length === 0) {
@@ -5438,7 +5503,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const directPrintBill = async (tableId: string) => {
-    lastLocalEditTimeRef.current = Date.now();
+    markTableEditedLocally(tableId);
     openPrintBill(tableId, false);
   };
 

@@ -245,7 +245,7 @@ function mergeTablesSafely(
 
       // If incoming table has an old orderRef that was already settled in sales FOR THIS TABLE
       if (it.orderRef && tableSettledRefs && tableSettledRefs.has(it.orderRef)) {
-        if (isExplicitOrderAction && hasIncomingCart && (!st.settledAt || !it.orderCreatedAt || it.orderCreatedAt > st.settledAt)) {
+        if (hasIncomingCart && (!st.settledAt || !it.orderCreatedAt || it.orderCreatedAt > st.settledAt)) {
           // Assign a fresh unique orderRef so it does not collide with settled historical order
           it.orderRef = `ORD-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 90 + 10)}`;
         } else {
