@@ -2290,6 +2290,15 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const isUpdatingFromSync = useRef<boolean>(false);
   const isInitialSyncDoneRef = useRef<boolean>(false);
   const lastLocalEditTimeRef = useRef<number>(0);
+  const tableLocalEditTimeMapRef = useRef<Map<string, number>>(new Map());
+
+  const markTableEditedLocally = (tableId?: string) => {
+    const now = Date.now();
+    lastLocalEditTimeRef.current = now;
+    if (tableId) {
+      tableLocalEditTimeMapRef.current.set(tableId, now);
+    }
+  };
   // Multi-tab instant synchronization channel
   const posBroadcastChannelRef = useRef<BroadcastChannel | null>(null);
   const tabClientIdRef = useRef<string>(Math.random().toString(36).substring(2, 9));
@@ -2358,7 +2367,22 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const localTables = dataRef.current?.tables || [];
         const now = Date.now();
         const salesList = result.data.sales || dataRef.current.sales || [];
-        const settledOrderRefs = new Set(salesList.map((s: any) => s.orderRef).filter(Boolean));
+        // Group settled orderRefs strictly by their specific tableId so a sale on Table A never affects Table B
+        const settledOrderRefsByTable = new Map<string, Set<string>>();
+        salesList.forEach((s: any) => {
+          const tid = s.tableId || s.table;
+          if (!tid || !s.orderRef) return;
+          if (!settledOrderRefsByTable.has(tid)) {
+            settledOrderRefsByTable.set(tid, new Set());
+          }
+          settledOrderRefsByTable.get(tid)!.add(s.orderRef);
+          if (s.table && s.table !== tid) {
+            if (!settledOrderRefsByTable.has(s.table)) {
+              settledOrderRefsByTable.set(s.table, new Set());
+            }
+            settledOrderRefsByTable.get(s.table)!.add(s.orderRef);
+          }
+        });
 
         result.data.tables = result.data.tables.map((t: Table) => {
           const lt = localTables.find(l => l.id === t.id);
@@ -2370,12 +2394,13 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             if (lt && lt.status === 'free') return lt;
           }
 
-          // 2. If table's orderRef is already settled in sales
-          if (t.orderRef && settledOrderRefs.has(t.orderRef) && !t.isPaidOrder && !t.linkedSaleId) {
+          // 2. If table's orderRef is already settled in sales FOR THIS SPECIFIC TABLE
+          const tableSettledRefs = settledOrderRefsByTable.get(t.id) || settledOrderRefsByTable.get(t.name);
+          if (t.orderRef && tableSettledRefs && tableSettledRefs.has(t.orderRef) && !t.isPaidOrder && !t.linkedSaleId) {
             if (t.cart && t.cart.length > 0) {
               t = {
                 ...t,
-                orderRef: `ORD-${Date.now().toString().slice(-6)}`
+                orderRef: `ORD-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 90 + 10)}`
               };
             } else {
               return {
@@ -2401,14 +2426,16 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           if (t.status === 'free') {
             if (lt.status === 'free') return t;
             const hasUnprintedLocalDraft = (lt.cart?.length || 0) > 0 && lt.cart.every(i => !i.kotPrinted);
-            const isActivelyTyping = (t.id === activeTableIdRef.current) && ((now - (lastLocalEditTimeRef.current || 0)) < 2500) && hasUnprintedLocalDraft;
+            const thisTableEditTime = tableLocalEditTimeMapRef.current.get(t.id) || 0;
+            const isActivelyTyping = (t.id === activeTableIdRef.current) && ((now - thisTableEditTime) < 2500) && hasUnprintedLocalDraft;
             if (isActivelyTyping) return lt;
             return t;
           }
 
           // If active table has genuine unprinted draft edited recently in this tab (< 2500ms), preserve local in-flight draft
           const hasUnprintedLocalDraft = (lt.cart?.length || 0) > 0 && lt.cart.every(i => !i.kotPrinted);
-          const isActiveAndRecentlyEdited = (t.id === activeTableIdRef.current) && ((now - (lastLocalEditTimeRef.current || 0)) < 2500) && hasUnprintedLocalDraft;
+          const thisTableEditTime = tableLocalEditTimeMapRef.current.get(t.id) || 0;
+          const isActiveAndRecentlyEdited = (t.id === activeTableIdRef.current) && ((now - thisTableEditTime) < 2500) && hasUnprintedLocalDraft;
           if (isActiveAndRecentlyEdited) {
             return lt;
           }
@@ -2503,7 +2530,23 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const salesList = (newSale && newSale.invoiceNo) 
       ? [...(dataRef.current.sales || []), newSale] 
       : (dataRef.current.sales || []);
-    const settledOrderRefs = new Set(salesList.map((s: any) => s.orderRef).filter(Boolean));
+    
+    // Group settled orderRefs strictly by their specific tableId so a sale on Table A never affects Table B
+    const settledOrderRefsByTable = new Map<string, Set<string>>();
+    salesList.forEach((s: any) => {
+      const tid = s.tableId || s.table;
+      if (!tid || !s.orderRef) return;
+      if (!settledOrderRefsByTable.has(tid)) {
+        settledOrderRefsByTable.set(tid, new Set());
+      }
+      settledOrderRefsByTable.get(tid)!.add(s.orderRef);
+      if (s.table && s.table !== tid) {
+        if (!settledOrderRefsByTable.has(s.table)) {
+          settledOrderRefsByTable.set(s.table, new Set());
+        }
+        settledOrderRefsByTable.get(s.table)!.add(s.orderRef);
+      }
+    });
 
     const mergedTables = incomingTables.map(st => {
       const lt = currentLocalTables.find(l => l.id === st.id);
@@ -2517,13 +2560,14 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
       }
 
-      // 2. If incoming table has an orderRef that is already settled in sales
-      if (st.orderRef && settledOrderRefs.has(st.orderRef) && !st.isPaidOrder && !st.linkedSaleId) {
+      // 2. If incoming table has an orderRef that is already settled in sales FOR THIS SPECIFIC TABLE
+      const tableSettledRefs = settledOrderRefsByTable.get(st.id) || settledOrderRefsByTable.get(st.name);
+      if (st.orderRef && tableSettledRefs && tableSettledRefs.has(st.orderRef) && !st.isPaidOrder && !st.linkedSaleId) {
         // If table has active items in cart, allocate a fresh non-colliding orderRef instead of clearing it!
         if (st.cart && st.cart.length > 0) {
           st = {
             ...st,
-            orderRef: `ORD-${Date.now().toString().slice(-6)}`
+            orderRef: `ORD-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 90 + 10)}`
           };
         } else {
           return {
@@ -2546,21 +2590,23 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (!lt) return st;
 
       // CRITICAL: Protect against stale in-flight server pulse overwriting freshly submitted KOT / Bill / Order!
-      const isRecentlyEditedLocally = (now - (lastLocalEditTimeRef.current || 0)) < 4000;
+      // Check if THIS SPECIFIC TABLE was edited recently or is currently active in this tab
+      const thisTableEditTime = tableLocalEditTimeMapRef.current.get(st.id) || 0;
+      const isThisTableRecentlyEdited = (now - thisTableEditTime) < 4000;
       const hasLocalCart = (lt.cart?.length || 0) > 0;
-      const isLocalActiveOrHeld = (st.id === activeTableIdRef.current) || lt.status === 'hold' || lt.status === 'billed';
+      const isLocalActive = (st.id === activeTableIdRef.current);
 
       if (st.status === 'free') {
         if (lt.status === 'free') return st;
-        // If table was modified locally in the last 4 seconds and has cart items (submitted KOT, Bill, or active draft), PRESERVE IT!
-        if (isRecentlyEditedLocally && hasLocalCart && isLocalActiveOrHeld) {
+        // ONLY preserve local table if THIS table is actively open or was modified locally in the last 4s with a cart
+        if (isThisTableRecentlyEdited && hasLocalCart && isLocalActive) {
           return lt;
         }
         return st;
       }
 
-      // 3. If local table was edited recently in this tab (< 4000ms), preserve local in-flight draft/cart state
-      if (isRecentlyEditedLocally && hasLocalCart && isLocalActiveOrHeld) {
+      // 3. If THIS specific table was edited recently in this tab, preserve local in-flight draft/cart state
+      if (isThisTableRecentlyEdited && hasLocalCart && isLocalActive) {
         // If local has more items or has billed status, keep local authoritative
         if ((st.cart?.length || 0) < (lt.cart?.length || 0) || (lt.status === 'billed' && st.status !== 'billed')) {
           return lt;
@@ -2606,7 +2652,14 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     modifiedTableId?: string
   ) => {
     const now = Date.now();
-    lastLocalEditTimeRef.current = now;
+    if (action !== 'TABLE_SETTLE') {
+      lastLocalEditTimeRef.current = now;
+      if (modifiedTableId) {
+        tableLocalEditTimeMapRef.current.set(modifiedTableId, now);
+      }
+    } else if (modifiedTableId) {
+      tableLocalEditTimeMapRef.current.delete(modifiedTableId);
+    }
 
     const syncMode = (dataRef.current?.restaurantProfile?.tableHoldSyncMode || data.restaurantProfile?.tableHoldSyncMode) || 'instant';
     let tablesToBroadcast = tablesToSend;
@@ -5682,6 +5735,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } : t);
 
     recentlyFreedTablesRef.current.set(tableId, Date.now());
+    tableLocalEditTimeMapRef.current.delete(tableId);
     lastLocalEditTimeRef.current = 0;
     if (activeTableIdRef.current === tableId) {
       activeTableIdRef.current = null;

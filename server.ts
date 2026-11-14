@@ -65,17 +65,34 @@ function normalizeLogo(state: any): boolean {
   return false;
 }
 
+function buildSettledOrdersByTable(sales: any[] = []) {
+  const map = new Map<string, Set<string>>();
+  (sales || []).forEach((s: any) => {
+    const tid = s.tableId || s.table;
+    if (!tid || !s.orderRef) return;
+    if (!map.has(tid)) {
+      map.set(tid, new Set());
+    }
+    map.get(tid)!.add(s.orderRef);
+    if (s.table && s.table !== tid) {
+      if (!map.has(s.table)) {
+        map.set(s.table, new Set());
+      }
+      map.get(s.table)!.add(s.orderRef);
+    }
+  });
+  return map;
+}
+
 // Dedicated Ultra-Fast Real-Time POS Sync (3.8KB payload, <5ms round-trip)
 function sanitizeTables(tables: any[], existingSales: any[] = [], isHoldSyncOnKotOnly = false) {
   if (!Array.isArray(tables)) return tables;
-  const settledOrderRefs = new Set(
-    (existingSales || [])
-      .map((s: any) => s.orderRef)
-      .filter(Boolean)
-  );
+  const settledOrdersByTable = buildSettledOrdersByTable(existingSales);
+
   return tables.map(t => {
+    const tableSettledRefs = settledOrdersByTable.get(t.id) || settledOrdersByTable.get(t.name);
     // A table is only considered already settled if it has no active cart items
-    const isAlreadySettled = t.orderRef && settledOrderRefs.has(t.orderRef) && (!t.cart || t.cart.length === 0) && !t.isPaidOrder && !t.linkedSaleId;
+    const isAlreadySettled = t.orderRef && tableSettledRefs && tableSettledRefs.has(t.orderRef) && (!t.cart || t.cart.length === 0) && !t.isPaidOrder && !t.linkedSaleId;
     const isReallyEmpty = !t.cart || t.cart.length === 0;
     const hasAnyKot = !isReallyEmpty && t.cart.some((item: any) => (item.kotPrintedQty || 0) > 0 || item.kotPrinted);
     const isUnprintedDraftInOnKotMode = isHoldSyncOnKotOnly && !isReallyEmpty && !hasAnyKot && t.status !== 'billed';
@@ -121,11 +138,7 @@ function mergeTablesSafely(
     return sanitizeTables(incomingTables, existingSales);
   }
 
-  const settledOrderRefs = new Set(
-    (existingSales || [])
-      .map((s: any) => s.orderRef)
-      .filter(Boolean)
-  );
+  const settledOrdersByTable = buildSettledOrdersByTable(existingSales);
 
   const now = Date.now();
   const serverTableMap = new Map((currentServerTables || []).map((t: any) => [t.id, t]));
@@ -163,9 +176,11 @@ function mergeTablesSafely(
     const it = incomingTables.find((t: any) => t.id === st.id);
     if (!it) return st;
 
+    const tableSettledRefs = settledOrdersByTable.get(st.id) || settledOrdersByTable.get(st.name);
+
     // 1. Explicit settle action for this table
     const isTargetOfSettle = (action === 'TABLE_SETTLE') && (modifiedTableId ? it.id === modifiedTableId : (!it.cart || it.cart.length === 0));
-    if (isTargetOfSettle || (it.orderRef && settledOrderRefs.has(it.orderRef) && (!it.cart || it.cart.length === 0) && !it.isPaidOrder && !it.linkedSaleId)) {
+    if (isTargetOfSettle || (it.orderRef && tableSettledRefs && tableSettledRefs.has(it.orderRef) && (!it.cart || it.cart.length === 0) && !it.isPaidOrder && !it.linkedSaleId)) {
       return {
         ...st,
         ...it,
@@ -228,11 +243,11 @@ function mergeTablesSafely(
         return st;
       }
 
-      // If incoming table has an old orderRef that was already settled in sales
-      if (it.orderRef && settledOrderRefs.has(it.orderRef)) {
+      // If incoming table has an old orderRef that was already settled in sales FOR THIS TABLE
+      if (it.orderRef && tableSettledRefs && tableSettledRefs.has(it.orderRef)) {
         if (isExplicitOrderAction && hasIncomingCart && (!st.settledAt || !it.orderCreatedAt || it.orderCreatedAt > st.settledAt)) {
           // Assign a fresh unique orderRef so it does not collide with settled historical order
-          it.orderRef = `ORD-${Date.now().toString().slice(-6)}`;
+          it.orderRef = `ORD-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 90 + 10)}`;
         } else {
           return st;
         }
