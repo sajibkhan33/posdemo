@@ -4591,9 +4591,17 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     lastLocalEditTimeRef.current = now;
     lastSyncedTablesStrRef.current = JSON.stringify(updatedTables);
+    if (dataRef.current) {
+      dataRef.current = {
+        ...dataRef.current,
+        tables: updatedTables,
+        serialConfig: serialConfigChanged ? activeSerialConfig : dataRef.current.serialConfig
+      };
+    }
     setData(prev => ({
       ...prev,
-      tables: updatedTables
+      tables: updatedTables,
+      serialConfig: serialConfigChanged ? activeSerialConfig : prev.serialConfig
     }));
     syncPosTablesToServer(updatedTables, undefined, 'KOT_SUBMIT', undefined, tableId);
 
@@ -5217,6 +5225,13 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     lastLocalEditTimeRef.current = Date.now();
     lastSyncedTablesStrRef.current = JSON.stringify(updatedBillTables);
+    if (dataRef.current) {
+      dataRef.current = {
+        ...dataRef.current,
+        tables: updatedBillTables,
+        serialConfig: serialConfigChanged ? activeSerialConfig : dataRef.current.serialConfig
+      };
+    }
     setData(prev => ({
       ...prev,
       tables: updatedBillTables,
