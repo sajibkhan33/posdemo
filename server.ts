@@ -65,6 +65,155 @@ function normalizeLogo(state: any): boolean {
   return false;
 }
 
+// Dedicated Ultra-Fast Real-Time POS Sync (3.8KB payload, <5ms round-trip)
+function sanitizeTables(tables: any[], existingSales: any[] = []) {
+  if (!Array.isArray(tables)) return tables;
+  const settledOrderRefs = new Set(
+    (existingSales || [])
+      .map((s: any) => s.orderRef)
+      .filter(Boolean)
+  );
+  return tables.map(t => {
+    const isAlreadySettled = t.orderRef && settledOrderRefs.has(t.orderRef) && !t.isPaidOrder && !t.linkedSaleId;
+    if (!t.cart || t.cart.length === 0 || isAlreadySettled) {
+      return {
+        ...t,
+        status: 'free',
+        waiter: '',
+        customer: 'Walk-in Customer',
+        cart: [],
+        discountVal: 0,
+        channelOrAgentId: 'dine_in',
+        linkedSaleId: undefined,
+        linkedInvoiceNo: undefined,
+        kotBaseSerial: undefined,
+        isPaidOrder: false,
+        paidAmount: 0,
+        orderCreatedBy: undefined,
+        orderCreatedRole: undefined,
+        orderCreatedId: undefined,
+        orderCreatedAt: undefined,
+        billedAt: undefined,
+        billedAtTime: undefined,
+        orderRef: undefined,
+        kotCount: 0,
+        billCount: 0
+      };
+    }
+    return t;
+  });
+}
+
+function mergeTablesSafely(
+  currentServerTables: any[], 
+  incomingTables: any[], 
+  existingSales: any[] = [], 
+  action: string = 'TABLES_UPDATE',
+  modifiedTableId?: string
+) {
+  if (!Array.isArray(incomingTables)) return currentServerTables || [];
+  if (!Array.isArray(currentServerTables) || currentServerTables.length === 0) {
+    return sanitizeTables(incomingTables, existingSales);
+  }
+
+  const settledOrderRefs = new Set(
+    (existingSales || [])
+      .map((s: any) => s.orderRef)
+      .filter(Boolean)
+  );
+
+  const now = Date.now();
+
+  return currentServerTables.map(st => {
+    const it = incomingTables.find((t: any) => t.id === st.id);
+    if (!it) return st;
+
+    // 1. Explicit settle action for this table
+    const isTargetOfSettle = (action === 'TABLE_SETTLE') && (modifiedTableId ? it.id === modifiedTableId : (!it.cart || it.cart.length === 0));
+    if (isTargetOfSettle || (it.orderRef && settledOrderRefs.has(it.orderRef) && !it.isPaidOrder && !it.linkedSaleId)) {
+      return {
+        ...st,
+        ...it,
+        status: 'free',
+        waiter: '',
+        customer: 'Walk-in Customer',
+        cart: [],
+        discountVal: 0,
+        channelOrAgentId: 'dine_in',
+        linkedSaleId: undefined,
+        linkedInvoiceNo: undefined,
+        kotBaseSerial: undefined,
+        isPaidOrder: false,
+        paidAmount: 0,
+        orderCreatedBy: undefined,
+        orderCreatedRole: undefined,
+        orderCreatedId: undefined,
+        orderCreatedAt: undefined,
+        billedAt: undefined,
+        billedAtTime: undefined,
+        orderRef: undefined,
+        kotCount: 0,
+        billCount: 0,
+        settledAt: now,
+        lastSettledOrderRef: it.orderRef || st.orderRef
+      };
+    }
+
+    // 2. Explicit release or cart clear for this table
+    const isTargetOfRelease = (action === 'TABLE_RELEASE' || action === 'CART_CLEAR' || action === 'ORDER_CANCEL_DRAFT') && 
+      (modifiedTableId ? it.id === modifiedTableId : true) && (!it.cart || it.cart.length === 0);
+    if (isTargetOfRelease && it.status === 'free') {
+      return {
+        ...st,
+        ...it,
+        status: 'free',
+        waiter: '',
+        customer: 'Walk-in Customer',
+        cart: [],
+        discountVal: 0,
+        orderRef: undefined,
+        kotCount: 0,
+        billCount: 0,
+        settledAt: now
+      };
+    }
+
+    // 3. Protection: If server table is FREE, never let stale incoming table revive it!
+    if (st.status === 'free') {
+      const hasIncomingCart = it.cart && it.cart.length > 0;
+      if (!hasIncomingCart) {
+        return st; // Stays free
+      }
+
+      // If incoming table has an old orderRef that was already settled, reject resurrection!
+      if (it.orderRef && settledOrderRefs.has(it.orderRef)) {
+        return st;
+      }
+
+      // If server table was settled recently, check orderCreatedAt
+      if (st.settledAt && it.orderCreatedAt && it.orderCreatedAt <= st.settledAt) {
+        return st;
+      }
+    }
+
+    // 4. If modifiedTableId was specified, only update that specific table!
+    if (modifiedTableId) {
+      if (it.id === modifiedTableId) {
+        return it;
+      }
+      return st;
+    }
+
+    // 5. If server table is billed, do not downgrade to hold from an older client
+    if (st.status === 'billed' && it.status === 'hold' && (!it.cart || it.cart.length <= (st.cart?.length || 0))) {
+      return st;
+    }
+
+    // Otherwise accept updated table
+    return it;
+  });
+}
+
 // Initialize MongoDB connection and synchronize state
 async function initDatabase() {
   const connected = await connectToDatabase();
@@ -73,6 +222,9 @@ async function initDatabase() {
       const doc = await RestaurantStateModel.findOne({ stateKey: STATE_KEY }).lean() as any;
       if (doc && doc.data) {
         cachedState = doc.data;
+        if (cachedState && cachedState.tables) {
+          cachedState.tables = sanitizeTables(cachedState.tables, cachedState.sales);
+        }
         const now = Date.now();
         lastServerUpdate = (doc.timestamp && doc.timestamp <= now + 60000) ? doc.timestamp : now;
         isLoadedFromMongo = true;
@@ -1987,42 +2139,9 @@ async function startServer() {
     });
   });
 
-  // Dedicated Ultra-Fast Real-Time POS Sync (3.8KB payload, <5ms round-trip)
-    function sanitizeTables(tables: any[]) {
-    if (!Array.isArray(tables)) return tables;
-    return tables.map(t => {
-      if (!t.cart || t.cart.length === 0) {
-        return {
-          ...t,
-          status: 'free',
-          waiter: '',
-          customer: 'Walk-in Customer',
-          cart: [],
-          discountVal: 0,
-          channelOrAgentId: 'dine_in',
-          linkedSaleId: undefined,
-          linkedInvoiceNo: undefined,
-          kotBaseSerial: undefined,
-          isPaidOrder: false,
-          paidAmount: 0,
-          orderCreatedBy: undefined,
-          orderCreatedRole: undefined,
-          orderCreatedId: undefined,
-          orderCreatedAt: undefined,
-          billedAt: undefined,
-          billedAtTime: undefined,
-          orderRef: undefined,
-          kotCount: 0,
-          billCount: 0
-        };
-      }
-      return t;
-    });
-  }
-
   app.post("/api/restaurant/pos-sync", async (req, res) => {
     try {
-      const { tables, newSale, action = 'TABLES_UPDATE', serialConfig, sender } = req.body;
+      const { tables, newSale, action = 'TABLES_UPDATE', serialConfig, sender, modifiedTableId } = req.body;
       const now = Date.now();
 
       if (serialConfig && typeof serialConfig === 'object' && cachedState) {
@@ -2033,14 +2152,14 @@ async function startServer() {
       }
 
       if (Array.isArray(tables) && cachedState) {
-        cachedState.tables = sanitizeTables(tables);
         if (newSale && newSale.invoiceNo) {
           if (!Array.isArray(cachedState.sales)) cachedState.sales = [];
-          const exists = cachedState.sales.some((s: any) => s.invoiceNo === newSale.invoiceNo);
+          const exists = cachedState.sales.some((s: any) => s.invoiceNo === newSale.invoiceNo || (s.id && newSale.id && s.id === newSale.id));
           if (!exists) {
             cachedState.sales.push(newSale);
           }
         }
+        cachedState.tables = mergeTablesSafely(cachedState.tables || [], tables, cachedState.sales || [], action, modifiedTableId);
 
         lastServerUpdate = now;
         lastMongoSyncCheck = now;
@@ -2092,7 +2211,7 @@ async function startServer() {
       changed: true,
       timestamp: lastServerUpdate,
       fullUpdateTimestamp: lastFullStateUpdate,
-      tables: sanitizeTables(cachedState?.tables || []),
+      tables: sanitizeTables(cachedState?.tables || [], cachedState?.sales || []),
       salesCount: cachedState?.sales?.length || 0,
       serialConfig: cachedState?.serialConfig
     });
@@ -2116,6 +2235,9 @@ async function startServer() {
               lastServerUpdate = doc.timestamp || now;
               isLoadedFromMongo = true;
               normalizeLogo(cachedState);
+              if (cachedState && cachedState.tables) {
+                cachedState.tables = sanitizeTables(cachedState.tables, cachedState.sales);
+              }
             }
           }
         }
@@ -2152,8 +2274,33 @@ async function startServer() {
 
       if (clientData) {
         normalizeLogo(clientData);
-        if (clientData.tables) clientData.tables = sanitizeTables(clientData.tables);
-        cachedState = clientData;
+
+        // 1. Merge sales safely so no sales can ever be lost or overwritten by an older client
+        const serverSales = Array.isArray(cachedState?.sales) ? cachedState.sales : [];
+        const clientSales = Array.isArray(clientData?.sales) ? clientData.sales : [];
+        const salesMap = new Map();
+        serverSales.forEach((s: any) => {
+          const key = s.invoiceNo || String(s.id);
+          salesMap.set(key, s);
+        });
+        clientSales.forEach((s: any) => {
+          const key = s.invoiceNo || String(s.id);
+          if (!salesMap.has(key)) {
+            salesMap.set(key, s);
+          }
+        });
+        const mergedSales = Array.from(salesMap.values());
+
+        // 2. Merge tables safely so settled/freed tables cannot be resurrected by a stale full sync
+        const mergedTables = mergeTablesSafely(cachedState?.tables || [], clientData.tables || [], mergedSales);
+
+        cachedState = {
+          ...cachedState,
+          ...clientData,
+          sales: mergedSales,
+          tables: mergedTables
+        };
+
         lastServerUpdate = Date.now();
         lastFullStateUpdate = lastServerUpdate;
         lastMongoSyncCheck = lastServerUpdate;

@@ -35,6 +35,7 @@ export const SplitPaymentModal: React.FC = () => {
 
   const [splitAmounts, setSplitAmounts] = useState<Record<string, number>>({});
   const [advanceInputAmt, setAdvanceInputAmt] = useState<number>(0);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [cashNoteMode, setCashNoteMode] = useState<'set' | 'add'>('set');
   const [isCustomCustomerInput, setIsCustomCustomerInput] = useState<boolean>(false);
   const [selectedWaiter, setSelectedWaiter] = useState<string>(
@@ -157,6 +158,8 @@ export const SplitPaymentModal: React.FC = () => {
 
   const handleSettle = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     if (totalEntered < netTotal) {
       alert(`Payment incomplete! Remaining ৳${remaining.toLocaleString()} is due.`);
       return;
@@ -179,15 +182,20 @@ export const SplitPaymentModal: React.FC = () => {
       }
     }
 
-    settlePayment(
-      activeSettlingTable.id, 
-      {
-        byMethod: splitAmounts,
-        advance: advanceInputAmt
-      }, 
-      finalWaiter,
-      finalCustomer || undefined
-    );
+    setIsSubmitting(true);
+    try {
+      settlePayment(
+        activeSettlingTable.id, 
+        {
+          byMethod: splitAmounts,
+          advance: advanceInputAmt
+        }, 
+        finalWaiter,
+        finalCustomer || undefined
+      );
+    } catch (err) {
+      setIsSubmitting(false);
+    }
   };
 
   const getMethodIcon = (m: PaymentMethodConfig) => {
@@ -674,15 +682,24 @@ export const SplitPaymentModal: React.FC = () => {
             <button
               type="submit"
               id="submit-settle-payment"
-              disabled={totalEntered < netTotal}
+              disabled={totalEntered < netTotal || isSubmitting}
               className={`flex-1 py-3 rounded-xl font-extrabold text-sm shadow-md transition flex items-center justify-center gap-2 ${
-                totalEntered >= netTotal 
+                totalEntered >= netTotal && !isSubmitting
                   ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer' 
                   : 'bg-slate-200 text-slate-400 cursor-not-allowed'
               }`}
             >
-              <CheckCircle2 className="w-5 h-5" />
-              <span>Confirm Payment & Settle Bill</span>
+              {isSubmitting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/60 border-t-white rounded-full animate-spin" />
+                  <span>Processing Settlement...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-5 h-5" />
+                  <span>Confirm Payment & Settle Bill</span>
+                </>
+              )}
             </button>
           </div>
         </form>

@@ -248,6 +248,7 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
   }, []);
 
   const handleTableCardClick = (table: Table) => {
+    setActiveTableId(table.id);
     if (table.status === 'billed') {
       if (isWaiter) {
         alert("This table's bill has already been printed. Awaiting payment settlement.");
@@ -628,7 +629,7 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
   }
   const cartTotalQty = activeTable?.cart?.reduce((sum, item) => sum + item.qty, 0) || 0;
 
-  // Filtered floor plan tables
+  // Filtered floor plan tables sorted sequentially by floor/zone order and table number
   const filteredTables = data.tables.filter(table => {
     const tableZone = table.zone || 'Floor 1';
     if (selectedFloorZone !== 'ALL' && tableZone !== selectedFloorZone) {
@@ -646,6 +647,17 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
       if (!matchName && !matchId && !matchZone && !matchWaiter) return false;
     }
     return true;
+  }).sort((a, b) => {
+    const zoneA = a.zone || 'Floor 1';
+    const zoneB = b.zone || 'Floor 1';
+    const idxA = allZones.indexOf(zoneA);
+    const idxB = allZones.indexOf(zoneB);
+    const effA = idxA === -1 ? 999 : idxA;
+    const effB = idxB === -1 ? 999 : idxB;
+    if (effA !== effB) {
+      return effA - effB;
+    }
+    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
   });
 
   // If on Floor view:

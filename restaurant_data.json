@@ -2,37 +2,37 @@
   "data": {
     "serialConfig": {
       "posInvoicePrefix": "POS-",
-      "posInvoiceNextNumber": 11,
+      "posInvoiceNextNumber": 47,
       "posInvoicePadding": 4,
       "posInvoiceIncludeDate": false,
       "posInvoiceResetCycle": "NEVER",
       "kotPrefix": "KOT-",
-      "kotNextNumber": 16,
+      "kotNextNumber": 38,
       "kotPadding": 4,
       "kotIncludeDate": false,
       "kotResetCycle": "NEVER",
       "orderRefPrefix": "ORD-",
-      "orderRefNextNumber": 17,
+      "orderRefNextNumber": 39,
       "orderRefPadding": 4,
       "orderRefResetCycle": "NEVER",
-      "lastResetDate": "2026-11-12",
+      "lastResetDate": "2026-11-14",
       "lastResetYear": 2026
     },
     "session": {
-      "id": "SES-20261112-0886",
+      "id": "SES-20261114-7616",
       "isActive": true,
-      "openingCash": 200,
-      "startTime": "11:58 AM",
-      "startDate": "2026-11-12",
-      "startTimestamp": 1794463100887,
+      "openingCash": 500,
+      "startTime": "10:46 AM",
+      "startDate": "2026-11-14",
+      "startTimestamp": 1794631607617,
       "openedBy": "Super Admin (ADMIN)",
       "notes": "Business Day Start - Shift 1 float verified",
       "shiftType": "Shift 1"
     },
     "businessDay": {
-      "date": "2026-11-12",
+      "date": "2026-11-14",
       "isOpen": true,
-      "openedAt": "11:58 AM",
+      "openedAt": "10:46 AM",
       "openedBy": "Super Admin (ADMIN)",
       "dayNumber": 1
     },
@@ -49,7 +49,9 @@
       "currencySymbol": "৳",
       "vatPercent": 0,
       "vatMode": "inclusive",
-      "enableVat": false
+      "enableVat": false,
+      "posTableOrderFlow": "direct",
+      "tableHoldSyncMode": "on_kot"
     },
     "commissionAgents": [],
     "printers": [
@@ -365,90 +367,7 @@
       "width": 110,
       "height": 75
     },
-    "purchaseOrders": [
-      {
-        "id": 1794463160830,
-        "poNo": "DCC-PO-2026-1104",
-        "date": "2026-11-12",
-        "vendor": "Haji And Sons",
-        "expectedDate": "2026-11-14",
-        "items": [
-          {
-            "itemId": 2,
-            "item": "Streamed Rice-সিদ্ব চাউল",
-            "category": "Grocery",
-            "uom": "KG",
-            "qty": 1,
-            "rate": 70,
-            "total": 70
-          }
-        ],
-        "total": 70,
-        "status": "FULFILLED",
-        "grnNo": "INV-4770",
-        "notes": "",
-        "receivedHistory": [
-          {
-            "grnNo": "INV-4770",
-            "billNo": "INV-4770",
-            "date": "2026-11-12",
-            "items": [
-              {
-                "itemId": 2,
-                "item": "Streamed Rice-সিদ্ব চাউল",
-                "category": "Grocery",
-                "uom": "KG",
-                "qty": 1,
-                "rate": 70,
-                "total": 70
-              }
-            ],
-            "total": 70
-          }
-        ]
-      },
-      {
-        "id": 1794463124571,
-        "poNo": "DCC-PO-2026-3103",
-        "date": "2026-11-12",
-        "vendor": "Haji And Sons",
-        "expectedDate": "2026-11-14",
-        "items": [
-          {
-            "itemId": 1,
-            "item": "Flour - ময়দা",
-            "category": "Grocery",
-            "uom": "KG",
-            "qty": 1,
-            "rate": 60,
-            "total": 60
-          }
-        ],
-        "total": 60,
-        "status": "FULFILLED",
-        "grnNo": "INV-3721",
-        "notes": "",
-        "receivedHistory": [
-          {
-            "grnNo": "INV-3721",
-            "billNo": "INV-3721",
-            "date": "2026-11-12",
-            "items": [
-              {
-                "itemId": 1,
-                "item": "Flour - ময়দা",
-                "category": "Grocery",
-                "uom": "KG",
-                "qty": 1,
-                "rate": 60,
-                "total": 60
-              }
-            ],
-            "total": 60
-          }
-        ]
-      }
-    ],
+    "purchaseOrders": [],
     "purchaseReturns": [],
     "employees": [
       {
@@ -970,9 +889,47 @@
         "paidAmount": 0,
         "kotCount": 0,
         "billCount": 0
+      },
+      {
+        "id": "T-11",
+        "name": "T 6",
+        "zone": "Floor 1",
+        "status": "free",
+        "waiter": "",
+        "customer": "Walk-in Customer",
+        "discountType": "taka",
+        "discountVal": 0,
+        "cart": [],
+        "channelOrAgentId": "dine_in",
+        "isPaidOrder": false,
+        "paidAmount": 0,
+        "kotCount": 0,
+        "billCount": 0,
+        "customerName": "",
+        "isBillPrinted": false
+      },
+      {
+        "id": "T-12",
+        "name": "T 6",
+        "zone": "Floor 2",
+        "status": "free",
+        "waiter": "",
+        "customer": "Walk-in Customer",
+        "discountType": "taka",
+        "discountVal": 0,
+        "cart": [],
+        "channelOrAgentId": "dine_in",
+        "isPaidOrder": false,
+        "paidAmount": 0,
+        "kotCount": 0,
+        "billCount": 0,
+        "customerName": "",
+        "isBillPrinted": false
       }
     ],
-    "waiters": [],
+    "waiters": [
+      "Rahim"
+    ],
     "departments": [
       "Bangla Kitchen",
       "Grill & BBQ",
@@ -1041,7 +998,7 @@
         "type": "ASSET",
         "category": "Current Assets",
         "systemRole": "CASH",
-        "balance": 200
+        "balance": 500
       },
       {
         "id": "1020",
@@ -1477,15 +1434,23 @@
         "name": "Main Cashier(shift1)",
         "username": "cashier",
         "email": "cashier1@tsc.com",
-        "pinOrPassword": "3322",
-        "role": "CASHIER",
+        "pinOrPassword": "3321",
+        "role": "MANAGER",
         "permissions": [
           "launcher",
+          "dashboard",
           "pos",
+          "menu-items",
           "sales",
+          "expenses",
+          "purchases",
+          "payables",
           "receivables",
+          "inv-items",
+          "inventory",
           "hr",
-          "journal"
+          "journal",
+          "reports"
         ],
         "isActive": true,
         "phone": "+880 1911-000003",
@@ -1504,7 +1469,15 @@
           "sales",
           "receivables",
           "hr",
-          "journal"
+          "journal",
+          "reports",
+          "expenses",
+          "purchases",
+          "payables",
+          "inv-items",
+          "inventory",
+          "dashboard",
+          "menu-items"
         ],
         "isActive": true,
         "phone": "+880 1911-000004",
@@ -1569,6 +1542,32 @@
           "journal",
           "reports"
         ]
+      },
+      {
+        "name": "Manager",
+        "username": "manager",
+        "pinOrPassword": "3322",
+        "role": "MANAGER",
+        "phone": "0000",
+        "isActive": true,
+        "canEditSubmittedOrders": true,
+        "id": "USR-08",
+        "permissions": [
+          "launcher",
+          "dashboard",
+          "pos",
+          "menu-items",
+          "sales",
+          "expenses",
+          "purchases",
+          "payables",
+          "receivables",
+          "inv-items",
+          "inventory",
+          "hr",
+          "journal",
+          "reports"
+        ]
       }
     ],
     "rolePermissions": {
@@ -1613,7 +1612,15 @@
         "sales",
         "receivables",
         "hr",
-        "journal"
+        "journal",
+        "reports",
+        "expenses",
+        "purchases",
+        "payables",
+        "inv-items",
+        "inventory",
+        "dashboard",
+        "menu-items"
       ],
       "WAITER": [
         "launcher",
@@ -3043,7 +3050,32 @@
         "cost": 0,
         "recipe": [],
         "channelPrices": {},
-        "variations": [],
+        "variations": [
+          {
+            "id": "var_3488",
+            "name": "Large",
+            "criteria": "Size",
+            "price": 15,
+            "cost": 0,
+            "recipeMultiplier": 1
+          },
+          {
+            "id": "var_4412",
+            "name": "Medium",
+            "criteria": "Size",
+            "price": 10,
+            "cost": 0,
+            "recipeMultiplier": 1
+          },
+          {
+            "id": "var_5370",
+            "name": "Large (Full / 1:5)",
+            "criteria": "Size",
+            "price": 25,
+            "cost": 0,
+            "recipeMultiplier": 1
+          }
+        ],
         "addons": []
       },
       {
@@ -3084,9 +3116,12 @@
         "name": "Shak",
         "department": "Bangla Kitchen",
         "category": "Bangla Items",
-        "price": 10,
+        "price": 25,
         "cost": 0,
-        "recipe": []
+        "recipe": [],
+        "channelPrices": {},
+        "variations": [],
+        "addons": []
       },
       {
         "id": 1790767984548,
@@ -3861,68 +3896,115 @@
         "channelPrices": {},
         "variations": [],
         "addons": []
-      }
-    ],
-    "purchases": [
-      {
-        "id": 1794463168190,
-        "date": "2026-11-12",
-        "vendor": "Haji And Sons",
-        "billNo": "INV-4770",
-        "paymentType": "CREDIT",
-        "status": "FINAL",
-        "total": 70,
-        "paid": 50,
-        "items": [
-          {
-            "itemId": 2,
-            "item": "Streamed Rice-সিদ্ব চাউল",
-            "category": "Grocery",
-            "uom": "KG",
-            "qty": 1,
-            "rate": 70,
-            "total": 70
-          }
-        ]
       },
       {
-        "id": 1794463127988,
-        "date": "2026-11-12",
-        "vendor": "Haji And Sons",
-        "billNo": "INV-3721",
-        "paymentType": "CREDIT",
-        "status": "FINAL",
-        "total": 60,
-        "paid": 60,
-        "items": [
-          {
-            "itemId": 1,
-            "item": "Flour - ময়দা",
-            "category": "Grocery",
-            "uom": "KG",
-            "qty": 1,
-            "rate": 60,
-            "total": 60
-          }
-        ]
+        "id": 1794489415293,
+        "name": "Aarong Juice",
+        "department": "Beverage",
+        "category": "Beverage Items",
+        "price": 35,
+        "cost": 0,
+        "recipe": [],
+        "channelPrices": {},
+        "variations": [],
+        "addons": []
       }
     ],
+    "purchases": [],
     "sales": [
       {
-        "id": 1794474346813,
-        "date": "2026-11-12",
-        "invoiceNo": "POS-0010",
-        "orderRef": "ORD-0012",
-        "tableId": "T-01",
-        "table": "T 1",
-        "subtotal": 130,
+        "id": 1794636509322,
+        "date": "2026-11-14",
+        "invoiceNo": "POS-0030",
+        "orderRef": "ORD-0029",
+        "tableId": "T-04",
+        "table": "T 4",
+        "subtotal": 50,
         "discountVal": 0,
         "discountType": "taka",
         "vatVal": 0,
         "vatPercent": 0,
         "vatMode": "inclusive",
-        "details": "T 1 [Zone: Floor 1] (W: N/A, Ref: ORD-0012): Beef Bhuna (1)",
+        "details": "T 4 [Zone: Floor 1] (W: Floor Waiter (Rahim), Ref: ORD-0029): Chicken Soup (1)",
         "items": [
+          {
+            "id": 1790767031883,
+            "cartItemId": "1790767031883-std--",
+            "name": "Chicken Soup",
+            "department": "Bangla Kitchen",
+            "category": "Bangla Items",
+            "basePrice": 50,
+            "price": 50,
+            "qty": 1,
+            "addedAt": 1794636277964,
+            "addedAtTime": "12:04 PM",
+            "kotPrinted": true,
+            "kotPrintedQty": 1,
+            "kotPrintedAt": "12:06 PM",
+            "kotPrintedTimestamp": 1794636374823
+          }
+        ],
+        "cash": 50,
+        "card": 0,
+        "bkash": 0,
+        "nagad": 0,
+        "dueGiven": 0,
+        "dueCustomer": "",
+        "dueCollected": 0,
+        "advanceAdjusted": 0,
+        "paymentBreakdown": {
+          "cash": 50,
+          "Cash": 50
+        },
+        "change": 0,
+        "total": 50,
+        "channelCommissionPercent": 0,
+        "channelCommissionAmount": 0,
+        "netRestaurantRevenue": 50,
+        "sessionId": "SES-20261114-7616",
+        "waiterName": "Floor Waiter (Rahim)",
+        "cashierName": "Super Admin",
+        "cashierRole": "ADMIN",
+        "cashierId": "USR-01",
+        "sellerName": "Floor Waiter (Rahim)",
+        "sellerRole": "WAITER",
+        "sellerId": "USR-04",
+        "orderCreatedBy": "Floor Waiter (Rahim)",
+        "orderCreatedRole": "WAITER",
+        "shift": "Shift 1",
+        "createdAt": 1794636509322
+      },
+      {
+        "id": 1794636529790,
+        "date": "2026-11-14",
+        "invoiceNo": "POS-0031",
+        "orderRef": "ORD-0027",
+        "tableId": "T-01",
+        "table": "T 1",
+        "subtotal": 145,
+        "discountVal": 0,
+        "discountType": "taka",
+        "vatVal": 0,
+        "vatPercent": 0,
+        "vatMode": "inclusive",
+        "details": "T 1 [Zone: Floor 1] (W: Floor Waiter (Rahim), Ref: ORD-0027): Alo Bharta (1), Beef Bhuna (1)",
+        "items": [
+          {
+            "id": 1790766923505,
+            "cartItemId": "1790766923505-std--",
+            "name": "Alo Bharta",
+            "department": "Bangla Kitchen",
+            "category": "Bangla Items",
+            "basePrice": 15,
+            "price": 15,
+            "qty": 1,
+            "addedAt": 1794636223403,
+            "addedAtTime": "12:03 PM",
+            "kotPrinted": true,
+            "kotPrintedQty": 1,
+            "kotPrintedAt": "12:04 PM",
+            "kotPrintedTimestamp": 1794636247624
+          },
           {
             "id": 1790766956012,
             "cartItemId": "1790766956012-std--",
@@ -3932,11 +4014,15 @@
             "basePrice": 130,
             "price": 130,
             "qty": 1,
-            "addedAt": 1794474331174,
-            "addedAtTime": "3:05 PM"
+            "addedAt": 1794636224125,
+            "addedAtTime": "12:03 PM",
+            "kotPrinted": true,
+            "kotPrintedQty": 1,
+            "kotPrintedAt": "12:04 PM",
+            "kotPrintedTimestamp": 1794636247624
           }
         ],
-        "cash": 130,
+        "cash": 145,
         "card": 0,
         "bkash": 0,
         "nagad": 0,
@@ -3945,75 +4031,300 @@
         "dueCollected": 0,
         "advanceAdjusted": 0,
         "paymentBreakdown": {
-          "cash": 130,
-          "Cash": 130
+          "cash": 145,
+          "Cash": 145
         },
         "change": 0,
-        "total": 130,
+        "total": 145,
         "channelCommissionPercent": 0,
         "channelCommissionAmount": 0,
-        "netRestaurantRevenue": 130,
-        "sessionId": "SES-20261112-0886",
-        "waiterName": "Staff",
+        "netRestaurantRevenue": 145,
+        "sessionId": "SES-20261114-7616",
+        "waiterName": "Floor Waiter (Rahim)",
         "cashierName": "Super Admin",
         "cashierRole": "ADMIN",
         "cashierId": "USR-01",
-        "sellerName": "Super Admin",
-        "sellerRole": "ADMIN",
-        "sellerId": "USR-01",
-        "orderCreatedBy": "Super Admin",
-        "orderCreatedRole": "ADMIN",
+        "sellerName": "Floor Waiter (Rahim)",
+        "sellerRole": "WAITER",
+        "sellerId": "USR-04",
+        "orderCreatedBy": "Floor Waiter (Rahim)",
+        "orderCreatedRole": "WAITER",
         "shift": "Shift 1",
-        "createdAt": 1794474346813
+        "createdAt": 1794636529790
+      },
+      {
+        "id": 1794637070053,
+        "date": "2026-11-14",
+        "invoiceNo": "POS-0042",
+        "orderRef": "ORD-0033",
+        "tableId": "T-12",
+        "table": "T 6",
+        "subtotal": 290,
+        "discountVal": 0,
+        "discountType": "taka",
+        "vatVal": 0,
+        "vatPercent": 0,
+        "vatMode": "inclusive",
+        "details": "T 6 [Zone: Floor 2] (W: Floor Waiter (Rahim), Ref: ORD-0033): Mixed Sobji (1), Macher Dim (1), Plain Rice (Large) (1), Dim Khichuri (1), Chicken Soup (1), Chicken Kaliea (1)",
+        "items": [
+          {
+            "id": 1790767627081,
+            "cartItemId": "1790767627081-std--",
+            "name": "Mixed Sobji",
+            "department": "Bangla Kitchen",
+            "category": "Bangla Items",
+            "basePrice": 25,
+            "price": 25,
+            "qty": 1,
+            "addedAt": 1794636719933,
+            "addedAtTime": "12:11 PM",
+            "kotPrinted": true,
+            "kotPrintedQty": 1,
+            "kotPrintedAt": "12:12 PM",
+            "kotPrintedTimestamp": 1794636726019
+          },
+          {
+            "id": 1790767614925,
+            "cartItemId": "1790767614925-std--",
+            "name": "Macher Dim",
+            "department": "Bangla Kitchen",
+            "category": "Bangla Items",
+            "basePrice": 70,
+            "price": 70,
+            "qty": 1,
+            "addedAt": 1794636720216,
+            "addedAtTime": "12:12 PM",
+            "kotPrinted": true,
+            "kotPrintedQty": 1,
+            "kotPrintedAt": "12:12 PM",
+            "kotPrintedTimestamp": 1794636726019
+          },
+          {
+            "id": 1790767746844,
+            "cartItemId": "1790767746844-var_3488--",
+            "name": "Plain Rice (Large)",
+            "department": "Bangla Kitchen",
+            "category": "Bangla Items",
+            "basePrice": 15,
+            "price": 15,
+            "qty": 1,
+            "selectedVariation": {
+              "id": "var_3488",
+              "name": "Large",
+              "criteria": "Size",
+              "price": 15,
+              "cost": 0,
+              "recipeMultiplier": 1
+            },
+            "selectedAddons": [],
+            "addedAt": 1794636721493,
+            "addedAtTime": "12:12 PM",
+            "kotPrinted": true,
+            "kotPrintedQty": 1,
+            "kotPrintedAt": "12:12 PM",
+            "kotPrintedTimestamp": 1794636726019
+          },
+          {
+            "id": 1790767454931,
+            "cartItemId": "1790767454931-std--",
+            "name": "Dim Khichuri",
+            "department": "Bangla Kitchen",
+            "category": "Bangla Items",
+            "basePrice": 50,
+            "price": 50,
+            "qty": 1,
+            "addedAt": 1794636804345,
+            "addedAtTime": "12:13 PM",
+            "kotPrinted": true,
+            "kotPrintedQty": 1,
+            "kotPrintedAt": "12:13 PM",
+            "kotPrintedTimestamp": 1794636807748
+          },
+          {
+            "id": 1790767031883,
+            "cartItemId": "1790767031883-std--",
+            "name": "Chicken Soup",
+            "department": "Bangla Kitchen",
+            "category": "Bangla Items",
+            "basePrice": 50,
+            "price": 50,
+            "qty": 1,
+            "addedAt": 1794636804914,
+            "addedAtTime": "12:13 PM",
+            "kotPrinted": true,
+            "kotPrintedQty": 1,
+            "kotPrintedAt": "12:13 PM",
+            "kotPrintedTimestamp": 1794636807748
+          },
+          {
+            "id": 1790767014674,
+            "cartItemId": "1790767014674-std--",
+            "name": "Chicken Kaliea",
+            "department": "Bangla Kitchen",
+            "category": "Bangla Items",
+            "basePrice": 80,
+            "price": 80,
+            "qty": 1,
+            "addedAt": 1794636805569,
+            "addedAtTime": "12:13 PM",
+            "kotPrinted": true,
+            "kotPrintedQty": 1,
+            "kotPrintedAt": "12:13 PM",
+            "kotPrintedTimestamp": 1794636807748
+          }
+        ],
+        "cash": 290,
+        "card": 0,
+        "bkash": 0,
+        "nagad": 0,
+        "dueGiven": 0,
+        "dueCustomer": "",
+        "dueCollected": 0,
+        "advanceAdjusted": 0,
+        "paymentBreakdown": {
+          "cash": 290,
+          "Cash": 290
+        },
+        "change": 0,
+        "total": 290,
+        "channelCommissionPercent": 0,
+        "channelCommissionAmount": 0,
+        "netRestaurantRevenue": 290,
+        "sessionId": "SES-20261114-7616",
+        "waiterName": "Floor Waiter (Rahim)",
+        "cashierName": "Super Admin",
+        "cashierRole": "ADMIN",
+        "cashierId": "USR-01",
+        "sellerName": "Floor Waiter (Rahim)",
+        "sellerRole": "WAITER",
+        "sellerId": "USR-04",
+        "orderCreatedBy": "Floor Waiter (Rahim)",
+        "orderCreatedRole": "WAITER",
+        "shift": "Shift 1",
+        "createdAt": 1794637070053
+      },
+      {
+        "id": 1794637120785,
+        "date": "2026-11-14",
+        "invoiceNo": "POS-0044",
+        "orderRef": "ORD-0031",
+        "tableId": "T-01",
+        "table": "T 1",
+        "subtotal": 160,
+        "discountVal": 0,
+        "discountType": "taka",
+        "vatVal": 0,
+        "vatPercent": 0,
+        "vatMode": "inclusive",
+        "details": "T 1 [Zone: Floor 1] (W: Floor Waiter (Rahim), Ref: ORD-0031): Alo Bharta (1), Chicken Soup (1), Mixed Sobji (1), Macher Dim (1)",
+        "items": [
+          {
+            "id": 1790766923505,
+            "cartItemId": "1790766923505-std--",
+            "name": "Alo Bharta",
+            "department": "Bangla Kitchen",
+            "category": "Bangla Items",
+            "basePrice": 15,
+            "price": 15,
+            "qty": 1,
+            "addedAt": 1794636693940,
+            "addedAtTime": "12:11 PM",
+            "kotPrinted": true,
+            "kotPrintedQty": 1,
+            "kotPrintedAt": "12:11 PM",
+            "kotPrintedTimestamp": 1794636699436
+          },
+          {
+            "id": 1790767031883,
+            "cartItemId": "1790767031883-std--",
+            "name": "Chicken Soup",
+            "department": "Bangla Kitchen",
+            "category": "Bangla Items",
+            "basePrice": 50,
+            "price": 50,
+            "qty": 1,
+            "addedAt": 1794636695767,
+            "addedAtTime": "12:11 PM",
+            "kotPrinted": true,
+            "kotPrintedQty": 1,
+            "kotPrintedAt": "12:11 PM",
+            "kotPrintedTimestamp": 1794636699436
+          },
+          {
+            "id": 1790767627081,
+            "cartItemId": "1790767627081-std--",
+            "name": "Mixed Sobji",
+            "department": "Bangla Kitchen",
+            "category": "Bangla Items",
+            "basePrice": 25,
+            "price": 25,
+            "qty": 1,
+            "addedAt": 1794636772123,
+            "addedAtTime": "12:12 PM",
+            "kotPrinted": true,
+            "kotPrintedQty": 1,
+            "kotPrintedAt": "12:12 PM",
+            "kotPrintedTimestamp": 1794636774635
+          },
+          {
+            "id": 1790767614925,
+            "cartItemId": "1790767614925-std--",
+            "name": "Macher Dim",
+            "department": "Bangla Kitchen",
+            "category": "Bangla Items",
+            "basePrice": 70,
+            "price": 70,
+            "qty": 1,
+            "addedAt": 1794636772694,
+            "addedAtTime": "12:12 PM",
+            "kotPrinted": true,
+            "kotPrintedQty": 1,
+            "kotPrintedAt": "12:12 PM",
+            "kotPrintedTimestamp": 1794636774635
+          }
+        ],
+        "cash": 160,
+        "card": 0,
+        "bkash": 0,
+        "nagad": 0,
+        "dueGiven": 0,
+        "dueCustomer": "",
+        "dueCollected": 0,
+        "advanceAdjusted": 0,
+        "paymentBreakdown": {
+          "cash": 160,
+          "Cash": 160
+        },
+        "change": 0,
+        "total": 160,
+        "channelCommissionPercent": 0,
+        "channelCommissionAmount": 0,
+        "netRestaurantRevenue": 160,
+        "sessionId": "SES-20261114-7616",
+        "waiterName": "Floor Waiter (Rahim)",
+        "cashierName": "Super Admin",
+        "cashierRole": "ADMIN",
+        "cashierId": "USR-01",
+        "sellerName": "Floor Waiter (Rahim)",
+        "sellerRole": "WAITER",
+        "sellerId": "USR-04",
+        "orderCreatedBy": "Floor Waiter (Rahim)",
+        "orderCreatedRole": "WAITER",
+        "shift": "Shift 1",
+        "createdAt": 1794637120785
       }
     ],
     "expenses": [],
-    "payments": [
-      {
-        "id": 1794463176507,
-        "date": "2026-11-12",
-        "vendor": "Haji And Sons",
-        "billNo": "INV-4770",
-        "amount": 50,
-        "method": "Cash",
-        "note": "Payment for Bill INV-4770"
-      },
-      {
-        "id": 1794463134846,
-        "date": "2026-11-12",
-        "vendor": "Haji And Sons",
-        "billNo": "INV-3721",
-        "amount": 60,
-        "method": "Cash",
-        "note": "Payment for Bill INV-3721"
-      }
-    ],
-    "inventory": [
-      {
-        "id": 1,
-        "open": 0,
-        "used": 0,
-        "manualUsed": 0,
-        "wastage": 0,
-        "rate": 60
-      },
-      {
-        "id": 2,
-        "open": 0,
-        "used": 0,
-        "manualUsed": 0,
-        "wastage": 0,
-        "rate": 70
-      }
-    ],
+    "payments": [],
+    "inventory": [],
     "dayEndRecords": [],
     "orderEditPermissions": {
       "ADMIN": true,
-      "MANAGER": false,
+      "MANAGER": true,
       "CASHIER": false,
       "WAITER": false,
       "CHEF": false
     }
   },
-  "timestamp": 1794483043101
+  "timestamp": 1794637687198
 }

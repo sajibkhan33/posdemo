@@ -2303,6 +2303,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const dataRef = useRef<AppData>(data);
   const posViewRef = useRef(posView);
   const activeTableIdRef = useRef(activeTableId);
+  const recentlyFreedTablesRef = useRef<Map<string, number>>(new Map());
+  const inFlightSettleRef = useRef<Set<string>>(new Set());
   const lastSyncedTablesStrRef = useRef<string>("");
   const debounceSyncTimerRef = useRef<any>(null);
   const debounceTablesSyncTimerRef = useRef<any>(null);
@@ -2355,15 +2357,51 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (!isInitial) {
         const localTables = dataRef.current?.tables || [];
         const now = Date.now();
+        const salesList = result.data.sales || dataRef.current.sales || [];
+        const settledOrderRefs = new Set(salesList.map((s: any) => s.orderRef).filter(Boolean));
+
         result.data.tables = result.data.tables.map((t: Table) => {
           const lt = localTables.find(l => l.id === t.id);
+
+          // 1. If table was freed locally within the last 30 seconds, protect it against stale pulse resurrection
+          const freedTime = recentlyFreedTablesRef.current.get(t.id);
+          if (freedTime && (now - freedTime < 30000)) {
+            if (lt && lt.status === 'free') return lt;
+          }
+
+          // 2. If table's orderRef is already settled in sales, force it to stay free
+          if (t.orderRef && settledOrderRefs.has(t.orderRef) && !t.isPaidOrder && !t.linkedSaleId) {
+            return {
+              ...t,
+              status: 'free' as const,
+              waiter: '',
+              customer: 'Walk-in Customer',
+              channelOrAgentId: 'dine_in',
+              discountVal: 0,
+              cart: [],
+              orderRef: undefined,
+              kotCount: 0,
+              billCount: 0,
+              billedAt: undefined,
+              billedAtTime: undefined
+            };
+          }
+
           if (!lt) return t;
 
-          // If active table edited recently in this tab (< 2500ms), preserve local in-flight draft
-          const isActiveAndRecentlyEdited = (t.id === activeTableIdRef.current) && ((now - (lastLocalEditTimeRef.current || 0)) < 2500);
-          const isHoldSyncOnKotOnly = (dataRef.current?.restaurantProfile?.tableHoldSyncMode || data.restaurantProfile?.tableHoldSyncMode) === 'on_kot';
-          const isUnprintedDraftOnActiveTable = isHoldSyncOnKotOnly && (t.id === activeTableIdRef.current) && ((lt.cart?.length || 0) > 0) && ((t.cart?.length || 0) === 0);
-          if (isActiveAndRecentlyEdited || isUnprintedDraftOnActiveTable) {
+          // CRITICAL: If incoming server table is 'free', accept it! NEVER restore an old cart if table is freed!
+          if (t.status === 'free') {
+            if (lt.status === 'free') return t;
+            const hasUnprintedLocalDraft = (lt.cart?.length || 0) > 0 && lt.cart.every(i => !i.kotPrinted);
+            const isActivelyTyping = (t.id === activeTableIdRef.current) && ((now - (lastLocalEditTimeRef.current || 0)) < 2500) && hasUnprintedLocalDraft;
+            if (isActivelyTyping) return lt;
+            return t;
+          }
+
+          // If active table has genuine unprinted draft edited recently in this tab (< 2500ms), preserve local in-flight draft
+          const hasUnprintedLocalDraft = (lt.cart?.length || 0) > 0 && lt.cart.every(i => !i.kotPrinted);
+          const isActiveAndRecentlyEdited = (t.id === activeTableIdRef.current) && ((now - (lastLocalEditTimeRef.current || 0)) < 2500) && hasUnprintedLocalDraft;
+          if (isActiveAndRecentlyEdited) {
             return lt;
           }
 
@@ -2456,15 +2494,55 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     const now = Date.now();
     const currentLocalTables = dataRef.current.tables || [];
+    const salesList = (newSale && newSale.invoiceNo) 
+      ? [...(dataRef.current.sales || []), newSale] 
+      : (dataRef.current.sales || []);
+    const settledOrderRefs = new Set(salesList.map((s: any) => s.orderRef).filter(Boolean));
+
     const mergedTables = incomingTables.map(st => {
       const lt = currentLocalTables.find(l => l.id === st.id);
+
+      // 1. If this table was freed locally within the last 30 seconds, protect it from being resurrected by stale pulse
+      const freedTime = recentlyFreedTablesRef.current.get(st.id);
+      if (freedTime && (now - freedTime < 30000)) {
+        if (lt && lt.status === 'free') {
+          return lt;
+        }
+      }
+
+      // 2. If incoming table has an orderRef that is already settled in sales, force it to stay free
+      if (st.orderRef && settledOrderRefs.has(st.orderRef) && !st.isPaidOrder && !st.linkedSaleId) {
+        return {
+          ...st,
+          status: 'free' as const,
+          waiter: '',
+          customer: 'Walk-in Customer',
+          channelOrAgentId: 'dine_in',
+          discountVal: 0,
+          cart: [],
+          orderRef: undefined,
+          kotCount: 0,
+          billCount: 0,
+          billedAt: undefined,
+          billedAtTime: undefined
+        };
+      }
+
       if (!lt) return st;
 
-      // If active table edited recently in this tab (< 2500ms), preserve local in-flight draft
-      const isActiveAndRecentlyEdited = (st.id === activeTableIdRef.current) && ((now - (lastLocalEditTimeRef.current || 0)) < 2500);
-      const isHoldSyncOnKotOnly = (dataRef.current?.restaurantProfile?.tableHoldSyncMode || data.restaurantProfile?.tableHoldSyncMode) === 'on_kot';
-      const isUnprintedDraftOnActiveTable = isHoldSyncOnKotOnly && (st.id === activeTableIdRef.current) && ((lt.cart?.length || 0) > 0) && ((st.cart?.length || 0) === 0);
-      if (isActiveAndRecentlyEdited || isUnprintedDraftOnActiveTable) {
+      // CRITICAL: If incoming server table is 'free', accept it! NEVER restore an old cart if table is freed!
+      if (st.status === 'free') {
+        if (lt.status === 'free') return st;
+        const hasUnprintedLocalDraft = (lt.cart?.length || 0) > 0 && lt.cart.every(i => !i.kotPrinted);
+        const isActivelyTyping = (st.id === activeTableIdRef.current) && ((now - (lastLocalEditTimeRef.current || 0)) < 2500) && hasUnprintedLocalDraft;
+        if (isActivelyTyping) return lt;
+        return st;
+      }
+
+      // 3. If active table has genuine unprinted draft edited recently in this tab (< 2500ms), preserve local in-flight draft
+      const hasUnprintedLocalDraft = (lt.cart?.length || 0) > 0 && lt.cart.every(i => !i.kotPrinted);
+      const isActiveAndRecentlyEdited = (st.id === activeTableIdRef.current) && ((now - (lastLocalEditTimeRef.current || 0)) < 2500) && hasUnprintedLocalDraft;
+      if (isActiveAndRecentlyEdited) {
         return lt;
       }
 
@@ -2499,7 +2577,13 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   // Instant differential POS table pusher (<10ms across all screens & terminals)
-  const syncPosTablesToServer = async (tablesToSend: Table[], newSaleToSend?: SaleRecord, action = 'TABLES_UPDATE', serialConfigToSend?: SerialNumberConfig) => {
+  const syncPosTablesToServer = async (
+    tablesToSend: Table[], 
+    newSaleToSend?: SaleRecord, 
+    action = 'TABLES_UPDATE', 
+    serialConfigToSend?: SerialNumberConfig,
+    modifiedTableId?: string
+  ) => {
     const now = Date.now();
     lastLocalEditTimeRef.current = now;
 
@@ -2528,10 +2612,12 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       try {
         posBroadcastChannelRef.current.postMessage({
           type: 'POS_TABLES_UPDATE',
+          action,
           sender: tabClientIdRef.current,
           tables: tablesToBroadcast,
           newSale: newSaleToSend,
           serialConfig: serialConfigToSend,
+          modifiedTableId,
           timestamp: now
         });
       } catch (e) {}
@@ -2550,7 +2636,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           sender: tabClientIdRef.current,
           tables: tablesToBroadcast,
           newSale: newSaleToSend,
-          serialConfig: serialConfigToSend
+          serialConfig: serialConfigToSend,
+          modifiedTableId
         })
       });
       if (res.ok) {
@@ -4236,7 +4323,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         tables: updatedTables
       };
       dataRef.current = nextState;
-      syncPosTablesToServer(updatedTables, undefined, 'CART_CLEAR');
+      syncPosTablesToServer(updatedTables, undefined, 'CART_CLEAR', undefined, tableId);
       return nextState;
     });
   };
@@ -4484,7 +4571,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       ...prev,
       tables: updatedTables
     }));
-    syncPosTablesToServer(updatedTables, undefined, 'KOT_SUBMIT');
+    syncPosTablesToServer(updatedTables, undefined, 'KOT_SUBMIT', undefined, tableId);
 
     const agents = data.commissionAgents || DEFAULT_COMMISSION_AGENTS;
     const agent = agents.find(a => a.id === table.channelOrAgentId);
@@ -4924,8 +5011,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         sales: updatedSales,
         tables: freedTables
       };
+      recentlyFreedTablesRef.current.set(tableId, Date.now());
       dataRef.current = nextState;
-      syncPosTablesToServer(freedTables, undefined, 'TABLE_RELEASE');
+      syncPosTablesToServer(freedTables, undefined, 'TABLE_RELEASE', undefined, tableId);
       return nextState;
     });
   };
@@ -4968,7 +5056,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           })
         };
         dataRef.current = nextState;
-        syncPosTablesToServer(nextState.tables, undefined, 'ORDER_CANCEL_DRAFT');
+        syncPosTablesToServer(nextState.tables, undefined, 'ORDER_CANCEL_DRAFT', undefined, tableId);
         return nextState;
       });
     } else {
@@ -5105,7 +5193,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       tables: updatedBillTables,
       serialConfig: serialConfigChanged ? activeSerialConfig : prev.serialConfig
     }));
-    syncPosTablesToServer(updatedBillTables, undefined, 'BILL_PRINT', serialConfigChanged ? activeSerialConfig : undefined);
+    syncPosTablesToServer(updatedBillTables, undefined, 'BILL_PRINT', serialConfigChanged ? activeSerialConfig : undefined, tableId);
 
     const agents = data.commissionAgents || DEFAULT_COMMISSION_AGENTS;
     const agent = agents.find(a => a.id === table.channelOrAgentId);
@@ -5256,6 +5344,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       alert('No payable bill found on this table!');
       return;
     }
+    setActiveTableId(tableId);
+    activeTableIdRef.current = tableId;
     setActiveSettlingTable(table);
   };
 
@@ -5277,12 +5367,20 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     waiterOverride?: string,
     customerOverride?: string
   ) => {
+    if (inFlightSettleRef.current.has(tableId)) {
+      return;
+    }
     if (!data.session || !data.session.isActive) {
       setIsStartSessionModalOpen(true);
       return;
     }
     const table = data.tables.find(t => t.id === tableId);
-    if (!table || table.cart.length === 0) return;
+    if (!table || table.cart.length === 0 || table.status === 'free') return;
+
+    inFlightSettleRef.current.add(tableId);
+    setTimeout(() => {
+      inFlightSettleRef.current.delete(tableId);
+    }, 5000);
 
     const assignedWaiter = (waiterOverride || table.waiter || '').trim();
     const assignedCustomer = (customerOverride || table.customer || 'Walk-in Customer').trim();
@@ -5391,12 +5489,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return;
     }
 
-    // Auto-dispatch KOT to kitchen if cart has unprinted items before settling
-    const hasUnprintedKot = table.cart.some(item => !item.kotPrinted || item.qty > (item.kotPrintedQty || 0));
-    if (hasUnprintedKot) {
-      openPrintKot(tableId, false);
-    }
-
+    // Auto-dispatch KOT to kitchen handled via receipt hardware print below without conflicting network KOT_SUBMIT
     const changeReturn = Math.max(0, totalEntered - netTotal);
     const cashRetained = Math.max(0, computedCash - changeReturn);
     let activeSerialConfig = { ...(data.serialConfig || DEFAULT_SERIAL_CONFIG) };
@@ -5503,9 +5596,14 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       billCount: 0
     } : t);
 
-    lastLocalEditTimeRef.current = Date.now();
+    recentlyFreedTablesRef.current.set(tableId, Date.now());
+    lastLocalEditTimeRef.current = 0;
+    if (activeTableIdRef.current === tableId) {
+      activeTableIdRef.current = null;
+      setActiveTableId(null);
+    }
     lastSyncedTablesStrRef.current = JSON.stringify(freedTables);
-    syncPosTablesToServer(freedTables, newSale, 'TABLE_SETTLE', serialConfigChanged ? activeSerialConfig : undefined);
+    syncPosTablesToServer(freedTables, newSale, 'TABLE_SETTLE', serialConfigChanged ? activeSerialConfig : undefined, tableId);
 
     // Update state
     setData(prev => {
