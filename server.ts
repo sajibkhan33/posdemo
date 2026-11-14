@@ -66,7 +66,7 @@ function normalizeLogo(state: any): boolean {
 }
 
 // Dedicated Ultra-Fast Real-Time POS Sync (3.8KB payload, <5ms round-trip)
-function sanitizeTables(tables: any[], existingSales: any[] = []) {
+function sanitizeTables(tables: any[], existingSales: any[] = [], isHoldSyncOnKotOnly = false) {
   if (!Array.isArray(tables)) return tables;
   const settledOrderRefs = new Set(
     (existingSales || [])
@@ -76,7 +76,11 @@ function sanitizeTables(tables: any[], existingSales: any[] = []) {
   return tables.map(t => {
     // A table is only considered already settled if it has no active cart items
     const isAlreadySettled = t.orderRef && settledOrderRefs.has(t.orderRef) && (!t.cart || t.cart.length === 0) && !t.isPaidOrder && !t.linkedSaleId;
-    if (!t.cart || t.cart.length === 0 || isAlreadySettled) {
+    const isReallyEmpty = !t.cart || t.cart.length === 0;
+    const hasAnyKot = !isReallyEmpty && t.cart.some((item: any) => (item.kotPrintedQty || 0) > 0 || item.kotPrinted);
+    const isUnprintedDraftInOnKotMode = isHoldSyncOnKotOnly && !isReallyEmpty && !hasAnyKot && t.status !== 'billed';
+
+    if (isReallyEmpty || isAlreadySettled || isUnprintedDraftInOnKotMode) {
       return {
         ...t,
         status: 'free',
@@ -2123,10 +2127,11 @@ async function startServer() {
     res.flushHeaders?.();
 
     // Send immediate compact initial packet (only tables & timestamp, NOT full 1MB)
+    const isOnKotMode = cachedState?.restaurantProfile?.tableHoldSyncMode === 'on_kot';
     res.write(`data: ${JSON.stringify({ 
       type: 'CONNECTED', 
       timestamp: lastServerUpdate, 
-      tables: cachedState?.tables || [] 
+      tables: sanitizeTables(cachedState?.tables || [], cachedState?.sales || [], isOnKotMode)
     })}\n\n`);
     (res as any).flush?.();
 
@@ -2173,13 +2178,14 @@ async function startServer() {
         lastServerUpdate = now;
         lastMongoSyncCheck = now;
 
+        const isOnKotMode = cachedState?.restaurantProfile?.tableHoldSyncMode === 'on_kot';
         // Broadcast to all connected terminals instantly via SSE (<10ms)
         broadcastRealtimeState({
           type: 'POS_TABLES_UPDATE',
           action,
           sender: sender || null,
           timestamp: now,
-          tables: cachedState.tables,
+          tables: sanitizeTables(cachedState.tables, cachedState.sales || [], isOnKotMode),
           newSale: newSale || null,
           serialConfig: cachedState.serialConfig
         });
@@ -2216,11 +2222,12 @@ async function startServer() {
       return res.json({ changed: false, timestamp: lastServerUpdate });
     }
 
+    const isOnKotMode = cachedState?.restaurantProfile?.tableHoldSyncMode === 'on_kot';
     return res.json({
       changed: true,
       timestamp: lastServerUpdate,
       fullUpdateTimestamp: lastFullStateUpdate,
-      tables: sanitizeTables(cachedState?.tables || [], cachedState?.sales || []),
+      tables: sanitizeTables(cachedState?.tables || [], cachedState?.sales || [], isOnKotMode),
       salesCount: cachedState?.sales?.length || 0,
       serialConfig: cachedState?.serialConfig
     });
@@ -2332,12 +2339,18 @@ async function startServer() {
           if (err) console.error("Error writing restaurant state file:", err);
         });
 
+        const isOnKotMode = cachedState?.restaurantProfile?.tableHoldSyncMode === 'on_kot';
+        const broadcastState = isOnKotMode ? {
+          ...cachedState,
+          tables: sanitizeTables(cachedState.tables || [], cachedState.sales || [], true)
+        } : cachedState;
+
         // Broadcast to all other terminals instantly via SSE stream
         broadcastRealtimeState({
           type: 'FULL_STATE_UPDATED',
           sender: sender || null,
           timestamp: lastServerUpdate,
-          data: cachedState
+          data: broadcastState
         });
       }
 

@@ -856,11 +856,9 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
               const isHoldSyncOnKotOnly = data.restaurantProfile?.tableHoldSyncMode === 'on_kot';
               const hasAnyKotPrinted = !isReallyEmpty && table.cart.some(item => (item.kotPrintedQty || 0) > 0 || item.kotPrinted);
               
-              // Smooth flicker-free transition: If table is held or billed, or actively modified, it is NEVER forced to free!
-              const isLocalHeldOrActive = table.status === 'hold' || table.status === 'billed';
-              const isFree = (table.status === 'free' || isReallyEmpty) || (isHoldSyncOnKotOnly && !hasAnyKotPrinted && !isLocalHeldOrActive);
-              const isHold = !isReallyEmpty && table.status === 'hold' && (!isHoldSyncOnKotOnly || hasAnyKotPrinted || isLocalHeldOrActive);
               const isBilled = !isReallyEmpty && table.status === 'billed';
+              const isHold = !isReallyEmpty && table.status === 'hold' && (!isHoldSyncOnKotOnly || hasAnyKotPrinted);
+              const isFree = (table.status === 'free' || isReallyEmpty) || (isHoldSyncOnKotOnly && !hasAnyKotPrinted && !isBilled);
               const hasUnprintedKot = !isReallyEmpty && table.cart.length > 0 && table.cart.some(item => !item.kotPrinted || item.qty > (item.kotPrintedQty || 0));
               const isBillPrinted = !isReallyEmpty && table.status === 'billed';
               const zoneLabel = table.zone || 'Floor 1';

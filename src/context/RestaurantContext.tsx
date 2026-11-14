@@ -2804,13 +2804,38 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           }, 300);
         }
 
+        const syncMode = (dataRef.current?.restaurantProfile?.tableHoldSyncMode || data.restaurantProfile?.tableHoldSyncMode) || 'instant';
+        let tablesToSync = data.tables;
+        if (syncMode === 'on_kot') {
+          tablesToSync = data.tables.map(t => {
+            const isReallyEmpty = !t.cart || t.cart.length === 0;
+            const hasAnyKot = !isReallyEmpty && t.cart.some(item => (item.kotPrintedQty || 0) > 0 || item.kotPrinted);
+            const isBilled = t.status === 'billed';
+            if (!isReallyEmpty && !hasAnyKot && !isBilled) {
+              return {
+                ...t,
+                status: 'free' as const,
+                cart: [],
+                waiter: '',
+                discountVal: 0
+              };
+            }
+            return t;
+          });
+        }
+
         // Instant zero-lag broadcast to all other open tabs in this browser
         if (posBroadcastChannelRef.current) {
           try {
+            const dataToBroadcast = (syncMode === 'on_kot') ? {
+              ...data,
+              tables: tablesToSync
+            } : data;
+
             posBroadcastChannelRef.current.postMessage({
               type: 'POS_TAB_SYNC',
               sender: tabClientIdRef.current,
-              data
+              data: dataToBroadcast
             });
           } catch (e) {}
         }
@@ -2818,7 +2843,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         // Debounced full state push to MongoDB
         if (debounceSyncTimerRef.current) clearTimeout(debounceSyncTimerRef.current);
         debounceSyncTimerRef.current = setTimeout(() => {
-          syncToServer(data);
+          const dataToSend = (syncMode === 'on_kot') ? {
+            ...data,
+            tables: tablesToSync
+          } : data;
+          syncToServer(dataToSend);
         }, 300);
       }
     } catch (e) {
