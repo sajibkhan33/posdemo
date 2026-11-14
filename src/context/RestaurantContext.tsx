@@ -2510,43 +2510,57 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
       }
 
-      // 2. If incoming table has an orderRef that is already settled in sales, force it to stay free
+      // 2. If incoming table has an orderRef that is already settled in sales
       if (st.orderRef && settledOrderRefs.has(st.orderRef) && !st.isPaidOrder && !st.linkedSaleId) {
-        return {
-          ...st,
-          status: 'free' as const,
-          waiter: '',
-          customer: 'Walk-in Customer',
-          channelOrAgentId: 'dine_in',
-          discountVal: 0,
-          cart: [],
-          orderRef: undefined,
-          kotCount: 0,
-          billCount: 0,
-          billedAt: undefined,
-          billedAtTime: undefined
-        };
+        // If table has active items in cart, allocate a fresh non-colliding orderRef instead of clearing it!
+        if (st.cart && st.cart.length > 0) {
+          st = {
+            ...st,
+            orderRef: `ORD-${Date.now().toString().slice(-6)}`
+          };
+        } else {
+          return {
+            ...st,
+            status: 'free' as const,
+            waiter: '',
+            customer: 'Walk-in Customer',
+            channelOrAgentId: 'dine_in',
+            discountVal: 0,
+            cart: [],
+            orderRef: undefined,
+            kotCount: 0,
+            billCount: 0,
+            billedAt: undefined,
+            billedAtTime: undefined
+          };
+        }
       }
 
       if (!lt) return st;
 
-      // CRITICAL: If incoming server table is 'free', accept it! NEVER restore an old cart if table is freed!
+      // CRITICAL: Protect against stale in-flight server pulse overwriting freshly submitted KOT / Bill / Order!
+      const isRecentlyEditedLocally = (now - (lastLocalEditTimeRef.current || 0)) < 4000;
+      const hasLocalCart = (lt.cart?.length || 0) > 0;
+      const isLocalActiveOrHeld = (st.id === activeTableIdRef.current) || lt.status === 'hold' || lt.status === 'billed';
+
       if (st.status === 'free') {
         if (lt.status === 'free') return st;
-        const hasUnprintedLocalDraft = (lt.cart?.length || 0) > 0 && lt.cart.every(i => !i.kotPrinted);
-        const isActivelyTyping = (st.id === activeTableIdRef.current) && ((now - (lastLocalEditTimeRef.current || 0)) < 2500) && hasUnprintedLocalDraft;
-        if (isActivelyTyping) return lt;
+        // If table was modified locally in the last 4 seconds and has cart items (submitted KOT, Bill, or active draft), PRESERVE IT!
+        if (isRecentlyEditedLocally && hasLocalCart && isLocalActiveOrHeld) {
+          return lt;
+        }
         return st;
       }
 
-      // 3. If active table has genuine unprinted draft edited recently in this tab (< 2500ms), preserve local in-flight draft
-      const hasUnprintedLocalDraft = (lt.cart?.length || 0) > 0 && lt.cart.every(i => !i.kotPrinted);
-      const isActiveAndRecentlyEdited = (st.id === activeTableIdRef.current) && ((now - (lastLocalEditTimeRef.current || 0)) < 2500) && hasUnprintedLocalDraft;
-      if (isActiveAndRecentlyEdited) {
-        return lt;
+      // 3. If local table was edited recently in this tab (< 4000ms), preserve local in-flight draft/cart state
+      if (isRecentlyEditedLocally && hasLocalCart && isLocalActiveOrHeld) {
+        // If local has more items or has billed status, keep local authoritative
+        if ((st.cart?.length || 0) < (lt.cart?.length || 0) || (lt.status === 'billed' && st.status !== 'billed')) {
+          return lt;
+        }
       }
 
-      // Otherwise, the incoming server table is 100% authoritative
+      // Otherwise, the incoming server table is authoritative
       return st;
     });
 
@@ -4074,10 +4088,15 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         let orderRef = t.orderRef;
         let kotBaseSerial = t.kotBaseSerial;
 
-        if (!orderRef) {
-          const num = activeSerialConfig.orderRefNextNumber || 1;
-          const padded = String(num).padStart(activeSerialConfig.orderRefPadding || 4, '0');
-          orderRef = `${activeSerialConfig.orderRefPrefix || 'ORD-'}${padded}`;
+        const settledOrderRefs = new Set((prev.sales || []).map((s: any) => s.orderRef).filter(Boolean));
+        if (!orderRef || settledOrderRefs.has(orderRef)) {
+          let num = activeSerialConfig.orderRefNextNumber || 1;
+          let candidate = `${activeSerialConfig.orderRefPrefix || 'ORD-'}${String(num).padStart(activeSerialConfig.orderRefPadding || 4, '0')}`;
+          while (settledOrderRefs.has(candidate)) {
+            num++;
+            candidate = `${activeSerialConfig.orderRefPrefix || 'ORD-'}${String(num).padStart(activeSerialConfig.orderRefPadding || 4, '0')}`;
+          }
+          orderRef = candidate;
           activeSerialConfig.orderRefNextNumber = num + 1;
           serialAllocated = true;
         }
@@ -4487,7 +4506,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setIsStartSessionModalOpen(true);
       return;
     }
-    const table = data.tables.find(t => t.id === tableId);
+    const currentTables = (dataRef.current?.tables && dataRef.current.tables.length > 0) ? dataRef.current.tables : data.tables;
+    const table = currentTables.find(t => t.id === tableId) || data.tables.find(t => t.id === tableId);
     if (!table || table.cart.length === 0) {
       alert('No food items in this table order to print KOT!');
       return;
@@ -4513,7 +4533,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return;
     }
 
-    const orderRef = table.orderRef || ('ORD-' + Date.now().toString().slice(-5));
+    const settledOrderRefs = new Set((dataRef.current?.sales || data.sales || []).map((s: any) => s.orderRef).filter(Boolean));
+    let orderRef = table.orderRef;
+    if (!orderRef || settledOrderRefs.has(orderRef)) {
+      orderRef = 'ORD-' + Date.now().toString().slice(-6);
+    }
     const nextKotCount = (table.kotCount || 0) + 1;
     const isAddonKot = nextKotCount > 1;
     const linkedInvoiceNo = table.linkedInvoiceNo || ('POS-' + Date.now().toString().slice(-6));
@@ -4545,7 +4569,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     // Mark all current items in cart as KOT printed up to their current full quantity
     const now = Date.now();
     const timeStr = new Date(now).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-    const updatedTables = data.tables.map(t => {
+    const updatedTables = currentTables.map(t => {
       if (t.id !== tableId) return t;
       const updatedCart = t.cart.map(item => ({
         ...item,
@@ -5139,7 +5163,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setIsStartSessionModalOpen(true);
       return;
     }
-    const table = data.tables.find(t => t.id === tableId);
+    const currentTables = (dataRef.current?.tables && dataRef.current.tables.length > 0) ? dataRef.current.tables : data.tables;
+    const table = currentTables.find(t => t.id === tableId) || data.tables.find(t => t.id === tableId);
     if (!table || table.cart.length === 0) {
       alert('There are no items in this bill!');
       return;
@@ -5148,7 +5173,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const billNow = Date.now();
     const billTimeStr = new Date(billNow).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 
-    const orderRef = table.orderRef || ('ORD-' + Date.now().toString().slice(-5));
+    const settledOrderRefs = new Set((dataRef.current?.sales || data.sales || []).map((s: any) => s.orderRef).filter(Boolean));
+    let orderRef = table.orderRef;
+    if (!orderRef || settledOrderRefs.has(orderRef)) {
+      orderRef = 'ORD-' + Date.now().toString().slice(-6);
+    }
     const nextBillCount = (table.billCount || 0) + 1;
     const isUpdatedBill = nextBillCount > 1;
 
@@ -5176,7 +5205,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       : posInvoiceNo;
     const billDateTime = new Date().toLocaleString('en-US');
 
-    const updatedBillTables = data.tables.map(t => t.id === tableId ? { 
+    const updatedBillTables = currentTables.map(t => t.id === tableId ? { 
       ...t, 
       status: 'billed' as const,
       orderRef,
@@ -5511,11 +5540,16 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       serialConfigChanged = true;
     }
 
+    const settledOrderRefs = new Set((dataRef.current?.sales || data.sales || []).map((s: any) => s.orderRef).filter(Boolean));
     let effectiveOrderRef = table.orderRef;
-    if (!effectiveOrderRef) {
-      const num = activeSerialConfig.orderRefNextNumber || 1;
-      const padded = String(num).padStart(activeSerialConfig.orderRefPadding || 4, '0');
-      effectiveOrderRef = `${activeSerialConfig.orderRefPrefix || 'ORD-'}${padded}`;
+    if (!effectiveOrderRef || settledOrderRefs.has(effectiveOrderRef)) {
+      let num = activeSerialConfig.orderRefNextNumber || 1;
+      let candidate = `${activeSerialConfig.orderRefPrefix || 'ORD-'}${String(num).padStart(activeSerialConfig.orderRefPadding || 4, '0')}`;
+      while (settledOrderRefs.has(candidate)) {
+        num++;
+        candidate = `${activeSerialConfig.orderRefPrefix || 'ORD-'}${String(num).padStart(activeSerialConfig.orderRefPadding || 4, '0')}`;
+      }
+      effectiveOrderRef = candidate;
       activeSerialConfig.orderRefNextNumber = num + 1;
       serialConfigChanged = true;
     }

@@ -74,7 +74,8 @@ function sanitizeTables(tables: any[], existingSales: any[] = []) {
       .filter(Boolean)
   );
   return tables.map(t => {
-    const isAlreadySettled = t.orderRef && settledOrderRefs.has(t.orderRef) && !t.isPaidOrder && !t.linkedSaleId;
+    // A table is only considered already settled if it has no active cart items
+    const isAlreadySettled = t.orderRef && settledOrderRefs.has(t.orderRef) && (!t.cart || t.cart.length === 0) && !t.isPaidOrder && !t.linkedSaleId;
     if (!t.cart || t.cart.length === 0 || isAlreadySettled) {
       return {
         ...t,
@@ -130,7 +131,7 @@ function mergeTablesSafely(
 
     // 1. Explicit settle action for this table
     const isTargetOfSettle = (action === 'TABLE_SETTLE') && (modifiedTableId ? it.id === modifiedTableId : (!it.cart || it.cart.length === 0));
-    if (isTargetOfSettle || (it.orderRef && settledOrderRefs.has(it.orderRef) && !it.isPaidOrder && !it.linkedSaleId)) {
+    if (isTargetOfSettle || (it.orderRef && settledOrderRefs.has(it.orderRef) && (!it.cart || it.cart.length === 0) && !it.isPaidOrder && !it.linkedSaleId)) {
       return {
         ...st,
         ...it,
@@ -185,14 +186,22 @@ function mergeTablesSafely(
         return st; // Stays free
       }
 
-      // If incoming table has an old orderRef that was already settled, reject resurrection!
-      if (it.orderRef && settledOrderRefs.has(it.orderRef)) {
+      // Explicit intentional user actions (KOT submit, Bill print)
+      const isExplicitOrderAction = (action === 'KOT_SUBMIT' || action === 'BILL_PRINT');
+
+      // If server table was settled recently and this incoming order was created before or at settle time, REJECT!
+      if (st.settledAt && it.orderCreatedAt && it.orderCreatedAt <= st.settledAt) {
         return st;
       }
 
-      // If server table was settled recently, check orderCreatedAt
-      if (st.settledAt && it.orderCreatedAt && it.orderCreatedAt <= st.settledAt) {
-        return st;
+      // If incoming table has an old orderRef that was already settled in sales
+      if (it.orderRef && settledOrderRefs.has(it.orderRef)) {
+        if (isExplicitOrderAction && hasIncomingCart && (!st.settledAt || !it.orderCreatedAt || it.orderCreatedAt > st.settledAt)) {
+          // Assign a fresh unique orderRef so it does not collide with settled historical order
+          it.orderRef = `ORD-${Date.now().toString().slice(-6)}`;
+        } else {
+          return st;
+        }
       }
     }
 
