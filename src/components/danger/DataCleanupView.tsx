@@ -102,10 +102,10 @@ export const DataCleanupView: React.FC = () => {
     }
   };
 
-  const confirmFactoryReset = () => {
+  const confirmFactoryReset = async () => {
     setIsProcessing(true);
     try {
-      resetAllData();
+      await resetAllData();
       showSuccess('All transaction records have been successfully reset! Menus, users, and configurations remain intact.');
     } catch (e: any) {
       showError('Failed to reset system: ' + (e?.message || 'Error'));

@@ -2360,9 +2360,160 @@ async function startServer() {
     }
   });
 
+  // Dedicated Purge / Reset endpoint for irreversible clearing of data collections
+  app.post("/api/restaurant/purge", async (req, res) => {
+    try {
+      const { scope, saleId, invoiceNo, sender } = req.body;
+
+      if (!isDbConnected()) {
+        await connectToDatabase();
+      }
+
+      if (!cachedState) {
+        cachedState = {
+          sales: [],
+          tables: [],
+          purchases: [],
+          expenses: [],
+          inventory: [],
+          chartOfAccounts: []
+        };
+      }
+
+      if (scope === 'all') {
+        // Reset all transactions & entries (Factory Reset)
+        cachedState = {
+          ...cachedState,
+          sales: [],
+          purchases: [],
+          purchaseOrders: [],
+          purchaseReturns: [],
+          expenses: [],
+          payments: [],
+          inventory: [],
+          customerAdvances: [],
+          posSessions: [],
+          dayEndRecords: [],
+          chefShifts: [],
+          activeChefShift: null,
+          waiterShifts: [],
+          activeWaiterShift: null,
+          journalEntries: [],
+          chartOfAccounts: (cachedState.chartOfAccounts || []).map((acc: any) => ({
+            ...acc,
+            balance: 0
+          })),
+          tables: (cachedState.tables || []).map((t: any) => ({
+            ...t,
+            status: 'free',
+            waiter: '',
+            customer: 'Walk-in Customer',
+            cart: [],
+            discountVal: 0,
+            isBillPrinted: false
+          })),
+          session: { isActive: false, openingCash: 0, startTime: "" },
+          businessDay: { date: new Date().toISOString().split('T')[0], isOpen: false, dayNumber: 1 }
+        };
+      } else if (scope === 'sales') {
+        cachedState = {
+          ...cachedState,
+          sales: [],
+          posSessions: [],
+          dayEndRecords: [],
+          session: { isActive: false, openingCash: 0, startTime: "" },
+          tables: (cachedState.tables || []).map((t: any) => ({
+            ...t,
+            status: 'free',
+            waiter: '',
+            customer: 'Walk-in Customer',
+            cart: [],
+            discountVal: 0,
+            isBillPrinted: false
+          }))
+        };
+      } else if (scope === 'expenses') {
+        cachedState.expenses = [];
+      } else if (scope === 'purchases') {
+        cachedState.purchases = [];
+        cachedState.purchaseOrders = [];
+        cachedState.purchaseReturns = [];
+        cachedState.payments = [];
+      } else if (scope === 'payables') {
+        cachedState.payments = [];
+      } else if (scope === 'receivables' || scope === 'customerAdvances') {
+        cachedState.customerAdvances = [];
+      } else if (scope === 'inventory' || scope === 'stock') {
+        cachedState.inventory = [];
+      } else if (scope === 'tables') {
+        cachedState.tables = (cachedState.tables || []).map((t: any) => ({
+          ...t,
+          status: 'free',
+          waiter: '',
+          customer: 'Walk-in Customer',
+          cart: [],
+          discountVal: 0,
+          isBillPrinted: false
+        }));
+      } else if (scope === 'menu' || scope === 'menu-items') {
+        cachedState.menuItems = [];
+      } else if (scope === 'masterItems' || scope === 'master-items') {
+        cachedState.masterItems = [];
+      } else if (scope === 'items') {
+        cachedState.menuItems = [];
+        cachedState.masterItems = [];
+      } else if (scope === 'coa' || scope === 'heads') {
+        cachedState.chartOfAccounts = (cachedState.chartOfAccounts || []).map((acc: any) => ({ ...acc, balance: 0 }));
+      } else if (scope === 'single_sale' && (saleId || invoiceNo)) {
+        cachedState.sales = (cachedState.sales || []).filter((s: any) => s.id !== saleId && s.invoiceNo !== invoiceNo);
+      }
+
+      lastServerUpdate = Date.now();
+      lastFullStateUpdate = lastServerUpdate;
+      lastMongoSyncCheck = lastServerUpdate;
+
+      // Persist to MongoDB
+      if (isDbConnected()) {
+        await RestaurantStateModel.findOneAndUpdate(
+          { stateKey: STATE_KEY },
+          { stateKey: STATE_KEY, data: cachedState, timestamp: lastServerUpdate },
+          { upsert: true, returnDocument: 'after' }
+        ).catch((err: any) => {
+          console.error("MongoDB async purge update error:", err);
+        });
+      }
+
+      // Write to JSON file
+      try {
+        fs.writeFileSync(STATE_FILE, JSON.stringify({ data: cachedState, timestamp: lastServerUpdate }, null, 2));
+      } catch (err) {
+        console.error("Error writing restaurant state file on purge:", err);
+      }
+
+      // Broadcast to all other terminals
+      broadcastRealtimeState({
+        type: 'FULL_STATE_UPDATED',
+        sender: sender || null,
+        timestamp: lastServerUpdate,
+        data: cachedState
+      });
+
+      res.setHeader("X-LiteSpeed-Cache-Control", "no-cache");
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.json({
+        success: true,
+        timestamp: lastServerUpdate,
+        data: cachedState
+      });
+    } catch (err: any) {
+      console.error("Purge error:", err);
+      res.status(500).json({ success: false, error: err?.message || "Failed to purge data" });
+    }
+  });
+
   app.post("/api/restaurant/state", async (req, res) => {
     try {
-      const { data: clientData, sender } = req.body;
+      const { data: clientData, sender, isPurge, deletedSaleId } = req.body;
 
       if (!isDbConnected()) {
         await connectToDatabase();
@@ -2372,20 +2523,31 @@ async function startServer() {
         normalizeLogo(clientData);
 
         // 1. Merge sales safely so no sales can ever be lost or overwritten by an older client
-        const serverSales = Array.isArray(cachedState?.sales) ? cachedState.sales : [];
-        const clientSales = Array.isArray(clientData?.sales) ? clientData.sales : [];
-        const salesMap = new Map();
-        serverSales.forEach((s: any) => {
-          const key = s.invoiceNo || String(s.id);
-          salesMap.set(key, s);
-        });
-        clientSales.forEach((s: any) => {
-          const key = s.invoiceNo || String(s.id);
-          if (!salesMap.has(key)) {
+        let mergedSales: any[] = [];
+        if (isPurge) {
+          mergedSales = Array.isArray(clientData?.sales) ? clientData.sales : [];
+        } else if (deletedSaleId) {
+          const serverSales = (Array.isArray(cachedState?.sales) ? cachedState.sales : []).filter((s: any) => s.id !== deletedSaleId && s.invoiceNo !== deletedSaleId);
+          const clientSales = (Array.isArray(clientData?.sales) ? clientData.sales : []).filter((s: any) => s.id !== deletedSaleId && s.invoiceNo !== deletedSaleId);
+          const salesMap = new Map();
+          serverSales.forEach((s: any) => salesMap.set(s.invoiceNo || String(s.id), s));
+          clientSales.forEach((s: any) => salesMap.set(s.invoiceNo || String(s.id), s));
+          mergedSales = Array.from(salesMap.values());
+        } else {
+          const serverSales = Array.isArray(cachedState?.sales) ? cachedState.sales : [];
+          const clientSales = Array.isArray(clientData?.sales) ? clientData.sales : [];
+          const salesMap = new Map();
+          serverSales.forEach((s: any) => {
+            const key = s.invoiceNo || String(s.id);
             salesMap.set(key, s);
-          }
-        });
-        const mergedSales = Array.from(salesMap.values());
+          });
+          clientSales.forEach((s: any) => {
+            const key = s.invoiceNo || String(s.id);
+            // Client version always updates server version
+            salesMap.set(key, s);
+          });
+          mergedSales = Array.from(salesMap.values());
+        }
 
         // 2. Merge tables safely: if table structure (count or IDs) was changed in config, use TABLES_CONFIG_UPDATE
         const serverIds = (cachedState?.tables || []).map((t: any) => t.id).join(',');

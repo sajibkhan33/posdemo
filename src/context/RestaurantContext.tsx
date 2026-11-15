@@ -6749,7 +6749,22 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const deleteSale = (id: number) => {
+    const saleToDelete = data.sales.find(s => s.id === id);
+    lastSyncedStringRef.current = "";
+    lastLocalEditTimeRef.current = Date.now();
     setData(prev => ({ ...prev, sales: prev.sales.filter(s => s.id !== id) }));
+    try {
+      fetch('/api/restaurant/purge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          scope: 'single_sale', 
+          saleId: id, 
+          invoiceNo: saleToDelete?.invoiceNo, 
+          sender: tabClientIdRef.current 
+        })
+      }).catch(() => {});
+    } catch (e) {}
   };
 
   const voidSale = (saleId: number, options: {
@@ -8570,6 +8585,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // Reset & Clean Data per Module
   const resetModuleData = (moduleType: 'sales' | 'expenses' | 'purchases' | 'payables' | 'receivables' | 'stock' | 'inventory' | 'tables' | 'menu' | 'menu-items' | 'masterItems' | 'master-items' | 'items' | 'customerAdvances' | 'coa' | 'heads' | 'users' | 'all') => {
+    lastSyncedStringRef.current = "";
+    lastLocalEditTimeRef.current = Date.now();
     setData(prev => {
       if (moduleType === 'sales') {
         return {
@@ -8579,7 +8596,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           dayEndRecords: [],
           session: { isActive: false, openingCash: 0, startTime: "" },
           businessDay: { date: new Date().toISOString().split('T')[0], isOpen: false, dayNumber: 1 },
-          tables: prev.tables.map(t => ({ ...t, status: 'free' as const, waiter: '', customerName: '', cart: [], discountVal: 0, isBillPrinted: false }))
+          tables: prev.tables.map(t => ({ ...t, status: 'free' as const, waiter: '', customer: 'Walk-in Customer', customerName: '', cart: [], discountVal: 0, isBillPrinted: false }))
         };
       } else if (moduleType === 'purchases') {
         return {
@@ -8606,7 +8623,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       } else if (moduleType === 'tables') {
         return {
           ...prev,
-          tables: DEFAULT_DATA.tables.map(t => ({ ...t, status: 'free', waiter: '', cart: [], discountVal: 0 }))
+          tables: DEFAULT_DATA.tables.map(t => ({ ...t, status: 'free', waiter: '', customer: 'Walk-in Customer', cart: [], discountVal: 0, isBillPrinted: false }))
         };
       } else if (moduleType === 'menu' || moduleType === 'menu-items') {
         return { ...prev, menuItems: [] };
@@ -8644,6 +8661,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             ...t, 
             status: 'free' as const, 
             waiter: '', 
+            customer: 'Walk-in Customer',
             customerName: '', 
             cart: [], 
             discountVal: 0, 
@@ -8655,13 +8673,25 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
       return prev;
     });
+
+    try {
+      fetch('/api/restaurant/purge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scope: moduleType, sender: tabClientIdRef.current })
+      }).catch(err => {
+        console.warn("Module purge sync error:", err);
+      });
+    } catch (e) {}
   };
 
   const cleanModuleData = (moduleType: any) => {
     resetModuleData(moduleType);
   };
 
-  const resetAllData = () => {
+  const resetAllData = async () => {
+    lastSyncedStringRef.current = "";
+    lastLocalEditTimeRef.current = Date.now();
     setData(prev => ({
       ...prev,
       sales: [],
@@ -8687,6 +8717,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         ...t, 
         status: 'free' as const, 
         waiter: '', 
+        customer: 'Walk-in Customer',
         customerName: '', 
         cart: [], 
         discountVal: 0, 
@@ -8695,6 +8726,16 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       session: { isActive: false, openingCash: 0, startTime: "" },
       businessDay: { date: new Date().toISOString().split('T')[0], isOpen: false, dayNumber: 1 }
     }));
+
+    try {
+      await fetch('/api/restaurant/purge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scope: 'all', sender: tabClientIdRef.current })
+      });
+    } catch (e) {
+      console.warn("Factory reset purge error:", e);
+    }
   };
 
   const cleanAllSystemData = () => {
