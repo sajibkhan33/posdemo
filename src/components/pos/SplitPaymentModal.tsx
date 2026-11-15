@@ -13,7 +13,8 @@ import {
   Zap,
   Building,
   QrCode,
-  Users
+  Users,
+  Lock
 } from 'lucide-react';
 
 export const SplitPaymentModal: React.FC = () => {
@@ -50,6 +51,9 @@ export const SplitPaymentModal: React.FC = () => {
   );
 
   if (!activeSettlingTable) return null;
+
+  const liveTable = data.tables.find(t => t.id === activeSettlingTable.id);
+  const isAlreadySettled = !liveTable || liveTable.status === 'free' || !liveTable.cart || liveTable.cart.length === 0;
 
   const getMethodAmt = (mId: string): number => splitAmounts[mId] || 0;
   const setMethodAmt = (mId: string, val: number) => {
@@ -158,7 +162,7 @@ export const SplitPaymentModal: React.FC = () => {
 
   const handleSettle = (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSubmitting) return;
+    if (isSubmitting || isAlreadySettled) return;
 
     if (totalEntered < netTotal) {
       alert(`Payment incomplete! Remaining ৳${remaining.toLocaleString()} is due.`);
@@ -670,6 +674,18 @@ export const SplitPaymentModal: React.FC = () => {
             </div>
           )}
 
+          {/* Already settled alert for concurrent devices */}
+          {isAlreadySettled && (
+            <div className="mt-3 p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-center gap-2.5 text-amber-950 animate-in fade-in duration-200">
+              <div className="p-1.5 bg-amber-200/80 rounded-lg shrink-0">
+                <Lock className="w-4 h-4 text-amber-900" />
+              </div>
+              <div className="text-xs font-bold leading-tight">
+                This table bill has already been settled and paid from another device!
+              </div>
+            </div>
+          )}
+
           {/* Action buttons */}
           <div className="pt-4 flex gap-3">
             <button
@@ -682,14 +698,21 @@ export const SplitPaymentModal: React.FC = () => {
             <button
               type="submit"
               id="submit-settle-payment"
-              disabled={totalEntered < netTotal || isSubmitting}
+              disabled={totalEntered < netTotal || isSubmitting || isAlreadySettled}
               className={`flex-1 py-3 rounded-xl font-extrabold text-sm shadow-md transition flex items-center justify-center gap-2 ${
-                totalEntered >= netTotal && !isSubmitting
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer' 
-                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                isAlreadySettled
+                  ? 'bg-slate-200 border border-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+                  : totalEntered >= netTotal && !isSubmitting
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer' 
+                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
               }`}
             >
-              {isSubmitting ? (
+              {isAlreadySettled ? (
+                <>
+                  <Lock className="w-4 h-4 text-slate-500" />
+                  <span>Already Settled & Paid</span>
+                </>
+              ) : isSubmitting ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white/60 border-t-white rounded-full animate-spin" />
                   <span>Processing Settlement...</span>
