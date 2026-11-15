@@ -1,0 +1,11 @@
+# LiteSpeed & Reverse Proxy: Disable buffering for instant real-time Server-Sent Events (SSE)
+<IfModule Litespeed>
+  RewriteEngine On
+  RewriteRule .* - [E=nobs:1]
+</IfModule>
+
+<IfModule mod_headers.c>
+  Header set Cache-Control "no-cache, no-transform, no-buffer"
+  Header set X-Accel-Buffering "no"
+  Header set X-LiteSpeed-Buffer "no"
+</IfModule>

@@ -33,6 +33,7 @@ $filesToCopy = @(
     "print-agent.cjs",
     ".node-version",
     ".env.example",
+    ".htaccess",
     "README.md"
 )
 

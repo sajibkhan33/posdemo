@@ -2837,7 +2837,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     setupSSE();
 
-    // 2. High-speed lightweight heartbeat pulse check every 1 second (<40 bytes)
+    // 2. High-speed lightweight heartbeat pulse check every 600ms (<40 bytes)
     const pulseInterval = setInterval(async () => {
       try {
         const since = lastSyncedTimestampRef.current || 0;
@@ -2848,7 +2848,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           const json = await res.json();
           if (json.changed) {
             if (json.tables) {
-              applyIncomingTables(json.tables, undefined, json.timestamp, json.serialConfig);
+              applyIncomingTables(json.tables, json.latestSale, json.timestamp, json.serialConfig);
             }
             const hasFullUpdate = json.fullUpdateTimestamp && json.fullUpdateTimestamp > (lastFullSyncTimestampRef.current || 0);
             const hasSalesMismatch = json.salesCount !== undefined && json.salesCount !== (dataRef.current.sales?.length || 0);
@@ -2858,7 +2858,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           }
         }
       } catch (e) {}
-    }, 1000);
+    }, 600);
 
     // 3. Instant multi-tab message listener (0ms on same device)
     const channel = posBroadcastChannelRef.current;

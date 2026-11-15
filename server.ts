@@ -2193,9 +2193,10 @@ async function startServer() {
   // Real-time Event Stream (SSE) for zero-lag instant cross-device synchronization (<15ms)
   app.get("/api/restaurant/stream", (req, res) => {
     res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Cache-Control", "no-cache, no-transform, no-buffer");
     res.setHeader("Connection", "keep-alive");
     res.setHeader("X-Accel-Buffering", "no");
+    res.setHeader("X-LiteSpeed-Buffer", "no");
     res.setHeader("X-LiteSpeed-Cache-Control", "no-cache");
     res.flushHeaders?.();
 
@@ -2300,13 +2301,15 @@ async function startServer() {
     }
 
     const isOnKotMode = cachedState?.restaurantProfile?.tableHoldSyncMode === 'on_kot';
+    const recentSale = (cachedState?.sales && cachedState.sales.length > 0) ? cachedState.sales[cachedState.sales.length - 1] : null;
     return res.json({
       changed: true,
       timestamp: lastServerUpdate,
       fullUpdateTimestamp: lastFullStateUpdate,
       tables: sanitizeTables(cachedState?.tables || [], cachedState?.sales || [], isOnKotMode),
       salesCount: cachedState?.sales?.length || 0,
-      serialConfig: cachedState?.serialConfig
+      serialConfig: cachedState?.serialConfig,
+      latestSale: recentSale
     });
   });
 
