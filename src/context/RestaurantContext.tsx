@@ -5833,7 +5833,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       billedAtTime: undefined,
       orderRef: undefined,
       kotCount: 0,
-      billCount: 0
+      billCount: 0,
+      settledAt: Date.now(),
+      lastSettledOrderRef: effectiveOrderRef
     } : t);
 
     recentlyFreedTablesRef.current.set(tableId, Date.now());

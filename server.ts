@@ -220,7 +220,7 @@ function mergeTablesSafely(
           orderRef: undefined,
           kotCount: 0,
           billCount: 0,
-          settledAt: st.settledAt || now,
+          settledAt: now,
           lastSettledOrderRef: it.orderRef || st.orderRef || st.lastSettledOrderRef
         };
       }
@@ -252,8 +252,13 @@ function mergeTablesSafely(
         return st; // Stays free
       }
 
-      // Explicit intentional user actions (KOT submit, Bill print)
-      const isExplicitOrderAction = (action === 'KOT_SUBMIT' || action === 'BILL_PRINT');
+      // Explicit intentional user actions (KOT submit, Bill print, or direct cart update)
+      const isExplicitOrderAction = (action === 'KOT_SUBMIT' || action === 'BILL_PRINT' || action === 'CART_ADD' || action === 'POS_ORDER');
+
+      // CRITICAL: Generic background state push (TABLES_UPDATE) from another client MUST NEVER resurrect a free table!
+      if (!isExplicitOrderAction && action === 'TABLES_UPDATE') {
+        return st;
+      }
 
       // If server table was settled recently and this incoming order was created before or at settle time, REJECT!
       if (st.settledAt && it.orderCreatedAt && it.orderCreatedAt <= st.settledAt) {
@@ -262,12 +267,7 @@ function mergeTablesSafely(
 
       // If incoming table has an old orderRef that was already settled in sales FOR THIS TABLE
       if (it.orderRef && tableSettledRefs && tableSettledRefs.has(it.orderRef)) {
-        if (hasIncomingCart && it.orderCreatedAt && st.settledAt && it.orderCreatedAt > st.settledAt) {
-          // Genuinely new order started AFTER the settle timestamp on this table
-          it.orderRef = `ORD-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 90 + 10)}`;
-        } else {
-          return st; // Stays free
-        }
+        return st;
       }
     }
 
