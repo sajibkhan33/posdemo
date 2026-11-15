@@ -2394,30 +2394,33 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             if (lt && lt.status === 'free') return lt;
           }
 
-          // 2. If table's orderRef is already settled in sales FOR THIS SPECIFIC TABLE
+          // 2. Settlement Check: If order is settled in sales (either locally or on server) FOR THIS SPECIFIC TABLE
           const tableSettledRefs = settledOrderRefsByTable.get(t.id) || settledOrderRefsByTable.get(t.name);
-          if (t.orderRef && tableSettledRefs && tableSettledRefs.has(t.orderRef) && !t.isPaidOrder && !t.linkedSaleId) {
-            if (t.cart && t.cart.length > 0) {
-              t = {
-                ...t,
-                orderRef: `ORD-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 90 + 10)}`
-              };
-            } else {
-              return {
-                ...t,
-                status: 'free' as const,
-                waiter: '',
-                customer: 'Walk-in Customer',
-                channelOrAgentId: 'dine_in',
-                discountVal: 0,
-                cart: [],
-                orderRef: undefined,
-                kotCount: 0,
-                billCount: 0,
-                billedAt: undefined,
-                billedAtTime: undefined
-              };
+          const isLtSettled = Boolean(lt?.orderRef && tableSettledRefs && tableSettledRefs.has(lt.orderRef));
+          const isTSettled = Boolean(t.orderRef && tableSettledRefs && tableSettledRefs.has(t.orderRef));
+          const isServerSettledAfterLocalOrder = Boolean(t.settledAt && lt?.orderCreatedAt && lt.orderCreatedAt <= t.settledAt);
+          const isOrderAlreadySettled = (isLtSettled || isTSettled || isServerSettledAfterLocalOrder) && !t.isPaidOrder && !t.linkedSaleId;
+
+          if (isOrderAlreadySettled) {
+            tableLocalEditTimeMapRef.current.delete(t.id);
+            if (activeTableIdRef.current === t.id) {
+              activeTableIdRef.current = null;
             }
+            return {
+              ...t,
+              status: 'free' as const,
+              waiter: '',
+              customer: 'Walk-in Customer',
+              channelOrAgentId: 'dine_in',
+              discountVal: 0,
+              cart: [],
+              orderRef: undefined,
+              kotCount: 0,
+              billCount: 0,
+              billedAt: undefined,
+              billedAtTime: undefined,
+              settledAt: t.settledAt || now
+            };
           }
 
           if (!lt) return t;
@@ -2425,6 +2428,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           // CRITICAL: If incoming server table is 'free', accept it! NEVER restore an old cart if table is freed!
           if (t.status === 'free') {
             if (lt.status === 'free') return t;
+            if (isOrderAlreadySettled) return t;
             const hasLocalCart = (lt.cart?.length || 0) > 0;
             const hasUnprintedLocalDraft = hasLocalCart && lt.cart.some(i => !i.kotPrinted || (i.kotPrintedQty || 0) < i.qty);
             const thisTableEditTime = tableLocalEditTimeMapRef.current.get(t.id) || 0;
@@ -2578,31 +2582,33 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
       }
 
-      // 2. If incoming table has an orderRef that is already settled in sales FOR THIS SPECIFIC TABLE
+      // 2. Settlement Check: If order is settled in sales (either locally or on server) FOR THIS SPECIFIC TABLE
       const tableSettledRefs = settledOrderRefsByTable.get(st.id) || settledOrderRefsByTable.get(st.name);
-      if (st.orderRef && tableSettledRefs && tableSettledRefs.has(st.orderRef) && !st.isPaidOrder && !st.linkedSaleId) {
-        // If table has active items in cart, allocate a fresh non-colliding orderRef instead of clearing it!
-        if (st.cart && st.cart.length > 0) {
-          st = {
-            ...st,
-            orderRef: `ORD-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 90 + 10)}`
-          };
-        } else {
-          return {
-            ...st,
-            status: 'free' as const,
-            waiter: '',
-            customer: 'Walk-in Customer',
-            channelOrAgentId: 'dine_in',
-            discountVal: 0,
-            cart: [],
-            orderRef: undefined,
-            kotCount: 0,
-            billCount: 0,
-            billedAt: undefined,
-            billedAtTime: undefined
-          };
+      const isLtSettled = Boolean(lt?.orderRef && tableSettledRefs && tableSettledRefs.has(lt.orderRef));
+      const isStSettled = Boolean(st.orderRef && tableSettledRefs && tableSettledRefs.has(st.orderRef));
+      const isServerSettledAfterLocalOrder = Boolean(st.settledAt && lt?.orderCreatedAt && lt.orderCreatedAt <= st.settledAt);
+      const isOrderAlreadySettled = (isLtSettled || isStSettled || isServerSettledAfterLocalOrder) && !st.isPaidOrder && !st.linkedSaleId;
+
+      if (isOrderAlreadySettled) {
+        tableLocalEditTimeMapRef.current.delete(st.id);
+        if (activeTableIdRef.current === st.id) {
+          activeTableIdRef.current = null;
         }
+        return {
+          ...st,
+          status: 'free' as const,
+          waiter: '',
+          customer: 'Walk-in Customer',
+          channelOrAgentId: 'dine_in',
+          discountVal: 0,
+          cart: [],
+          orderRef: undefined,
+          kotCount: 0,
+          billCount: 0,
+          billedAt: undefined,
+          billedAtTime: undefined,
+          settledAt: st.settledAt || now
+        };
       }
 
       if (!lt) return st;
@@ -2618,6 +2624,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       if (st.status === 'free') {
         if (lt.status === 'free') return st;
+        if (isOrderAlreadySettled) return st;
         // 1. If actively open on this POS screen with items, NEVER wipe it to free!
         if (isLocalActive && hasLocalCart) {
           return lt;
@@ -2861,6 +2868,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               mergedTables = incomingData.tables.map((st: Table) => {
                 const lt = prev.tables.find(l => l.id === st.id);
                 if (!lt) return st;
+                const sales = incomingData.sales || prev.sales || [];
+                const isLtSettled = Boolean(lt.orderRef && sales.some((s: any) => (s.tableId === st.id || s.table === st.name || s.table === st.id) && s.orderRef === lt.orderRef));
+                if (isLtSettled) {
+                  return st;
+                }
                 const hasLocalCart = (lt.cart?.length || 0) > 0;
                 const isLocalActive = (st.id === activeTableIdRef.current);
                 if (st.status === 'free' && hasLocalCart && isLocalActive) {

@@ -91,8 +91,12 @@ function sanitizeTables(tables: any[], existingSales: any[] = [], isHoldSyncOnKo
 
   return tables.map(t => {
     const tableSettledRefs = settledOrdersByTable.get(t.id) || settledOrdersByTable.get(t.name);
-    // A table is only considered already settled if it has no active cart items
-    const isAlreadySettled = t.orderRef && tableSettledRefs && tableSettledRefs.has(t.orderRef) && (!t.cart || t.cart.length === 0) && !t.isPaidOrder && !t.linkedSaleId;
+    const isAlreadySettled = Boolean(
+      (
+        (t.orderRef && tableSettledRefs && tableSettledRefs.has(t.orderRef)) ||
+        (t.lastSettledOrderRef && tableSettledRefs && tableSettledRefs.has(t.lastSettledOrderRef))
+      ) && !t.isPaidOrder && !t.linkedSaleId
+    );
     const isReallyEmpty = !t.cart || t.cart.length === 0;
     const hasAnyKot = !isReallyEmpty && t.cart.some((item: any) => (item.kotPrintedQty || 0) > 0 || item.kotPrinted);
     const isUnprintedDraftInOnKotMode = isHoldSyncOnKotOnly && !isReallyEmpty && !hasAnyKot && t.status !== 'billed';
@@ -178,35 +182,41 @@ function mergeTablesSafely(
 
     const tableSettledRefs = settledOrdersByTable.get(st.id) || settledOrdersByTable.get(st.name);
 
-    // 1. Explicit settle action for this table
+    // 1. Explicit settle action or already settled order in sales for this table
     const isTargetOfSettle = (action === 'TABLE_SETTLE') && (modifiedTableId ? it.id === modifiedTableId : (!it.cart || it.cart.length === 0));
-    if (isTargetOfSettle || (it.orderRef && tableSettledRefs && tableSettledRefs.has(it.orderRef) && (!it.cart || it.cart.length === 0) && !it.isPaidOrder && !it.linkedSaleId)) {
-      return {
-        ...st,
-        ...it,
-        status: 'free',
-        waiter: '',
-        customer: 'Walk-in Customer',
-        cart: [],
-        discountVal: 0,
-        channelOrAgentId: 'dine_in',
-        linkedSaleId: undefined,
-        linkedInvoiceNo: undefined,
-        kotBaseSerial: undefined,
-        isPaidOrder: false,
-        paidAmount: 0,
-        orderCreatedBy: undefined,
-        orderCreatedRole: undefined,
-        orderCreatedId: undefined,
-        orderCreatedAt: undefined,
-        billedAt: undefined,
-        billedAtTime: undefined,
-        orderRef: undefined,
-        kotCount: 0,
-        billCount: 0,
-        settledAt: now,
-        lastSettledOrderRef: it.orderRef || st.orderRef
-      };
+    const isItSettled = Boolean(it.orderRef && tableSettledRefs && tableSettledRefs.has(it.orderRef));
+    const isStSettled = Boolean(st.orderRef && tableSettledRefs && tableSettledRefs.has(st.orderRef));
+    const isServerSettledAfterIncoming = Boolean(st.settledAt && it.orderCreatedAt && it.orderCreatedAt <= st.settledAt);
+
+    if (isTargetOfSettle || isItSettled || isStSettled || isServerSettledAfterIncoming) {
+      if (!it.isPaidOrder && !it.linkedSaleId) {
+        return {
+          ...st,
+          ...it,
+          status: 'free',
+          waiter: '',
+          customer: 'Walk-in Customer',
+          cart: [],
+          discountVal: 0,
+          channelOrAgentId: 'dine_in',
+          linkedSaleId: undefined,
+          linkedInvoiceNo: undefined,
+          kotBaseSerial: undefined,
+          isPaidOrder: false,
+          paidAmount: 0,
+          orderCreatedBy: undefined,
+          orderCreatedRole: undefined,
+          orderCreatedId: undefined,
+          orderCreatedAt: undefined,
+          billedAt: undefined,
+          billedAtTime: undefined,
+          orderRef: undefined,
+          kotCount: 0,
+          billCount: 0,
+          settledAt: st.settledAt || now,
+          lastSettledOrderRef: it.orderRef || st.orderRef || st.lastSettledOrderRef
+        };
+      }
     }
 
     // 2. Explicit release or cart clear for this table
@@ -245,11 +255,11 @@ function mergeTablesSafely(
 
       // If incoming table has an old orderRef that was already settled in sales FOR THIS TABLE
       if (it.orderRef && tableSettledRefs && tableSettledRefs.has(it.orderRef)) {
-        if (hasIncomingCart && (!st.settledAt || !it.orderCreatedAt || it.orderCreatedAt > st.settledAt)) {
-          // Assign a fresh unique orderRef so it does not collide with settled historical order
+        if (hasIncomingCart && it.orderCreatedAt && st.settledAt && it.orderCreatedAt > st.settledAt) {
+          // Genuinely new order started AFTER the settle timestamp on this table
           it.orderRef = `ORD-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 90 + 10)}`;
         } else {
-          return st;
+          return st; // Stays free
         }
       }
     }
