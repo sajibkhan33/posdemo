@@ -1511,9 +1511,6 @@ interface RestaurantContextType {
   activeSettlingTable: Table | null;
   openSettleModal: (tableId: string) => void;
   closeSettleModal: () => void;
-  globalToast: { message: string; type?: 'info' | 'success' | 'warning'; id: number } | null;
-  showGlobalToast: (message: string, type?: 'info' | 'success' | 'warning') => void;
-  closeGlobalToast: () => void;
   settlePayment: (
     tableId: string, 
     payments: { 
@@ -2216,26 +2213,6 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [selectedDayEndPreview, setSelectedDayEndPreviewState] = useState<ConsolidatedDayReportData | null>(null);
   const [pendingLogoutAfterShiftClose, setPendingLogoutAfterShiftClose] = useState(false);
   const [activeSettlingTable, setActiveSettlingTable] = useState<Table | null>(null);
-  const activeSettlingTableRef = useRef<Table | null>(null);
-  useEffect(() => {
-    activeSettlingTableRef.current = activeSettlingTable;
-  }, [activeSettlingTable]);
-
-  const [globalToast, setGlobalToast] = useState<{ message: string; type?: 'info' | 'success' | 'warning'; id: number } | null>(null);
-  const showGlobalToast = (message: string, type: 'info' | 'success' | 'warning' = 'info') => {
-    setGlobalToast({ message, type, id: Date.now() });
-  };
-  const closeGlobalToast = () => {
-    setGlobalToast(null);
-  };
-  useEffect(() => {
-    if (globalToast) {
-      const timer = setTimeout(() => {
-        setGlobalToast(null);
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [globalToast]);
   const [printableReceipt, setPrintableReceipt] = useState<PrintableReceipt | null>(null);
   const printableReceiptRef = useRef<PrintableReceipt | null>(null);
   useEffect(() => {
@@ -2390,45 +2367,6 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const localTables = dataRef.current?.tables || [];
         const now = Date.now();
 
-        // Auto-dismiss settlement modal and POS order view if table was settled by another device
-        const settlingTable = activeSettlingTableRef.current;
-        if (settlingTable) {
-          const incTable = result.data.tables.find((t: any) => t.id === settlingTable.id);
-          const isSettledInSales = (result.data.sales || []).some((s: any) => s.tableId === settlingTable.id || (settlingTable.orderRef && s.orderRef === settlingTable.orderRef));
-          const isNowFree = incTable && (incTable.status === 'free' || !incTable.cart || incTable.cart.length === 0);
-
-          if (isSettledInSales || isNowFree) {
-            setActiveSettlingTable(null);
-            activeSettlingTableRef.current = null;
-            if (activeTableIdRef.current === settlingTable.id) {
-              activeTableIdRef.current = null;
-              setActiveTableId(null);
-              setPosView('floor');
-            }
-            const tblName = settlingTable.name || 'Table';
-            const zoneStr = settlingTable.zone ? ` (${settlingTable.zone})` : '';
-            showGlobalToast(`Table ${tblName}${zoneStr} has been settled and paid! Returned to Floor Plan.`, 'warning');
-          }
-        }
-
-        const viewingTableId = activeTableIdRef.current;
-        if (viewingTableId && (!settlingTable || settlingTable.id !== viewingTableId)) {
-          const incTable = result.data.tables.find((t: any) => t.id === viewingTableId);
-          const localTable = localTables.find(t => t.id === viewingTableId);
-          const isSettledInSales = (result.data.sales || []).some((s: any) => s.tableId === viewingTableId);
-          const isNowFree = incTable && (incTable.status === 'free' || !incTable.cart || incTable.cart.length === 0);
-          const freedTime = recentlyFreedTablesRef.current.get(viewingTableId);
-          const wasLocallyFreed = freedTime && (now - freedTime < 30000);
-
-          if ((isSettledInSales || isNowFree) && !wasLocallyFreed && localTable && (localTable.status === 'hold' || localTable.status === 'billed')) {
-            activeTableIdRef.current = null;
-            setActiveTableId(null);
-            setPosView('floor');
-            const tblName = localTable.name || 'Table';
-            const zoneStr = localTable.zone ? ` (${localTable.zone})` : '';
-            showGlobalToast(`Table ${tblName}${zoneStr} has been settled and paid! Returned to Floor Plan.`, 'warning');
-          }
-        }
         const salesList = result.data.sales || dataRef.current.sales || [];
         // Group settled orderRefs strictly by their specific tableId so a sale on Table A never affects Table B
         const settledOrderRefsByTable = new Map<string, Set<string>>();
@@ -2638,49 +2576,6 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         settledOrderRefsByTable.get(s.table)!.add(s.orderRef);
       }
     });
-
-    // Auto-Dismiss Modal & Exit Table Order View if another device settled this table
-    const settlingTable = activeSettlingTableRef.current;
-    if (settlingTable) {
-      const incTable = incomingTables.find(t => t.id === settlingTable.id);
-      const isSettledByOther = (newSale && (newSale.tableId === settlingTable.id || (settlingTable.orderRef && newSale.orderRef === settlingTable.orderRef))) ||
-        (incTable && (incTable.status === 'free' || !incTable.cart || incTable.cart.length === 0));
-
-      if (isSettledByOther) {
-        setActiveSettlingTable(null);
-        activeSettlingTableRef.current = null;
-        if (activeTableIdRef.current === settlingTable.id) {
-          activeTableIdRef.current = null;
-          setActiveTableId(null);
-          setPosView('floor');
-        }
-        const tblName = settlingTable.name || 'Table';
-        const zoneStr = settlingTable.zone ? ` (${settlingTable.zone})` : '';
-        const byWho = newSale?.cashierName ? ` by ${newSale.cashierName}` : '';
-        showGlobalToast(`Table ${tblName}${zoneStr} has been settled and paid${byWho}! Returned to Floor Plan.`, 'warning');
-      }
-    }
-
-    const viewingTableId = activeTableIdRef.current;
-    if (viewingTableId && (!settlingTable || settlingTable.id !== viewingTableId)) {
-      const incTable = incomingTables.find(t => t.id === viewingTableId);
-      const localTable = currentLocalTables.find(t => t.id === viewingTableId);
-      const isSettledByOther = (newSale && newSale.tableId === viewingTableId) ||
-        (incTable && (incTable.status === 'free' || !incTable.cart || incTable.cart.length === 0));
-
-      const freedTime = recentlyFreedTablesRef.current.get(viewingTableId);
-      const wasLocallyFreed = freedTime && (now - freedTime < 30000);
-
-      if (isSettledByOther && !wasLocallyFreed && localTable && (localTable.status === 'hold' || localTable.status === 'billed')) {
-        activeTableIdRef.current = null;
-        setActiveTableId(null);
-        setPosView('floor');
-        const tblName = localTable.name || 'Table';
-        const zoneStr = localTable.zone ? ` (${localTable.zone})` : '';
-        const byWho = newSale?.cashierName ? ` by ${newSale.cashierName}` : '';
-        showGlobalToast(`Table ${tblName}${zoneStr} has been settled and paid${byWho}! Returned to Floor Plan.`, 'warning');
-      }
-    }
 
     const mergedTables = incomingTables.map(st => {
       const lt = currentLocalTables.find(l => l.id === st.id);
@@ -5715,11 +5610,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return;
     }
     const table = data.tables.find(t => t.id === tableId);
-    if (!table || table.cart.length === 0 || table.status === 'free') {
-      closeSettleModal();
-      showGlobalToast(`This table has already been settled and paid!`, 'warning');
-      return;
-    }
+    if (!table || table.cart.length === 0 || table.status === 'free') return;
 
     inFlightSettleRef.current.add(tableId);
     setTimeout(() => {
@@ -8995,9 +8886,6 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       activeSettlingTable,
       openSettleModal,
       closeSettleModal,
-      globalToast,
-      showGlobalToast,
-      closeGlobalToast,
       settlePayment,
       getMethodCollection,
       getMethodLiveBalance,
