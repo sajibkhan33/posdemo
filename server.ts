@@ -68,13 +68,14 @@ function normalizeLogo(state: any): boolean {
 function buildSettledOrdersByTable(sales: any[] = []) {
   const map = new Map<string, Set<string>>();
   (sales || []).forEach((s: any) => {
-    const tid = s.tableId || s.table;
-    if (!tid || !s.orderRef) return;
-    if (!map.has(tid)) {
-      map.set(tid, new Set());
-    }
-    map.get(tid)!.add(s.orderRef);
-    if (s.table && s.table !== tid) {
+    if (!s.orderRef) return;
+    const tid = s.tableId;
+    if (tid) {
+      if (!map.has(tid)) {
+        map.set(tid, new Set());
+      }
+      map.get(tid)!.add(s.orderRef);
+    } else if (s.table) {
       if (!map.has(s.table)) {
         map.set(s.table, new Set());
       }
@@ -90,12 +91,9 @@ function sanitizeTables(tables: any[], existingSales: any[] = [], isHoldSyncOnKo
   const settledOrdersByTable = buildSettledOrdersByTable(existingSales);
 
   return tables.map(t => {
-    const tableSettledRefs = settledOrdersByTable.get(t.id) || settledOrdersByTable.get(t.name);
+    const tableSettledRefs = settledOrdersByTable.get(t.id) || (!t.id && t.name ? settledOrdersByTable.get(t.name) : undefined);
     const isAlreadySettled = Boolean(
-      (
-        (t.orderRef && tableSettledRefs && tableSettledRefs.has(t.orderRef)) ||
-        (t.lastSettledOrderRef && tableSettledRefs && tableSettledRefs.has(t.lastSettledOrderRef))
-      ) && !t.isPaidOrder && !t.linkedSaleId
+      t.orderRef && tableSettledRefs && tableSettledRefs.has(t.orderRef) && !t.isPaidOrder && !t.linkedSaleId
     );
     const isReallyEmpty = !t.cart || t.cart.length === 0;
     const hasAnyKot = !isReallyEmpty && t.cart.some((item: any) => (item.kotPrintedQty || 0) > 0 || item.kotPrinted);
@@ -180,15 +178,14 @@ function mergeTablesSafely(
     const it = incomingTables.find((t: any) => t.id === st.id);
     if (!it) return st;
 
-    const tableSettledRefs = settledOrdersByTable.get(st.id) || settledOrdersByTable.get(st.name);
+    const tableSettledRefs = settledOrdersByTable.get(st.id) || (!st.id && st.name ? settledOrdersByTable.get(st.name) : undefined);
 
     // 1. Explicit settle action or already settled order in sales for this table
     const isTargetOfSettle = (action === 'TABLE_SETTLE') && (modifiedTableId ? it.id === modifiedTableId : (!it.cart || it.cart.length === 0));
     const isItSettled = Boolean(it.orderRef && tableSettledRefs && tableSettledRefs.has(it.orderRef));
     const isStSettled = Boolean(st.orderRef && tableSettledRefs && tableSettledRefs.has(st.orderRef));
-    const isServerSettledAfterIncoming = Boolean(st.settledAt && it.orderCreatedAt && it.orderCreatedAt <= st.settledAt);
 
-    if (isTargetOfSettle || isItSettled || isStSettled || isServerSettledAfterIncoming) {
+    if (isTargetOfSettle || isItSettled || isStSettled) {
       if (!it.isPaidOrder && !it.linkedSaleId) {
         return {
           ...st,

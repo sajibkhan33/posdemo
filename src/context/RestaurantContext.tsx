@@ -2370,13 +2370,14 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         // Group settled orderRefs strictly by their specific tableId so a sale on Table A never affects Table B
         const settledOrderRefsByTable = new Map<string, Set<string>>();
         salesList.forEach((s: any) => {
-          const tid = s.tableId || s.table;
-          if (!tid || !s.orderRef) return;
-          if (!settledOrderRefsByTable.has(tid)) {
-            settledOrderRefsByTable.set(tid, new Set());
-          }
-          settledOrderRefsByTable.get(tid)!.add(s.orderRef);
-          if (s.table && s.table !== tid) {
+          if (!s.orderRef) return;
+          const tid = s.tableId;
+          if (tid) {
+            if (!settledOrderRefsByTable.has(tid)) {
+              settledOrderRefsByTable.set(tid, new Set());
+            }
+            settledOrderRefsByTable.get(tid)!.add(s.orderRef);
+          } else if (s.table) {
             if (!settledOrderRefsByTable.has(s.table)) {
               settledOrderRefsByTable.set(s.table, new Set());
             }
@@ -2395,11 +2396,10 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           }
 
           // 2. Settlement Check: If order is settled in sales (either locally or on server) FOR THIS SPECIFIC TABLE
-          const tableSettledRefs = settledOrderRefsByTable.get(t.id) || settledOrderRefsByTable.get(t.name);
+          const tableSettledRefs = settledOrderRefsByTable.get(t.id) || (!t.id && t.name ? settledOrderRefsByTable.get(t.name) : undefined);
           const isLtSettled = Boolean(lt?.orderRef && tableSettledRefs && tableSettledRefs.has(lt.orderRef));
           const isTSettled = Boolean(t.orderRef && tableSettledRefs && tableSettledRefs.has(t.orderRef));
-          const isServerSettledAfterLocalOrder = Boolean(t.settledAt && lt?.orderCreatedAt && lt.orderCreatedAt <= t.settledAt);
-          const isOrderAlreadySettled = (isLtSettled || isTSettled || isServerSettledAfterLocalOrder) && !t.isPaidOrder && !t.linkedSaleId;
+          const isOrderAlreadySettled = (isLtSettled || isTSettled) && !t.isPaidOrder && !t.linkedSaleId;
 
           if (isOrderAlreadySettled) {
             tableLocalEditTimeMapRef.current.delete(t.id);
@@ -2556,13 +2556,14 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     // Group settled orderRefs strictly by their specific tableId so a sale on Table A never affects Table B
     const settledOrderRefsByTable = new Map<string, Set<string>>();
     salesList.forEach((s: any) => {
-      const tid = s.tableId || s.table;
-      if (!tid || !s.orderRef) return;
-      if (!settledOrderRefsByTable.has(tid)) {
-        settledOrderRefsByTable.set(tid, new Set());
-      }
-      settledOrderRefsByTable.get(tid)!.add(s.orderRef);
-      if (s.table && s.table !== tid) {
+      if (!s.orderRef) return;
+      const tid = s.tableId;
+      if (tid) {
+        if (!settledOrderRefsByTable.has(tid)) {
+          settledOrderRefsByTable.set(tid, new Set());
+        }
+        settledOrderRefsByTable.get(tid)!.add(s.orderRef);
+      } else if (s.table) {
         if (!settledOrderRefsByTable.has(s.table)) {
           settledOrderRefsByTable.set(s.table, new Set());
         }
@@ -2583,11 +2584,10 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
 
       // 2. Settlement Check: If order is settled in sales (either locally or on server) FOR THIS SPECIFIC TABLE
-      const tableSettledRefs = settledOrderRefsByTable.get(st.id) || settledOrderRefsByTable.get(st.name);
+      const tableSettledRefs = settledOrderRefsByTable.get(st.id) || (!st.id && st.name ? settledOrderRefsByTable.get(st.name) : undefined);
       const isLtSettled = Boolean(lt?.orderRef && tableSettledRefs && tableSettledRefs.has(lt.orderRef));
       const isStSettled = Boolean(st.orderRef && tableSettledRefs && tableSettledRefs.has(st.orderRef));
-      const isServerSettledAfterLocalOrder = Boolean(st.settledAt && lt?.orderCreatedAt && lt.orderCreatedAt <= st.settledAt);
-      const isOrderAlreadySettled = (isLtSettled || isStSettled || isServerSettledAfterLocalOrder) && !st.isPaidOrder && !st.linkedSaleId;
+      const isOrderAlreadySettled = (isLtSettled || isStSettled) && !st.isPaidOrder && !st.linkedSaleId;
 
       if (isOrderAlreadySettled) {
         tableLocalEditTimeMapRef.current.delete(st.id);
@@ -4287,7 +4287,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           orderCreatedBy: isStartingNewOrder ? (currentUser?.name || 'Cashier') : (t.orderCreatedBy || currentUser?.name || 'Cashier'),
           orderCreatedRole: isStartingNewOrder ? (currentUser?.role || 'CASHIER') : (t.orderCreatedRole || currentUser?.role || 'CASHIER'),
           orderCreatedId: isStartingNewOrder ? currentUser?.id : (t.orderCreatedId || currentUser?.id),
-          orderCreatedAt: isStartingNewOrder ? now : (t.orderCreatedAt || now)
+          orderCreatedAt: isStartingNewOrder ? now : (t.orderCreatedAt || now),
+          settledAt: isStartingNewOrder ? undefined : t.settledAt,
+          lastSettledOrderRef: isStartingNewOrder ? undefined : (t as any).lastSettledOrderRef
         };
       });
 
