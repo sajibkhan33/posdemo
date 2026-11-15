@@ -2397,9 +2397,14 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
           // 2. Settlement Check: If order is settled in sales (either locally or on server) FOR THIS SPECIFIC TABLE
           const tableSettledRefs = settledOrderRefsByTable.get(t.id) || (!t.id && t.name ? settledOrderRefsByTable.get(t.name) : undefined);
-          const isLtSettled = Boolean(lt?.orderRef && tableSettledRefs && tableSettledRefs.has(lt.orderRef));
           const isTSettled = Boolean(t.orderRef && tableSettledRefs && tableSettledRefs.has(t.orderRef));
-          const isOrderAlreadySettled = (isLtSettled || isTSettled) && !t.isPaidOrder && !t.linkedSaleId;
+          const isLtSettled = Boolean(lt?.orderRef && (!t.orderRef || lt.orderRef === t.orderRef) && tableSettledRefs && tableSettledRefs.has(lt.orderRef));
+          const isOrderAlreadySettled = (isTSettled || isLtSettled) && !t.isPaidOrder && !t.linkedSaleId;
+
+          const existingInvoiceSet = new Set((salesList || []).map((s: any) => s.invoiceNo).filter(Boolean));
+          if (t.linkedInvoiceNo && existingInvoiceSet.has(t.linkedInvoiceNo) && !t.isPaidOrder && !t.linkedSaleId) {
+            t.linkedInvoiceNo = undefined;
+          }
 
           if (isOrderAlreadySettled) {
             tableLocalEditTimeMapRef.current.delete(t.id);
@@ -2585,9 +2590,14 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       // 2. Settlement Check: If order is settled in sales (either locally or on server) FOR THIS SPECIFIC TABLE
       const tableSettledRefs = settledOrderRefsByTable.get(st.id) || (!st.id && st.name ? settledOrderRefsByTable.get(st.name) : undefined);
-      const isLtSettled = Boolean(lt?.orderRef && tableSettledRefs && tableSettledRefs.has(lt.orderRef));
       const isStSettled = Boolean(st.orderRef && tableSettledRefs && tableSettledRefs.has(st.orderRef));
-      const isOrderAlreadySettled = (isLtSettled || isStSettled) && !st.isPaidOrder && !st.linkedSaleId;
+      const isLtSettled = Boolean(lt?.orderRef && (!st.orderRef || lt.orderRef === st.orderRef) && tableSettledRefs && tableSettledRefs.has(lt.orderRef));
+      const isOrderAlreadySettled = (isStSettled || isLtSettled) && !st.isPaidOrder && !st.linkedSaleId;
+
+      const existingInvoiceSet = new Set((salesList || []).map((s: any) => s.invoiceNo).filter(Boolean));
+      if (st.linkedInvoiceNo && existingInvoiceSet.has(st.linkedInvoiceNo) && !st.isPaidOrder && !st.linkedSaleId) {
+        st.linkedInvoiceNo = undefined;
+      }
 
       if (isOrderAlreadySettled) {
         tableLocalEditTimeMapRef.current.delete(st.id);
@@ -2869,7 +2879,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 const lt = prev.tables.find(l => l.id === st.id);
                 if (!lt) return st;
                 const sales = incomingData.sales || prev.sales || [];
-                const isLtSettled = Boolean(lt.orderRef && sales.some((s: any) => (s.tableId === st.id || s.table === st.name || s.table === st.id) && s.orderRef === lt.orderRef));
+                const isLtSettled = Boolean(lt.orderRef && (!st.orderRef || lt.orderRef === st.orderRef) && sales.some((s: any) => (s.tableId ? s.tableId === st.id : s.table === st.name) && s.orderRef === lt.orderRef));
                 if (isLtSettled) {
                   return st;
                 }
@@ -4250,11 +4260,15 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         let orderRef = isStartingNewOrder ? undefined : t.orderRef;
         let kotBaseSerial = isStartingNewOrder ? undefined : t.kotBaseSerial;
 
-        const settledOrderRefs = new Set((prev.sales || []).map((s: any) => s.orderRef).filter(Boolean));
-        if (!orderRef || settledOrderRefs.has(orderRef)) {
+        const existingOrderRefs = new Set([
+          ...(prev.sales || []).map((s: any) => s.orderRef),
+          ...(prev.tables || []).map((tbl: any) => tbl.orderRef)
+        ].filter(Boolean));
+
+        if (!orderRef || existingOrderRefs.has(orderRef)) {
           let num = activeSerialConfig.orderRefNextNumber || 1;
           let candidate = `${activeSerialConfig.orderRefPrefix || 'ORD-'}${String(num).padStart(activeSerialConfig.orderRefPadding || 4, '0')}`;
-          while (settledOrderRefs.has(candidate)) {
+          while (existingOrderRefs.has(candidate)) {
             num++;
             candidate = `${activeSerialConfig.orderRefPrefix || 'ORD-'}${String(num).padStart(activeSerialConfig.orderRefPadding || 4, '0')}`;
           }
@@ -4289,7 +4303,14 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           orderCreatedId: isStartingNewOrder ? currentUser?.id : (t.orderCreatedId || currentUser?.id),
           orderCreatedAt: isStartingNewOrder ? now : (t.orderCreatedAt || now),
           settledAt: isStartingNewOrder ? undefined : t.settledAt,
-          lastSettledOrderRef: isStartingNewOrder ? undefined : (t as any).lastSettledOrderRef
+          lastSettledOrderRef: isStartingNewOrder ? undefined : (t as any).lastSettledOrderRef,
+          linkedInvoiceNo: isStartingNewOrder ? undefined : t.linkedInvoiceNo,
+          linkedSaleId: isStartingNewOrder ? undefined : t.linkedSaleId,
+          isPaidOrder: isStartingNewOrder ? false : t.isPaidOrder,
+          paidAmount: isStartingNewOrder ? 0 : t.paidAmount,
+          billCount: isStartingNewOrder ? 0 : t.billCount,
+          billedAt: isStartingNewOrder ? undefined : t.billedAt,
+          billedAtTime: isStartingNewOrder ? undefined : t.billedAtTime
         };
       });
 
@@ -5360,9 +5381,10 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     let activeSerialConfig = { ...(data.serialConfig || DEFAULT_SERIAL_CONFIG) };
     let serialConfigChanged = false;
     let posInvoiceNo = table.linkedInvoiceNo;
+    const isAlreadyInSales = posInvoiceNo && (dataRef.current?.sales || data.sales || []).some((s: any) => s.invoiceNo === posInvoiceNo);
     const isLegacyRandomInvoice = posInvoiceNo && /POS-\d{5,6}$/.test(posInvoiceNo) && !posInvoiceNo.includes('POS-00');
 
-    if (!posInvoiceNo || isLegacyRandomInvoice) {
+    if (!posInvoiceNo || isLegacyRandomInvoice || isAlreadyInSales) {
       const todayDateStr = data.businessDay?.date || new Date().toISOString().split('T')[0];
       const num = activeSerialConfig.posInvoiceNextNumber || 1;
       const padded = String(num).padStart(activeSerialConfig.posInvoicePadding || 4, '0');
@@ -5707,9 +5729,10 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     let activeSerialConfig = { ...(data.serialConfig || DEFAULT_SERIAL_CONFIG) };
     let serialConfigChanged = false;
     let invoiceNo = table.linkedInvoiceNo;
+    const isAlreadyInSales = invoiceNo && (dataRef.current?.sales || data.sales || []).some((s: any) => s.invoiceNo === invoiceNo);
     const isLegacyRandomInvoice = invoiceNo && /POS-\d{5,6}$/.test(invoiceNo) && !invoiceNo.includes('POS-00');
 
-    if (!invoiceNo || isLegacyRandomInvoice) {
+    if (!invoiceNo || isLegacyRandomInvoice || isAlreadyInSales) {
       const todayDateStr = data.businessDay?.date || new Date().toISOString().split('T')[0];
       const num = activeSerialConfig.posInvoiceNextNumber || 1;
       const padded = String(num).padStart(activeSerialConfig.posInvoicePadding || 4, '0');

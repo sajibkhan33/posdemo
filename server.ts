@@ -89,6 +89,7 @@ function buildSettledOrdersByTable(sales: any[] = []) {
 function sanitizeTables(tables: any[], existingSales: any[] = [], isHoldSyncOnKotOnly = false) {
   if (!Array.isArray(tables)) return tables;
   const settledOrdersByTable = buildSettledOrdersByTable(existingSales);
+  const existingInvoiceSet = new Set((existingSales || []).map((s: any) => s.invoiceNo).filter(Boolean));
 
   return tables.map(t => {
     const tableSettledRefs = settledOrdersByTable.get(t.id) || (!t.id && t.name ? settledOrdersByTable.get(t.name) : undefined);
@@ -98,6 +99,9 @@ function sanitizeTables(tables: any[], existingSales: any[] = [], isHoldSyncOnKo
     const isReallyEmpty = !t.cart || t.cart.length === 0;
     const hasAnyKot = !isReallyEmpty && t.cart.some((item: any) => (item.kotPrintedQty || 0) > 0 || item.kotPrinted);
     const isUnprintedDraftInOnKotMode = isHoldSyncOnKotOnly && !isReallyEmpty && !hasAnyKot && t.status !== 'billed';
+
+    // If an unpaid/unsettled table has a linkedInvoiceNo that belongs to an already completed historical sale, clear it
+    const hasStaleLinkedInvoice = t.linkedInvoiceNo && existingInvoiceSet.has(t.linkedInvoiceNo) && !t.isPaidOrder && !t.linkedSaleId;
 
     if (isReallyEmpty || isAlreadySettled || isUnprintedDraftInOnKotMode) {
       return {
@@ -122,6 +126,12 @@ function sanitizeTables(tables: any[], existingSales: any[] = [], isHoldSyncOnKo
         orderRef: undefined,
         kotCount: 0,
         billCount: 0
+      };
+    }
+    if (hasStaleLinkedInvoice) {
+      return {
+        ...t,
+        linkedInvoiceNo: undefined
       };
     }
     return t;
@@ -183,7 +193,7 @@ function mergeTablesSafely(
     // 1. Explicit settle action or already settled order in sales for this table
     const isTargetOfSettle = (action === 'TABLE_SETTLE') && (modifiedTableId ? it.id === modifiedTableId : (!it.cart || it.cart.length === 0));
     const isItSettled = Boolean(it.orderRef && tableSettledRefs && tableSettledRefs.has(it.orderRef));
-    const isStSettled = Boolean(st.orderRef && tableSettledRefs && tableSettledRefs.has(st.orderRef));
+    const isStSettled = Boolean(st.orderRef && (!it.orderRef || it.orderRef === st.orderRef) && tableSettledRefs && tableSettledRefs.has(st.orderRef));
 
     if (isTargetOfSettle || isItSettled || isStSettled) {
       if (!it.isPaidOrder && !it.linkedSaleId) {
