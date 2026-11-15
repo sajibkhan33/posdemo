@@ -34,7 +34,44 @@ import { AIChefAssistantModal } from './components/ai/AIChefAssistantModal';
 import { TableZoneEditModal } from './components/pos/TableZoneEditModal';
 import { AuthPage } from './components/auth/AuthPage';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { ShieldAlert, LogOut, Power, Home } from 'lucide-react';
+import { ShieldAlert, LogOut, Power, Home, AlertCircle, CheckCircle2, X } from 'lucide-react';
+
+const GlobalToastBanner: React.FC<{
+  toast: { message: string; type: 'info' | 'warning' | 'success' } | null;
+  onClose: () => void;
+}> = ({ toast, onClose }) => {
+  if (!toast) return null;
+  return (
+    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[99999] max-w-lg w-[92%] sm:w-auto px-4 pointer-events-none animate-in fade-in slide-in-from-top-4 duration-200">
+      <div
+        className={`pointer-events-auto px-4 py-3 rounded-2xl shadow-2xl border flex items-center gap-3 backdrop-blur-md ${
+          toast.type === 'warning'
+            ? 'bg-amber-500 text-slate-950 border-amber-400 font-bold'
+            : toast.type === 'success'
+              ? 'bg-emerald-600 text-white border-emerald-500 font-bold'
+              : 'bg-[#004b9b] text-white border-blue-400 font-bold'
+        }`}
+      >
+        <div className="p-1.5 rounded-xl bg-black/10 shrink-0">
+          {toast.type === 'success' ? (
+            <CheckCircle2 className="w-5 h-5" />
+          ) : (
+            <AlertCircle className="w-5 h-5" />
+          )}
+        </div>
+        <span className="text-xs sm:text-sm font-extrabold flex-1 leading-snug">{toast.message}</span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-1 hover:bg-black/10 rounded-lg cursor-pointer shrink-0 transition"
+          aria-label="Close notification"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
 
 const MainLayout: React.FC = () => {
   const { 
@@ -54,7 +91,9 @@ const MainLayout: React.FC = () => {
     currentUser,
     logout,
     language,
-    isTableZoneModalOpen
+    isTableZoneModalOpen,
+    globalToast,
+    closeGlobalToast
   } = useRestaurant();
 
   const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
@@ -99,7 +138,10 @@ const MainLayout: React.FC = () => {
       <div className="min-h-screen bg-slate-100 font-sans antialiased text-slate-800">
         <LauncherHomeView onOpenAiAssistant={() => setIsAiAssistantOpen(true)} />
 
-        {/* Modals & Dialogs */}
+        {/* Global Realtime Sync Toast Notifications */}
+        <GlobalToastBanner toast={globalToast} onClose={closeGlobalToast} />
+
+      {/* Modals & Dialogs */}
         {isStartSessionModalOpen && <StartSessionModal />}
         {isCloseSessionModalOpen && <CloseSessionModal />}
         {isWaiterShiftModalOpen && <WaiterShiftModal />}
@@ -261,6 +303,9 @@ const MainLayout: React.FC = () => {
           </div>
         </footer>
       </div>
+
+      {/* Global Realtime Sync Toast Notifications */}
+      <GlobalToastBanner toast={globalToast} onClose={closeGlobalToast} />
 
       {/* Modals & Dialogs */}
       {isStartSessionModalOpen && <StartSessionModal />}
