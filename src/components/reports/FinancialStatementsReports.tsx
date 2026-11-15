@@ -452,6 +452,13 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
     const allRows: TrialBalanceRow[] = coaList.map(acc => {
       let initialBalance = Number(acc.balance) || 0;
 
+      // Retained Earnings (3020) and Drawings (3030) should not inherit the shift opening cash float
+      if (acc.code === '3020' || acc.code === '3030') {
+        if (initialBalance === activeFloatVal && activeFloatVal > 0) {
+          initialBalance = 0;
+        }
+      }
+
       const isCashHead = acc.code === '1010' || (acc.systemRole || getAccountSystemRole(acc)) === 'CASH';
       const isEquityHead = acc.code === '3010' || (acc.systemRole || getAccountSystemRole(acc)) === 'OWNER_CAPITAL';
 

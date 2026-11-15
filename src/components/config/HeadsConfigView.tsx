@@ -1618,11 +1618,14 @@ export const HeadsConfigView: React.FC = () => {
                     filteredAccounts.map(acc => {
                       const liveBalance = getLiveAccountBalance(acc);
                       const isCashHead = acc.code === '1010' || (acc.systemRole || getAccountSystemRole(acc)) === 'CASH';
-                      const isEquityHead = acc.code === '3010' || (acc.systemRole || getAccountSystemRole(acc)) === 'OWNER_EQUITY';
+                      const isEquityHead = acc.code === '3010' || (acc.systemRole || getAccountSystemRole(acc)) === 'OWNER_CAPITAL' || (acc.systemRole || getAccountSystemRole(acc)) === 'OWNER_EQUITY';
                       const activeShiftFloat = (data.session?.isActive && Number(data.session.openingCash) > 0) ? Number(data.session.openingCash) : 0;
-                      const effectiveDisplayOpening = (acc.balance && acc.balance > 0)
-                        ? acc.balance
-                        : ((isCashHead || isEquityHead) ? activeShiftFloat : (acc.balance || 0));
+                      const isRetainedOrDrawings = acc.code === '3020' || acc.code === '3030';
+                      const effectiveDisplayOpening = (isRetainedOrDrawings && acc.balance === activeShiftFloat && activeShiftFloat > 0)
+                        ? 0
+                        : ((acc.balance && acc.balance > 0)
+                          ? acc.balance
+                          : ((isCashHead || isEquityHead) ? activeShiftFloat : (acc.balance || 0)));
                       return (
                         <tr key={acc.id} className="hover:bg-slate-50/80 transition">
                           <td className="py-3 px-4 font-mono font-bold text-slate-900">

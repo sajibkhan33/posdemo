@@ -6041,7 +6041,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           coaUpdated = true;
           return { ...acc, balance: openingCash };
         }
-        if ((acc.code === '3010' || acc.systemRole === 'OWNER_CAPITAL' || acc.type === 'EQUITY') && (!acc.balance || acc.balance === 0) && openingCash > 0) {
+        if ((acc.code === '3010' || acc.systemRole === 'OWNER_CAPITAL') && (!acc.balance || acc.balance === 0) && openingCash > 0) {
           coaUpdated = true;
           return { ...acc, balance: openingCash };
         }
@@ -8222,10 +8222,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const getLiveAccountBalance = (acc: AccountHead): number => {
-    const opening = acc.balance || 0;
     const code = acc.code;
-
     const role = acc.systemRole || getAccountSystemRole(acc);
+    const isRetainedOrDrawings = code === '3020' || code === '3030' || role === 'RETAINED_EARNINGS' || role === 'OWNER_DRAWINGS';
+    const activeFloat = (data.session?.isActive && Number(data.session.openingCash) > 0) ? Number(data.session.openingCash) : 0;
+    const opening = (isRetainedOrDrawings && acc.balance === activeFloat && activeFloat > 0) ? 0 : (acc.balance || 0);
     const normName = (acc.name || '').toLowerCase();
     // ADE (Assets, Drawings, Expenses) are Debit normal; LCR (Liabilities, Capital, Revenue) are Credit normal
     const isDebitNature = acc.type === 'ASSET' || acc.type === 'EXPENSE' || role === 'OWNER_DRAWINGS';
