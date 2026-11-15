@@ -224,12 +224,20 @@ export const JournalEntryView: React.FC = () => {
     return `JV-${year}-${(maxSeq + 1).toString().padStart(3, '0')}`;
   };
 
-  const [jvForm, setJvForm] = useState({
+  const [jvForm, setJvForm] = useState<{
+    voucherNo: string;
+    date: string;
+    debitAccountId: string;
+    creditAccountId: string;
+    amount: number | string;
+    narration: string;
+    referenceNo: string;
+  }>({
     voucherNo: getNextVoucherNo(),
     date: new Date().toISOString().split('T')[0],
     debitAccountId: coa.find(c => c.type === 'EXPENSE')?.id || coa[0]?.id || '5010',
     creditAccountId: coa.find(c => c.type === 'ASSET')?.id || coa[1]?.id || '1010',
-    amount: 1500,
+    amount: '',
     narration: 'Office and kitchen daily operational settlement voucher',
     referenceNo: `REF-${Date.now().toString().slice(-4)}`
   });
@@ -241,7 +249,7 @@ export const JournalEntryView: React.FC = () => {
       date: new Date().toISOString().split('T')[0],
       debitAccountId: coa.find(c => c.type === 'EXPENSE')?.id || coa[0]?.id || '5010',
       creditAccountId: coa.find(c => c.type === 'ASSET')?.id || coa[1]?.id || '1010',
-      amount: 1500,
+      amount: '',
       narration: 'Daily adjustment and journal voucher entry',
       referenceNo: `REF-${Date.now().toString().slice(-4)}`
     });
@@ -264,7 +272,8 @@ export const JournalEntryView: React.FC = () => {
 
   const handleSaveJv = (e: React.FormEvent) => {
     e.preventDefault();
-    if (jvForm.amount <= 0) {
+    const numAmount = parseFloat(String(jvForm.amount));
+    if (isNaN(numAmount) || numAmount <= 0) {
       alert('Please enter a valid debit/credit amount greater than 0.');
       return;
     }
@@ -288,7 +297,7 @@ export const JournalEntryView: React.FC = () => {
       debitAccountName: `${debitAcc.code} - ${debitAcc.name}`,
       creditAccountId: creditAcc.id,
       creditAccountName: `${creditAcc.code} - ${creditAcc.name}`,
-      amount: Number(jvForm.amount),
+      amount: numAmount,
       narration: jvForm.narration,
       referenceNo: jvForm.referenceNo
     };
@@ -304,10 +313,17 @@ export const JournalEntryView: React.FC = () => {
   };
 
   // =================== OWNER'S CAPITAL INVESTMENT MODAL =================== //
-  const [capitalForm, setCapitalForm] = useState({
+  const [capitalForm, setCapitalForm] = useState<{
+    depositAccountId: string;
+    equityAccountId: string;
+    amount: number | string;
+    date: string;
+    referenceNo: string;
+    narration: string;
+  }>({
     depositAccountId: '1010', // Cash in Hand
     equityAccountId: '3010',  // Owner Equity & Capital
-    amount: 50000,
+    amount: '',
     date: new Date().toISOString().split('T')[0],
     referenceNo: `CAP-${Date.now().toString().slice(-4)}`,
     narration: "Owner Capital Investment / Equity Injection"
@@ -320,7 +336,7 @@ export const JournalEntryView: React.FC = () => {
     setCapitalForm({
       depositAccountId: cashAcc?.id || '1010',
       equityAccountId: equityAcc?.id || '3010',
-      amount: 50000,
+      amount: '',
       date: new Date().toISOString().split('T')[0],
       referenceNo: `CAP-${Date.now().toString().slice(-4)}`,
       narration: "Owner Capital Investment / Equity Injection"
@@ -330,7 +346,8 @@ export const JournalEntryView: React.FC = () => {
 
   const handleSaveCapital = (e: React.FormEvent) => {
     e.preventDefault();
-    if (capitalForm.amount <= 0) {
+    const numAmount = parseFloat(String(capitalForm.amount));
+    if (isNaN(numAmount) || numAmount <= 0) {
       alert('Please enter a valid investment amount greater than 0.');
       return;
     }
@@ -350,7 +367,7 @@ export const JournalEntryView: React.FC = () => {
       debitAccountName: `${debitAcc.code} - ${debitAcc.name}`,
       creditAccountId: creditAcc.id,
       creditAccountName: `${creditAcc.code} - ${creditAcc.name}`,
-      amount: Number(capitalForm.amount),
+      amount: numAmount,
       narration: capitalForm.narration || "Owner's Capital Investment",
       referenceNo: capitalForm.referenceNo || `CAP-${Date.now().toString().slice(-4)}`
     };
@@ -898,12 +915,20 @@ export const JournalEntryView: React.FC = () => {
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Amount (৳) *</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     required
-                    min="1"
+                    placeholder="0.00"
                     value={jvForm.amount}
-                    onChange={e => setJvForm({ ...jvForm, amount: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-black font-mono"
+                    onChange={e => {
+                      const val = e.target.value
+                        .replace(/[০-৯]/g, d => '০১২৩৪৫৬৭৮৯'.indexOf(d).toString())
+                        .replace(/[^0-9.]/g, '');
+                      const parts = val.split('.');
+                      const cleanVal = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : val;
+                      setJvForm({ ...jvForm, amount: cleanVal });
+                    }}
+                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-black font-mono focus:outline-hidden focus:ring-2 focus:ring-[#004b9b]"
                   />
                 </div>
 
@@ -1005,12 +1030,20 @@ export const JournalEntryView: React.FC = () => {
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Investment Amount (৳) *</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     required
-                    min="1"
+                    placeholder="0.00"
                     value={capitalForm.amount}
-                    onChange={e => setCapitalForm({ ...capitalForm, amount: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-black font-mono text-emerald-700"
+                    onChange={e => {
+                      const val = e.target.value
+                        .replace(/[০-৯]/g, d => '০১২৩৪৫৬৭৮৯'.indexOf(d).toString())
+                        .replace(/[^0-9.]/g, '');
+                      const parts = val.split('.');
+                      const cleanVal = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : val;
+                      setCapitalForm({ ...capitalForm, amount: cleanVal });
+                    }}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-black font-mono text-emerald-700 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
 
