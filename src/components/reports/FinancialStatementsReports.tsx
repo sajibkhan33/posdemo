@@ -218,21 +218,40 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
       if (!isPrior && !isPeriod) return;
 
       const total = p.total || 0;
-      const paid = p.paid ?? (p.paymentType === 'CASH' ? total : 0);
-      const unpaid = Math.max(0, total - paid);
+      if (total <= 0) return;
 
       // Dr Raw Material Inventory Asset (1060)
       postEntry(invAcc?.code || '1060', total, 0, isPrior);
 
-      // Cr Funding Account (Cash / Bank)
-      if (paid > 0) {
-        const pCode = getPaymentAccountCode(p.paymentType, cashAcc?.code || '1010');
-        postEntry(pCode, 0, paid, isPrior);
-      }
+      // Check if this purchase has linked payment records in data.payments
+      const hasLinkedPayments = (data.payments || []).some(pay => 
+        pay.billNo && p.billNo && (
+          pay.billNo.trim().toLowerCase() === p.billNo.trim().toLowerCase() ||
+          pay.billNo.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === p.billNo.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+        )
+      );
 
-      // Cr Accounts Payable (Vendor Due 2010)
-      if (unpaid > 0) {
-        postEntry(apAcc?.code || '2010', 0, unpaid, isPrior);
+      const pType = (p.paymentType || '').toUpperCase();
+
+      if (pType === 'CREDIT' || hasLinkedPayments) {
+        // Credit Purchases route through Accounts Payable (2010)
+        // Settlement is posted when data.payments is processed (Dr AP 2010, Cr Cash/Bank)
+        postEntry(apAcc?.code || '2010', 0, total, isPrior);
+      } else {
+        // Direct cash or instant payment without separate supplier payment voucher
+        const paid = p.paid ?? (pType === 'CASH' ? total : 0);
+        const unpaid = Math.max(0, total - paid);
+
+        if (paid > 0) {
+          const fundingCode = (pType === 'CASH' || !pType) 
+            ? (cashAcc?.code || '1010') 
+            : getPaymentAccountCode(p.paymentType, bankAcc?.code || '1030');
+          postEntry(fundingCode, 0, paid, isPrior);
+        }
+
+        if (unpaid > 0) {
+          postEntry(apAcc?.code || '2010', 0, unpaid, isPrior);
+        }
       }
     });
 
@@ -425,8 +444,24 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
       closingCredit: number;
     }
 
+    // Check if Cash has opening balance / float but Owner Equity has 0 to preserve double-entry balance
+    const cashOpeningVal = Number(cashAcc?.balance) || 0;
+    const sessionFloatVal = Number(data.session?.openingCash) || 0;
+    const activeFloatVal = cashOpeningVal > 0 ? cashOpeningVal : sessionFloatVal;
+
     const allRows: TrialBalanceRow[] = coaList.map(acc => {
-      const initialBalance = Number(acc.balance) || 0;
+      let initialBalance = Number(acc.balance) || 0;
+
+      const isCashHead = acc.code === '1010' || (acc.systemRole || getAccountSystemRole(acc)) === 'CASH';
+      const isEquityHead = acc.code === '3010' || (acc.systemRole || getAccountSystemRole(acc)) === 'OWNER_CAPITAL';
+
+      if (isCashHead && initialBalance === 0 && activeFloatVal > 0) {
+        initialBalance = activeFloatVal;
+      }
+      if (isEquityHead && initialBalance === 0 && activeFloatVal > 0) {
+        initialBalance = activeFloatVal;
+      }
+
       let initialDr = 0;
       let initialCr = 0;
 
@@ -875,12 +910,26 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
     const netCashFromInvesting = -equipmentAdditions;
 
     // 3. Financing Activities
-    const capitalInjections = 0;
-    const ownerDrawings = 0;
+    let capitalInjections = 0;
+    let ownerDrawings = 0;
+    (data.journalEntries || []).forEach(j => {
+      if (!matchesDate(j.date)) return;
+      const amt = Number(j.amount) || 0;
+      if (amt <= 0) return;
+      const isDebitLiquid = j.debitAccountId === '1010' || j.debitAccountId === '1030' || (j.debitAccountName && (j.debitAccountName.toLowerCase().includes('cash') || j.debitAccountName.toLowerCase().includes('bank')));
+      const isCreditLiquid = j.creditAccountId === '1010' || j.creditAccountId === '1030' || (j.creditAccountName && (j.creditAccountName.toLowerCase().includes('cash') || j.creditAccountName.toLowerCase().includes('bank')));
+      const isCreditEquity = j.creditAccountId === '3010' || (j.creditAccountName && (j.creditAccountName.toLowerCase().includes('equity') || j.creditAccountName.toLowerCase().includes('capital')));
+      const isDebitDrawings = j.debitAccountId === '3030' || (j.debitAccountName && j.debitAccountName.toLowerCase().includes('drawing'));
+      if (isDebitLiquid && isCreditEquity) capitalInjections += amt;
+      if (isCreditLiquid && isDebitDrawings) ownerDrawings += amt;
+    });
     const netCashFromFinancing = capitalInjections - ownerDrawings;
 
     const netChangeInCash = netCashFromOperating + netCashFromInvesting + netCashFromFinancing;
-    const openingCashEquivalents = 124000; // 15,000 cash + 109,000 bank
+    const coaListReport = data.chartOfAccounts || [];
+    const cashOpening = Number(coaListReport.find(a => a.code === '1010')?.balance) || Number(data.session?.openingCash) || 0;
+    const bankOpening = Number(coaListReport.find(a => a.code === '1030')?.balance) || 0;
+    const openingCashEquivalents = cashOpening + bankOpening;
     const closingCashEquivalents = openingCashEquivalents + netChangeInCash;
 
     return {
@@ -890,12 +939,14 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
       netCashFromOperating,
       equipmentAdditions,
       netCashFromInvesting,
+      capitalInjections,
+      ownerDrawings,
       netCashFromFinancing,
       netChangeInCash,
       openingCashEquivalents,
       closingCashEquivalents
     };
-  }, [data.sales, data.purchases, data.payments, data.expenses, data.customerAdvances, startDate, endDate]);
+  }, [data.sales, data.purchases, data.payments, data.expenses, data.customerAdvances, data.journalEntries, data.chartOfAccounts, data.session, startDate, endDate]);
 
   // CSV Exporters
   const handleExportTrialBalance = () => {
@@ -1602,7 +1653,11 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
                 <div className="p-4 space-y-2.5 text-slate-700">
                   <div className="flex items-center justify-between">
                     <span>Owner Equity Injections / Capital Withdrawals</span>
-                    <span className="font-mono font-bold">৳0</span>
+                    <span className="font-mono font-bold text-emerald-700">
+                      {ifrsCashFlowData.netCashFromFinancing >= 0 
+                        ? `+৳${ifrsCashFlowData.netCashFromFinancing.toLocaleString()}` 
+                        : `-৳${Math.abs(ifrsCashFlowData.netCashFromFinancing).toLocaleString()}`}
+                    </span>
                   </div>
                 </div>
               </div>

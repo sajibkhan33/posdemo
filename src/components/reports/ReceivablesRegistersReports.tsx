@@ -280,8 +280,17 @@ export const ReceivablesRegistersReports: React.FC<SubReportProps> = ({ reportTy
     data.purchases.forEach(p => {
       if (p.status === 'DRAFT') return;
       if (!matchesDate(p.date)) return;
+
+      const linkedPayments = (data.payments || []).filter(pay => 
+        pay.billNo && p.billNo && (
+          pay.billNo.trim().toLowerCase() === p.billNo.trim().toLowerCase() ||
+          pay.billNo.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === p.billNo.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+        )
+      );
+      if (linkedPayments.length > 0) return; // Handled by Supplier Payment below to prevent double-counting!
+
       const paid = p.paid ?? (p.paymentType === 'CASH' ? p.total : 0);
-      if (paid > 0) {
+      if (paid > 0 && p.paymentType === 'CASH') {
         entries.push({
           date: p.date,
           type: 'Purchase Bill',
@@ -300,9 +309,9 @@ export const ReceivablesRegistersReports: React.FC<SubReportProps> = ({ reportTy
       entries.push({
         date: pay.date,
         type: 'Supplier Payment',
-        voucherNo: `PAY-${pay.id}`,
-        party: pay.vendor,
-        details: `Vendor Arrears Bill Settlement (${pay.method}) - ${pay.note || ''}`,
+        voucherNo: pay.voucherNo || `PAY-${pay.id}`,
+        party: pay.supplier || pay.vendor,
+        details: `Vendor Arrears Bill Settlement (${pay.method}) - Payment for Bill ${pay.billNo || ''}`,
         inflow: 0,
         outflow: pay.amount
       });
@@ -437,6 +446,13 @@ export const ReceivablesRegistersReports: React.FC<SubReportProps> = ({ reportTy
 
       data.purchases.forEach(p => {
         if (p.status === 'DRAFT' || !matchesDate(p.date)) return;
+        const hasLinkedPayment = (data.payments || []).some(pay => 
+          pay.billNo && p.billNo && (
+            pay.billNo.trim().toLowerCase() === p.billNo.trim().toLowerCase() ||
+            pay.billNo.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === p.billNo.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+          )
+        );
+        if (hasLinkedPayment) return; // Handled by data.payments below!
         const paid = p.paid ?? (p.paymentType === 'CASH' ? p.total : 0);
         if (p.paymentType === 'CASH' && paid > 0 && activeRole !== 'PETTY_CASH') {
           rawTxList.push({
@@ -451,11 +467,12 @@ export const ReceivablesRegistersReports: React.FC<SubReportProps> = ({ reportTy
 
       data.payments.forEach(p => {
         if (!matchesDate(p.date)) return;
-        if (p.method === 'CASH' && (p.amount || 0) > 0 && activeRole !== 'PETTY_CASH') {
+        const pMethod = (p.method || '').toUpperCase();
+        if (pMethod === 'CASH' && (p.amount || 0) > 0 && activeRole !== 'PETTY_CASH') {
           rawTxList.push({
             date: p.date,
-            docNo: `PAY-${p.id}`,
-            particulars: `Supplier Payment to ${p.vendor}`,
+            docNo: p.voucherNo || `PAY-${p.id}`,
+            particulars: `Supplier Payment to ${p.supplier || p.vendor}`,
             debit: 0,
             credit: p.amount
           });
@@ -753,12 +770,41 @@ export const ReceivablesRegistersReports: React.FC<SubReportProps> = ({ reportTy
       });
     }
 
+    // Owner Capital Injections & Journal Voucher Cash Inflows
+    let capitalCash = 0;
+    let capitalBank = 0;
+    (data.journalEntries || []).forEach(j => {
+      if (!matchesDate(j.date)) return;
+      const amt = Number(j.amount) || 0;
+      if (amt <= 0) return;
+      const isDebitCash = j.debitAccountId === '1010' || (j.debitAccountName && j.debitAccountName.toLowerCase().includes('cash'));
+      const isDebitBank = j.debitAccountId === '1030' || (j.debitAccountName && j.debitAccountName.toLowerCase().includes('bank'));
+      if (isDebitCash) capitalCash += amt;
+      else if (isDebitBank) capitalBank += amt;
+    });
+
+    if (capitalCash > 0 || capitalBank > 0) {
+      receiptRows.push({
+        particulars: 'Owner Capital Investment / Equity Injection',
+        cash: capitalCash,
+        bank: capitalBank,
+        total: capitalCash + capitalBank
+      });
+    }
+
     // Direct Cash Purchases
     let purCash = 0;
     let purBank = 0;
     data.purchases.forEach(p => {
       if (p.status === 'DRAFT') return;
       if (!matchesDate(p.date)) return;
+      const hasLinkedPayment = (data.payments || []).some(pay => 
+        pay.billNo && p.billNo && (
+          pay.billNo.trim().toLowerCase() === p.billNo.trim().toLowerCase() ||
+          pay.billNo.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === p.billNo.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+        )
+      );
+      if (hasLinkedPayment) return; // Handled by supplier payments below!
       const paid = p.paid ?? (p.paymentType === 'CASH' ? p.total : 0);
       if (p.paymentType === 'CASH') purCash += paid;
     });
@@ -777,7 +823,8 @@ export const ReceivablesRegistersReports: React.FC<SubReportProps> = ({ reportTy
     let suppBank = 0;
     data.payments.forEach(pay => {
       if (!matchesDate(pay.date)) return;
-      if (pay.method === 'CASH') suppCash += pay.amount;
+      const m = (pay.method || '').toUpperCase();
+      if (m === 'CASH') suppCash += pay.amount;
       else suppBank += pay.amount;
     });
 
@@ -826,7 +873,7 @@ export const ReceivablesRegistersReports: React.FC<SubReportProps> = ({ reportTy
       closingCash,
       closingBank
     };
-  }, [data.sales, data.customerAdvances, data.purchases, data.payments, data.expenses, startDate, endDate]);
+  }, [data.sales, data.customerAdvances, data.purchases, data.payments, data.expenses, data.journalEntries, data.chartOfAccounts, startDate, endDate]);
 
   // CSV Exporters
   const handleExportReceivables = () => {

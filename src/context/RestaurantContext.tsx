@@ -6033,11 +6033,15 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         dayNumber: (prev.dayEndRecords?.length || 0) + 1
       };
 
-      // Synchronize Chart of Accounts 1010 (Cash in Hand) opening balance if it is currently 0
+      // Synchronize Chart of Accounts 1010 (Cash in Hand) and 3010 (Owner Equity) opening balance if currently 0
       const currentCoa = prev.chartOfAccounts || DEFAULT_CHART_OF_ACCOUNTS;
       let coaUpdated = false;
       const updatedCoa = currentCoa.map(acc => {
         if ((acc.code === '1010' || acc.systemRole === 'CASH') && (!acc.balance || acc.balance === 0) && openingCash > 0) {
+          coaUpdated = true;
+          return { ...acc, balance: openingCash };
+        }
+        if ((acc.code === '3010' || acc.systemRole === 'OWNER_CAPITAL' || acc.type === 'EQUITY') && (!acc.balance || acc.balance === 0) && openingCash > 0) {
           coaUpdated = true;
           return { ...acc, balance: openingCash };
         }
