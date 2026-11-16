@@ -426,6 +426,8 @@ export interface SaleRecord {
   date: string;
   invoiceNo: string;
   orderRef?: string;
+  kotBaseSerial?: string;
+  kotCount?: number;
   details: string;
   subtotal?: number;
   items?: TableCartItem[];
@@ -788,6 +790,8 @@ export interface AppData {
 export interface PrintableReceipt {
   invoiceNo: string;
   orderRef?: string;
+  kotBaseSerial?: string;
+  kotCount?: number;
   kotSequence?: number;
   isAddonKot?: boolean;
   billVersion?: number;

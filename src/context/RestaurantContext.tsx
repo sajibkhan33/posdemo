@@ -2674,11 +2674,26 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
       }
 
+      let mergedSerialConfig = prev.serialConfig;
+      if (incomingSerialConfig) {
+        if (!updatedSales || updatedSales.length === 0) {
+          mergedSerialConfig = incomingSerialConfig;
+        } else {
+          mergedSerialConfig = {
+            ...prev.serialConfig,
+            ...incomingSerialConfig,
+            posInvoiceNextNumber: Math.max(prev.serialConfig?.posInvoiceNextNumber || 1, incomingSerialConfig.posInvoiceNextNumber || 1),
+            kotNextNumber: Math.max(prev.serialConfig?.kotNextNumber || 1, incomingSerialConfig.kotNextNumber || 1),
+            orderRefNextNumber: Math.max(prev.serialConfig?.orderRefNextNumber || 1, incomingSerialConfig.orderRefNextNumber || 1)
+          };
+        }
+      }
+
       const next = {
         ...prev,
         tables: finalTables,
         sales: updatedSales,
-        serialConfig: incomingSerialConfig || prev.serialConfig
+        serialConfig: mergedSerialConfig
       };
       dataRef.current = next;
       return next;
@@ -4292,6 +4307,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           serialAllocated = true;
         }
 
+        orderRef = kotBaseSerial;
+
         return {
           ...t,
           status: t.status === 'free' ? 'hold' : t.status,
@@ -4722,16 +4739,6 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return;
     }
 
-    const settledOrderRefs = new Set((dataRef.current?.sales || data.sales || []).map((s: any) => s.orderRef).filter(Boolean));
-    let orderRef = table.orderRef;
-    if (!orderRef || settledOrderRefs.has(orderRef)) {
-      orderRef = 'ORD-' + Date.now().toString().slice(-6);
-    }
-    const nextKotCount = (table.kotCount || 0) + 1;
-    const isAddonKot = nextKotCount > 1;
-    const linkedInvoiceNo = table.linkedInvoiceNo || ('POS-' + Date.now().toString().slice(-6));
-    let activeSerialConfig = { ...(data.serialConfig || DEFAULT_SERIAL_CONFIG) };
-    if (activeSerialConfig.kotPrefix === 'KOT-ORD-') activeSerialConfig.kotPrefix = 'KOT-';
     let baseKotNo = table.kotBaseSerial;
     let serialConfigChanged = false;
 
@@ -4749,6 +4756,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       activeSerialConfig.kotNextNumber = num + 1;
       serialConfigChanged = true;
     }
+
+    const nextKotCount = (table.kotCount || 0) + 1;
+    const isAddonKot = nextKotCount > 1;
+    const linkedInvoiceNo = table.linkedInvoiceNo || ('POS-' + Date.now().toString().slice(-6));
+    const orderRef = baseKotNo;
 
     const invoiceNo = isAddonKot 
       ? `${baseKotNo}-#${nextKotCount}` 
@@ -4771,7 +4783,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         ...t,
         status: t.status === 'free' ? 'hold' : t.status,
         orderCreatedAt: t.orderCreatedAt || now,
-        orderRef,
+        orderRef: baseKotNo,
+        kotBaseSerial: baseKotNo,
         linkedInvoiceNo,
         kotCount: nextKotCount,
         cart: updatedCart
@@ -4792,7 +4805,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       tables: updatedTables,
       serialConfig: serialConfigChanged ? activeSerialConfig : prev.serialConfig
     }));
-    syncPosTablesToServer(updatedTables, undefined, 'KOT_SUBMIT', undefined, tableId);
+    syncPosTablesToServer(updatedTables, undefined, 'KOT_SUBMIT', serialConfigChanged ? activeSerialConfig : undefined, tableId);
 
     const agents = data.commissionAgents || DEFAULT_COMMISSION_AGENTS;
     const agent = agents.find(a => a.id === table.channelOrAgentId);
@@ -4815,7 +4828,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (showModal) {
       setPrintableReceipt({
         invoiceNo,
-        orderRef,
+        orderRef: baseKotNo,
+        kotBaseSerial: baseKotNo,
+        kotCount: nextKotCount,
         kotSequence: nextKotCount,
         isAddonKot,
         dateTime,
@@ -5747,19 +5762,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       serialConfigChanged = true;
     }
 
-    const settledOrderRefs = new Set((dataRef.current?.sales || data.sales || []).map((s: any) => s.orderRef).filter(Boolean));
-    let effectiveOrderRef = table.orderRef;
-    if (!effectiveOrderRef || settledOrderRefs.has(effectiveOrderRef)) {
-      let num = activeSerialConfig.orderRefNextNumber || 1;
-      let candidate = `${activeSerialConfig.orderRefPrefix || 'ORD-'}${String(num).padStart(activeSerialConfig.orderRefPadding || 4, '0')}`;
-      while (settledOrderRefs.has(candidate)) {
-        num++;
-        candidate = `${activeSerialConfig.orderRefPrefix || 'ORD-'}${String(num).padStart(activeSerialConfig.orderRefPadding || 4, '0')}`;
-      }
-      effectiveOrderRef = candidate;
-      activeSerialConfig.orderRefNextNumber = num + 1;
-      serialConfigChanged = true;
-    }
+    const effectiveKotBase = table.kotBaseSerial || (table.orderRef?.startsWith('KOT-') ? table.orderRef : (table.orderRef || `KOT-${String(activeSerialConfig.kotNextNumber || 1).padStart(activeSerialConfig.kotPadding || 4, '0')}`));
+    const effectiveKotCount = table.kotCount || 1;
+    const effectiveOrderRef = effectiveKotBase;
     const today = (data.businessDay?.isOpen && data.businessDay.date) ? data.businessDay.date : (data.session?.startDate || new Date().toISOString().split('T')[0]);
     const itemSummary = table.cart.map(i => `${i.name} (${i.qty})`).join(', ');
 
@@ -5771,7 +5776,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       id: Date.now(),
       date: today,
       invoiceNo,
-      orderRef: effectiveOrderRef,
+      orderRef: effectiveKotBase,
+      kotBaseSerial: effectiveKotBase,
+      kotCount: effectiveKotCount,
       tableId: table.id,
       table: table.name,
       subtotal: subtotal,
@@ -5780,7 +5787,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       vatVal: vatVal,
       vatPercent: isVatEnabled ? vatPercent : 0,
       vatMode,
-      details: `${table.name} [Zone: ${table.zone || 'Floor 1'}] (W: ${assignedWaiter || 'N/A'}${agent ? `, Ch: ${agent.name}` : ''}, Ref: ${effectiveOrderRef}): ${itemSummary}`,
+      details: `${table.name} [Zone: ${table.zone || 'Floor 1'}] (W: ${assignedWaiter || 'N/A'}${agent ? `, Ch: ${agent.name}` : ''}, KOT: ${effectiveKotBase}${effectiveKotCount > 1 ? ` #${effectiveKotCount}` : ''}): ${itemSummary}`,
       items: JSON.parse(JSON.stringify(table.cart)),
       cash: cashRetained,
       card: computedCard,
@@ -6817,6 +6824,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
         if (targetTable) {
           matchedTableId = targetTable.id;
+          const restoredKotBase = sale.kotBaseSerial || (sale.orderRef?.startsWith('KOT-') ? sale.orderRef : (sale.details?.match(/KOT:\s*([^):#\s]+)/i)?.[1]?.trim())) || (sale.orderRef ? sale.orderRef.replace(/^ORD-/, 'KOT-') : undefined);
+          const restoredKotCount = sale.kotCount || (sale.details?.match(/KOT:[^#]+#(\d+)/i) ? parseInt(sale.details.match(/KOT:[^#]+#(\d+)/i)![1]) : 1);
+
           updatedTables = prev.tables.map(t => {
             if (t.id !== targetTable.id) return t;
             return {
@@ -6836,7 +6846,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               discountType: sale.discountType || 'taka',
               orderCreatedBy: sale.orderCreatedBy || sale.sellerName,
               orderCreatedRole: sale.orderCreatedRole || sale.sellerRole,
-              orderCreatedAt: sale.createdAt || Date.now()
+              orderCreatedAt: sale.createdAt || Date.now(),
+              kotBaseSerial: restoredKotBase,
+              kotCount: restoredKotCount,
+              orderRef: restoredKotBase || sale.orderRef,
+              linkedInvoiceNo: sale.invoiceNo
             };
           });
         }
@@ -6860,6 +6874,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       ) || data.tables[0];
 
       if (targetTable) {
+        syncPosTablesToServer(dataRef.current.tables, undefined, 'TABLES_UPDATE', undefined, targetTable.id);
         setActiveTableId(targetTable.id);
         setPosView('order');
         setActiveTab('pos');
@@ -6925,7 +6940,10 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           paidAmount: sale.total,
           orderCreatedBy: sale.orderCreatedBy || sale.sellerName,
           orderCreatedRole: sale.orderCreatedRole || sale.sellerRole,
-          orderCreatedAt: sale.createdAt || Date.now()
+          orderCreatedAt: sale.createdAt || Date.now(),
+          kotBaseSerial: sale.kotBaseSerial || (sale.orderRef?.startsWith('KOT-') ? sale.orderRef : (sale.details?.match(/KOT:\s*([^):#\s]+)/i)?.[1]?.trim())) || (sale.orderRef ? sale.orderRef.replace(/^ORD-/, 'KOT-') : undefined),
+          kotCount: sale.kotCount || (sale.details?.match(/KOT:[^#]+#(\d+)/i) ? parseInt(sale.details.match(/KOT:[^#]+#(\d+)/i)![1]) : 1),
+          orderRef: sale.kotBaseSerial || sale.orderRef
         };
       })
     }));
@@ -8601,7 +8619,28 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           dayEndRecords: [],
           session: { isActive: false, openingCash: 0, startTime: "" },
           businessDay: { date: new Date().toISOString().split('T')[0], isOpen: false, dayNumber: 1 },
-          tables: prev.tables.map(t => ({ ...t, status: 'free' as const, waiter: '', customer: 'Walk-in Customer', customerName: '', cart: [], discountVal: 0, isBillPrinted: false }))
+          tables: prev.tables.map(t => ({ 
+            ...t, 
+            status: 'free' as const, 
+            waiter: '', 
+            customer: 'Walk-in Customer', 
+            customerName: '', 
+            cart: [], 
+            discountVal: 0, 
+            isBillPrinted: false,
+            kotBaseSerial: undefined,
+            kotCount: 0,
+            billCount: 0,
+            orderRef: undefined,
+            linkedInvoiceNo: undefined,
+            linkedSaleId: undefined
+          })),
+          serialConfig: {
+            ...(prev.serialConfig || DEFAULT_SERIAL_CONFIG),
+            posInvoiceNextNumber: 1,
+            kotNextNumber: 1,
+            orderRefNextNumber: 1
+          }
         };
       } else if (moduleType === 'purchases') {
         return {
@@ -8726,8 +8765,20 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         customerName: '', 
         cart: [], 
         discountVal: 0, 
-        isBillPrinted: false 
+        isBillPrinted: false,
+        kotBaseSerial: undefined,
+        kotCount: 0,
+        billCount: 0,
+        orderRef: undefined,
+        linkedInvoiceNo: undefined,
+        linkedSaleId: undefined
       })),
+      serialConfig: {
+        ...(prev.serialConfig || DEFAULT_SERIAL_CONFIG),
+        posInvoiceNextNumber: 1,
+        kotNextNumber: 1,
+        orderRefNextNumber: 1
+      },
       session: { isActive: false, openingCash: 0, startTime: "" },
       businessDay: { date: new Date().toISOString().split('T')[0], isOpen: false, dayNumber: 1 }
     }));
@@ -8807,6 +8858,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         ...(prev.serialConfig || DEFAULT_SERIAL_CONFIG),
         ...configUpdates
       };
+      syncPosTablesToServer(prev.tables, undefined, 'CONFIG_UPDATE', updatedConfig);
       return {
         ...prev,
         serialConfig: updatedConfig

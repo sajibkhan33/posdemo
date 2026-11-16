@@ -288,15 +288,20 @@ export const SalesLedgerView: React.FC = () => {
     const subtotal = sale.subtotal || sale.total;
     const discountDeduction = Math.max(0, subtotal - sale.total);
 
-    let orderRef = sale.orderRef;
+    let orderRef = sale.kotBaseSerial || (sale.orderRef?.startsWith('KOT-') ? sale.orderRef : null);
     if (!orderRef && detailsStr) {
-      const refMatch = detailsStr.match(/Ref:\s*([^):]+)/i);
-      if (refMatch) {
-        orderRef = refMatch[1].trim();
+      const kotMatch = detailsStr.match(/KOT:\s*([^):#\s]+)/i);
+      if (kotMatch) {
+        orderRef = kotMatch[1].trim();
+      } else {
+        const refMatch = detailsStr.match(/Ref:\s*([^):]+)/i);
+        if (refMatch) {
+          orderRef = refMatch[1].trim().replace(/^ORD-/, 'KOT-');
+        }
       }
     }
     if (!orderRef) {
-      orderRef = sale.invoiceNo ? 'ORD-' + sale.invoiceNo.replace(/\D/g, '').slice(-5) : 'ORD-00001';
+      orderRef = sale.invoiceNo ? 'KOT-' + sale.invoiceNo.replace(/\D/g, '').padStart(4, '0').slice(-4) : 'KOT-0001';
     }
 
     setPrintableReceipt({
@@ -726,8 +731,20 @@ export const SalesLedgerView: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <span className="text-[10px] text-slate-500 font-mono">{sale.date}</span>
-                          <span className="text-[9px] px-1 py-0.2 rounded font-mono font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                            {sale.orderRef || (sale.details?.match(/Ref:\s*([^):]+)/i)?.[1]?.trim()) || (sale.invoiceNo ? 'ORD-' + sale.invoiceNo.replace(/\D/g, '').slice(-5) : 'ORD-00001')}
+                          <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-bold bg-amber-50 text-amber-800 border border-amber-200 inline-flex items-center gap-1">
+                            <span>
+                              {sale.kotBaseSerial || 
+                               (sale.orderRef?.startsWith('KOT-') ? sale.orderRef : null) || 
+                               (sale.details?.match(/KOT:\s*([^):#\s]+)/i)?.[1]?.trim()) || 
+                               (sale.orderRef ? sale.orderRef.replace(/^ORD-/, 'KOT-') : null) || 
+                               (sale.details?.match(/Ref:\s*([^):]+)/i)?.[1]?.trim()?.replace(/^ORD-/, 'KOT-')) || 
+                               (sale.invoiceNo ? 'KOT-' + sale.invoiceNo.replace(/\D/g, '').padStart(4, '0').slice(-4) : 'KOT-0001')}
+                            </span>
+                            {(sale.kotCount && sale.kotCount > 1) ? (
+                              <span className="text-[8px] px-1 py-0.2 bg-amber-200 text-amber-900 rounded font-black">
+                                x{sale.kotCount}
+                              </span>
+                            ) : null}
                           </span>
                         </div>
                       </td>

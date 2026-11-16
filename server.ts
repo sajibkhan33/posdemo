@@ -2410,8 +2410,20 @@ async function startServer() {
             customer: 'Walk-in Customer',
             cart: [],
             discountVal: 0,
-            isBillPrinted: false
+            isBillPrinted: false,
+            kotBaseSerial: undefined,
+            kotCount: 0,
+            billCount: 0,
+            orderRef: undefined,
+            linkedInvoiceNo: undefined,
+            linkedSaleId: undefined
           })),
+          serialConfig: {
+            ...(cachedState.serialConfig || {}),
+            posInvoiceNextNumber: 1,
+            kotNextNumber: 1,
+            orderRefNextNumber: 1
+          },
           session: { isActive: false, openingCash: 0, startTime: "" },
           businessDay: { date: new Date().toISOString().split('T')[0], isOpen: false, dayNumber: 1 }
         };
@@ -2429,8 +2441,20 @@ async function startServer() {
             customer: 'Walk-in Customer',
             cart: [],
             discountVal: 0,
-            isBillPrinted: false
-          }))
+            isBillPrinted: false,
+            kotBaseSerial: undefined,
+            kotCount: 0,
+            billCount: 0,
+            orderRef: undefined,
+            linkedInvoiceNo: undefined,
+            linkedSaleId: undefined
+          })),
+          serialConfig: {
+            ...(cachedState.serialConfig || {}),
+            posInvoiceNextNumber: 1,
+            kotNextNumber: 1,
+            orderRefNextNumber: 1
+          }
         };
       } else if (scope === 'expenses') {
         cachedState.expenses = [];
