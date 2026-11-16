@@ -220,6 +220,7 @@ export const PosBillingView: React.FC = () => {
   const canUnlockBilledTable = currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER' || Boolean(currentUser?.canEditSubmittedOrders);
   const [assigningTable, setAssigningTable] = useState<Table | null>(null);
   const [isSubmittingKot, setIsSubmittingKot] = useState(false);
+  const [submittingTableKotId, setSubmittingTableKotId] = useState<string | null>(null);
 
   // Special Note for Cart Item
   const [editingNoteItem, setEditingNoteItem] = useState<{ item: TableCartItem; index: number } | null>(null);
@@ -978,16 +979,23 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
                             <button
                               type="button"
                               title="Direct Print KOT"
+                              disabled={submittingTableKotId === table.id}
                               onClick={async (e) => {
                                 e.stopPropagation();
-                                await directSubmitKotAndHold(table.id);
+                                if (submittingTableKotId === table.id) return;
+                                setSubmittingTableKotId(table.id);
+                                try {
+                                  await directSubmitKotAndHold(table.id);
+                                } finally {
+                                  setTimeout(() => setSubmittingTableKotId(null), 2500);
+                                }
                               }}
-                              className={`flex-1 bg-white/90 hover:bg-white text-slate-900 font-black flex items-center justify-center gap-0.5 transition cursor-pointer shadow-xs active:scale-95 ${
+                              className={`flex-1 bg-white/90 hover:bg-white text-slate-900 font-black flex items-center justify-center gap-0.5 transition cursor-pointer shadow-xs active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
                                 isUltraCompact ? 'py-0.5 px-0.5 rounded text-[8px]' : isCompact ? 'py-1 px-1 rounded-md text-[10px]' : isLarge ? 'py-2 px-2 rounded-xl text-xs' : 'py-1.5 px-1.5 rounded-lg text-[11px]'
                               }`}
                             >
                               <ChefHat className={isUltraCompact ? 'w-2 h-2 text-rose-600' : isCompact ? 'w-2.5 h-2.5 text-rose-600' : 'w-3 h-3 text-rose-600'} />
-                              <span className={isUltraCompact ? 'hidden' : ''}>KOT</span>
+                              <span className={isUltraCompact ? 'hidden' : ''}>{submittingTableKotId === table.id ? '...' : 'KOT'}</span>
                             </button>
                           )}
 

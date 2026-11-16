@@ -2215,6 +2215,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [activeSettlingTable, setActiveSettlingTable] = useState<Table | null>(null);
   const [printableReceipt, setPrintableReceipt] = useState<PrintableReceipt | null>(null);
   const printableReceiptRef = useRef<PrintableReceipt | null>(null);
+  const printingKotTablesRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     printableReceiptRef.current = printableReceipt;
   }, [printableReceipt]);
@@ -4711,6 +4712,15 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setIsStartSessionModalOpen(true);
       return;
     }
+    if (printingKotTablesRef.current.has(tableId)) {
+      console.warn(`[KOT In-Flight Guard] Blocked rapid duplicate KOT submit for table ${tableId}`);
+      return;
+    }
+    printingKotTablesRef.current.add(tableId);
+    setTimeout(() => {
+      printingKotTablesRef.current.delete(tableId);
+    }, 3500);
+
     markTableEditedLocally(tableId);
     const currentTables = (dataRef.current?.tables && dataRef.current.tables.length > 0) ? dataRef.current.tables : data.tables;
     const table = currentTables.find(t => t.id === tableId) || data.tables.find(t => t.id === tableId);
@@ -5112,12 +5122,17 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       || allTemplates.find(t => t.isActive && (t.templateType === 'KOT' || t.templateType === 'BOTH'))
       || allTemplates[0];
 
+    const activeKotSerial = table.kotBaseSerial || (table.orderRef?.startsWith('KOT-') ? table.orderRef : `KOT-${table.name.replace(/\D/g, '') || '0001'}`);
+    const activeKotTicket = `${activeKotSerial}${table.kotCount && table.kotCount > 1 ? `-#${table.kotCount}` : ''}`;
+    const voidKotNo = `VOID: ${activeKotTicket}`;
+
     const cancelKotPayload = {
       tableName: table.name,
       tableZone: table.zone || 'Floor 1',
       waiter: table.waiter || 'Staff',
       customer: table.customer || 'Walk-in Customer',
-      invoiceNo: 'VOID-KOT-' + Date.now().toString().slice(-5),
+      invoiceNo: voidKotNo,
+      orderRef: activeKotSerial,
       dateTime: new Date().toLocaleString('en-US'),
       paperWidth: defaultPrimaryKotTemplate?.paperWidth || '80mm',
       slips: [{
@@ -5126,7 +5141,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         items: [{
           name: `*** CANCELLED *** ${cancelledItemInfo.name}`,
           qty: cancelledItemInfo.qty,
-          notes: `REASON: ${cancelledItemInfo.reason} | AUTH: ${authorizedBy || 'Manager'}`
+          notes: `REF KOT: ${activeKotTicket} | REASON: ${cancelledItemInfo.reason} | AUTH: ${authorizedBy || 'Manager'}`
         }]
       }]
     };
@@ -5162,12 +5177,17 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         || allTemplates.find(t => t.isActive && (t.templateType === 'KOT' || t.templateType === 'BOTH'))
         || allTemplates[0];
 
+      const activeKotSerial = table.kotBaseSerial || (table.orderRef?.startsWith('KOT-') ? table.orderRef : `KOT-${table.name.replace(/\D/g, '') || '0001'}`);
+      const activeKotTicket = `${activeKotSerial}${table.kotCount && table.kotCount > 1 ? `-#${table.kotCount}` : ''}`;
+      const voidKotNo = `VOID: ${activeKotTicket}`;
+
       const releaseKotPayload = {
         tableName: table.name,
         tableZone: table.zone || 'Floor 1',
         waiter: table.waiter || 'Staff',
         customer: table.customer || 'Walk-in Customer',
-        invoiceNo: 'VOID-KOT-' + Date.now().toString().slice(-5),
+        invoiceNo: voidKotNo,
+        orderRef: activeKotSerial,
         dateTime: new Date().toLocaleString('en-US'),
         paperWidth: defaultPrimaryKotTemplate?.paperWidth || '80mm',
         slips: [{
@@ -5176,7 +5196,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           items: cancelledList.map(c => ({
             name: `*** TABLE RELEASED / VOID *** ${c.name}`,
             qty: c.qty,
-            notes: `REASON: ${c.reason} | AUTH: ${authorizedBy || 'Manager'}`
+            notes: `REF KOT: ${activeKotTicket} | REASON: ${c.reason} | AUTH: ${authorizedBy || 'Manager'}`
           }))
         }]
       };
@@ -5314,9 +5334,16 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const table = data.tables.find(t => t.id === tableId);
     if (!table) return;
 
+    const activeKotSerial = table.kotBaseSerial || (table.orderRef?.startsWith('KOT-') ? table.orderRef : `KOT-${table.name.replace(/\D/g, '') || '0001'}`);
+    const activeKotTicket = `${activeKotSerial}${table.kotCount && table.kotCount > 1 ? `-#${table.kotCount}` : ''}`;
+    const voidKotNo = `VOID: ${activeKotTicket}`;
+
     if (showModal) {
       setPrintableReceipt({
-        invoiceNo: 'VOID-KOT-' + Date.now().toString().slice(-5),
+        invoiceNo: voidKotNo,
+        orderRef: activeKotSerial,
+        kotBaseSerial: activeKotSerial,
+        kotSequence: table.kotCount || 1,
         dateTime: new Date().toLocaleString('en-US'),
         tableName: table.name,
         tableZone: table.zone || 'Floor 1',
@@ -5352,7 +5379,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       tableZone: table.zone || 'Floor 1',
       waiter: table.waiter || 'Staff',
       customer: table.customer || 'Walk-in Customer',
-      invoiceNo: 'VOID-KOT-' + Date.now().toString().slice(-5),
+      invoiceNo: voidKotNo,
+      orderRef: activeKotSerial,
       dateTime: new Date().toLocaleString('en-US'),
       paperWidth: defaultPrimaryKotTemplate?.paperWidth || '80mm',
       slips: [{
@@ -5361,7 +5389,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         items: cancelledItems.map(c => ({
           name: `*** CANCELLED *** ${c.name}`,
           qty: c.qty,
-          notes: `REASON: ${c.reason || reason} | AUTH: ${authorizedBy || 'Manager'}`
+          notes: `REF KOT: ${activeKotTicket} | REASON: ${c.reason || reason} | AUTH: ${authorizedBy || 'Manager'}`
         }))
       }]
     };
@@ -5762,8 +5790,132 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       serialConfigChanged = true;
     }
 
-    const effectiveKotBase = table.kotBaseSerial || (table.orderRef?.startsWith('KOT-') ? table.orderRef : (table.orderRef || `KOT-${String(activeSerialConfig.kotNextNumber || 1).padStart(activeSerialConfig.kotPadding || 4, '0')}`));
-    const effectiveKotCount = table.kotCount || 1;
+    const unprintedItems = table.cart.filter(item => {
+      const alreadyPrintedQty = item.kotPrintedQty || (item.kotPrinted ? item.qty : 0);
+      return (item.qty - alreadyPrintedQty) > 0;
+    });
+
+    let effectiveKotBase = table.kotBaseSerial;
+    let effectiveKotCount = table.kotCount || 0;
+
+    // AUTO-DISPATCH KOT TO KITCHEN: If cashier clicked Settle & Pay directly without sending KOT,
+    // fire KOT to the kitchen immediately upon payment settlement and advance kotNextNumber in lockstep!
+    if (unprintedItems.length > 0 || !effectiveKotBase) {
+      if (!effectiveKotBase || effectiveKotBase.startsWith('KOT-ORD-')) {
+        const todayDateStr = data.businessDay?.date || new Date().toISOString().split('T')[0];
+        const num = activeSerialConfig.kotNextNumber || 1;
+        const padded = String(num).padStart(activeSerialConfig.kotPadding || 4, '0');
+        const effKotPrefix = (activeSerialConfig.kotPrefix && activeSerialConfig.kotPrefix !== 'KOT-ORD-') ? activeSerialConfig.kotPrefix : 'KOT-';
+        if (activeSerialConfig.kotIncludeDate) {
+          const dateStr = todayDateStr.replace(/-/g, '');
+          effectiveKotBase = `${effKotPrefix}${dateStr}-${padded}`;
+        } else {
+          effectiveKotBase = `${effKotPrefix}${padded}`;
+        }
+        activeSerialConfig.kotNextNumber = num + 1;
+        serialConfigChanged = true;
+      }
+      effectiveKotCount = (effectiveKotCount || 0) + 1;
+
+      const isAddonKot = effectiveKotCount > 1;
+      const kotInvoiceNo = isAddonKot ? `${effectiveKotBase}-#${effectiveKotCount}` : effectiveKotBase;
+
+      const allTemplates = (data?.printTemplates && data.printTemplates.length > 0) ? data.printTemplates : DEFAULT_PRINT_TEMPLATES;
+      const defaultPrimaryKotTemplate = allTemplates.find(t => t.isActive && t.isDefault && (t.templateType === 'KOT' || t.templateType === 'BOTH'))
+        || allTemplates.find(t => t.isActive && (t.templateType === 'KOT' || t.templateType === 'BOTH'))
+        || allTemplates[0];
+
+      const menuCatalog = Array.isArray(data?.menuItems) ? data.menuItems : [];
+      const enrichedUnprinted = unprintedItems.map(item => {
+        const itemName = item.name ? String(item.name).trim() : '';
+        const itemId = item.id != null ? String(item.id) : null;
+        const menuObj = menuCatalog.find(m => {
+          if (!m) return false;
+          if (itemId && m.id != null && String(m.id) === itemId) return true;
+          if (itemName && m.name && String(m.name).trim().toLowerCase() === itemName.toLowerCase()) return true;
+          return false;
+        });
+        return {
+          ...item,
+          unsentQty: item.qty - (item.kotPrintedQty || (item.kotPrinted ? item.qty : 0)),
+          department: item.department || menuObj?.department || 'Main Kitchen'
+        };
+      });
+
+      const orderDepartments = Array.from(new Set(enrichedUnprinted.map(i => i.department).filter(Boolean)));
+      const printers = data?.printers || [];
+      const getPrinterForDept = (dept: string) => {
+        const p = printers.find(pr => pr.departments?.includes(dept) && pr.isActive);
+        return p || printers.find(pr => pr.isDefault && pr.isActive) || printers[0] || null;
+      };
+      const getTemplateForDept = (dept: string) => {
+        return allTemplates.find(t => t.isActive && (t.templateType === 'KOT' || t.templateType === 'BOTH') && t.departments?.includes(dept))
+          || defaultPrimaryKotTemplate;
+      };
+
+      const slipsToPrint = (orderDepartments.length > 1)
+        ? orderDepartments.map(dept => {
+            const deptItems = enrichedUnprinted.filter(i => i.department === dept);
+            const deptPrinter = getPrinterForDept(dept);
+            const deptTemplate = getTemplateForDept(dept);
+            return {
+              station: dept,
+              targetPrinterName: deptPrinter?.name,
+              showPrices: Boolean(deptTemplate?.showPricesOnKot),
+              showWaiter: deptTemplate?.showWaiter !== false,
+              showCustomer: Boolean(deptTemplate?.showCustomer),
+              showDateTime: deptTemplate?.showDateTime !== false,
+              paperWidth: deptTemplate?.paperWidth || defaultPrimaryKotTemplate?.paperWidth || '80mm',
+              items: deptItems.map(i => ({
+                name: i.name,
+                qty: i.unsentQty > 0 ? i.unsentQty : i.qty,
+                price: Number(i.price || 0),
+                variation: i.selectedVariation?.name,
+                addons: i.selectedAddons?.map(a => a.name),
+                notes: i.notes
+              }))
+            };
+          }).filter(s => s.items.length > 0)
+        : [{
+            station: orderDepartments[0] || 'Main Kitchen',
+            targetPrinterName: getPrinterForDept(orderDepartments[0] || 'Main Kitchen')?.name,
+            showPrices: false,
+            showWaiter: true,
+            showCustomer: false,
+            showDateTime: true,
+            paperWidth: defaultPrimaryKotTemplate?.paperWidth || '80mm',
+            items: enrichedUnprinted.map(i => ({
+              name: i.name,
+              qty: i.unsentQty > 0 ? i.unsentQty : i.qty,
+              price: Number(i.price || 0),
+              variation: i.selectedVariation?.name,
+              addons: i.selectedAddons?.map(a => a.name),
+              notes: i.notes
+            }))
+          }];
+
+      const kotHardwarePayload = {
+        tableName: table.name,
+        tableZone: table.zone || 'Floor 1',
+        waiter: table.waiter || 'Staff',
+        customer: table.customer || 'Walk-in Customer',
+        invoiceNo: kotInvoiceNo,
+        orderRef: effectiveKotBase,
+        kotSequence: effectiveKotCount,
+        isAddonKot,
+        dateTime: new Date().toLocaleString('en-US'),
+        paperWidth: defaultPrimaryKotTemplate?.paperWidth || '80mm',
+        slips: slipsToPrint
+      };
+
+      const hasActiveKotPrinter = Boolean((data.printers || []).some(p => p.isActive && (p.type === 'KOT' || p.type === 'ALL')));
+      if (hasActiveKotPrinter && slipsToPrint.some(s => s.items.length > 0)) {
+        dispatchHardwarePrint('/api/hardware/print-kot', kotHardwarePayload);
+      }
+    } else {
+      effectiveKotCount = effectiveKotCount || 1;
+    }
+
     const effectiveOrderRef = effectiveKotBase;
     const today = (data.businessDay?.isOpen && data.businessDay.date) ? data.businessDay.date : (data.session?.startDate || new Date().toISOString().split('T')[0]);
     const itemSummary = table.cart.map(i => `${i.name} (${i.qty})`).join(', ');

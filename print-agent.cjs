@@ -1163,13 +1163,13 @@ function isDuplicateJob(job) {
   if (!job) return false;
   const now = Date.now();
   for (const [key, timestamp] of recentJobsCache.entries()) {
-    if (now - timestamp > 30000) recentJobsCache.delete(key);
+    if (now - timestamp > 60000) recentJobsCache.delete(key);
   }
 
   const key = getJobDedupKey(job);
   if (recentJobsCache.has(key)) {
     const diff = now - recentJobsCache.get(key);
-    if (diff < 3000) {
+    if (diff < 60000) {
       console.log('⚠️ [Deduplication] Blocked duplicate print job (' + key + ') received within ' + diff + 'ms.');
       return true;
     }

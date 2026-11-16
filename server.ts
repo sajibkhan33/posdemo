@@ -1590,11 +1590,29 @@ async function startServer() {
   } = {};
 
   function enqueueCloudPrintJob(type: CloudPrintJob['type'], payload: any) {
+    const now = Date.now();
+    const isDuplicate = cloudPrintJobs.some(j => {
+      if (j.type !== type || j.status === 'failed') return false;
+      if (now - j.createdAt > 45000) return false;
+      const p1 = j.payload;
+      const p2 = payload;
+      if (!p1 || !p2) return false;
+      if (p1.invoiceNo && p2.invoiceNo && p1.invoiceNo === p2.invoiceNo && p1.tableName === p2.tableName) {
+        return true;
+      }
+      return false;
+    });
+
+    if (isDuplicate) {
+      console.log(`⚠️ [Print Queue Dedup] Blocked duplicate ${type} job for ${payload?.invoiceNo || payload?.tableName}`);
+      return null;
+    }
+
     const job: CloudPrintJob = {
       id: 'pjob_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
       type,
       payload,
-      createdAt: Date.now(),
+      createdAt: now,
       status: 'pending'
     };
     cloudPrintJobs.push(job);
