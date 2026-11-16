@@ -1576,7 +1576,7 @@ async function startServer() {
     type: 'KOT' | 'BILL' | 'ZREPORT' | 'WAITER_SLIP' | 'CHEF_SLIP' | 'DAYEND';
     payload: any;
     createdAt: number;
-    status: 'pending' | 'completed';
+    status: 'pending' | 'completed' | 'failed';
   }
 
   const cloudPrintJobs: CloudPrintJob[] = [];

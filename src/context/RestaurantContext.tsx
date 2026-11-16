@@ -27,7 +27,6 @@ import {
   AppUser,
   UserRole,
   PosSessionRecord,
-  PosSession,
   BusinessDay,
   DayEndRecord,
   ConsolidatedDayReportData,
@@ -1708,7 +1707,7 @@ interface RestaurantContextType {
 
 const RestaurantContext = createContext<RestaurantContextType | undefined>(undefined);
 
-export const getModuleForTab = (tab: ActiveTab, subNav?: string): string => {
+export const getModuleForTab = (tab: ActiveTab, _subNav?: string): string => {
   if (tab === 'pos' || tab === 'sales') return 'sales-pos';
   if (tab === 'menu-items' || tab === 'inv-items') return 'menu-kitchen';
   if (tab === 'inventory') return 'inventory';
@@ -4749,6 +4748,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return;
     }
 
+    let activeSerialConfig = { ...(data.serialConfig || DEFAULT_SERIAL_CONFIG) };
     let baseKotNo = table.kotBaseSerial;
     let serialConfigChanged = false;
 
@@ -5555,9 +5555,6 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       footerNotes: defaultPrimaryBillTemplate?.footerNotes
     };
 
-    const hasActiveBillPrinter = Boolean(
-      (data.printers || []).some(p => p.isActive && (p.type === 'BILL' || p.type === 'ALL'))
-    );
     const hasActiveBillHardwarePrinter = Boolean(
       (data.printers || []).some(p => p.isActive && (p.type === 'BILL' || p.type === 'ALL') && p.printOnBill !== false)
     );
@@ -6962,7 +6959,6 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       // 2. If restoreToTable is requested and sale has items, re-open table in live POS
       let updatedTables = prev.tables;
-      let matchedTableId: string | null = null;
 
       if (options.restoreToTable && sale.items && sale.items.length > 0) {
         const targetTable = prev.tables.find(t => 
@@ -6975,7 +6971,6 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         ) || prev.tables[0];
 
         if (targetTable) {
-          matchedTableId = targetTable.id;
           const restoredKotBase = sale.kotBaseSerial || (sale.orderRef?.startsWith('KOT-') ? sale.orderRef : (sale.details?.match(/KOT:\s*([^):#\s]+)/i)?.[1]?.trim())) || (sale.orderRef ? sale.orderRef.replace(/^ORD-/, 'KOT-') : undefined);
           const restoredKotCount = sale.kotCount || (sale.details?.match(/KOT:[^#]+#(\d+)/i) ? parseInt(sale.details.match(/KOT:[^#]+#(\d+)/i)![1]) : 1);
 
@@ -7617,7 +7612,6 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const list = prev.purchaseReturns || DEFAULT_PURCHASE_RETURNS;
       let updatedReturns: PurchaseReturn[];
       let targetRet: PurchaseReturn;
-      let qtyDiff = 0;
 
       if (returnRecord.id) {
         const index = list.findIndex(pr => pr.id === returnRecord.id);
@@ -7626,11 +7620,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           targetRet = { ...oldRet, ...returnRecord } as PurchaseReturn;
           updatedReturns = [...list];
           updatedReturns[index] = targetRet;
-          qtyDiff = (targetRet.qty || 0) - (oldRet.qty || 0);
         } else {
           targetRet = returnRecord as PurchaseReturn;
           updatedReturns = [targetRet, ...list];
-          qtyDiff = targetRet.qty || 0;
         }
       } else {
         targetRet = {
@@ -7649,7 +7641,6 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           refundStatus: returnRecord.refundStatus || 'ADJUSTED'
         };
         updatedReturns = [targetRet, ...list];
-        qtyDiff = targetRet.qty || 0;
       }
 
       return {

@@ -154,6 +154,8 @@ export interface Table {
   orderCreatedAt?: number;
   billedAt?: number;
   billedAtTime?: string;
+  settledAt?: number;
+  lastSettledOrderRef?: string;
   linkedSaleId?: number;
   linkedInvoiceNo?: string;
   isPaidOrder?: boolean;
@@ -515,6 +517,8 @@ export interface VendorPayment {
   id: number;
   date: string;
   vendor: string;
+  supplier?: string;
+  voucherNo?: string;
   billNo?: string;
   method: string;
   amount: number;
@@ -543,6 +547,7 @@ export type AccountSystemRole =
   | 'CUSTOMER_ADVANCE'    // Customer Advance Deposits (2030 or 2020)
   | 'TAX_PAYABLE'         // VAT, Tax, SD, Statutory Liabilities (2020 or 2030)
   | 'OWNER_EQUITY'        // Owner's Capital (3010)
+  | 'OWNER_CAPITAL'       // Alias for Owner's Capital (3010)
   | 'RETAINED_EARNINGS'   // Retained Earnings (3020)
   | 'OWNER_DRAWINGS'      // Owner Drawings & Withdrawals (3030 - ADE)
   | 'DINE_IN_REVENUE'     // Dine-in Sales Revenue (4010)
