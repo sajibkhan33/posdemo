@@ -134,7 +134,7 @@ export const SplitPaymentModal: React.FC = () => {
     if (!cashMethod) return;
     setSplitAmounts(prev => {
       const current = Number(prev[cashMethod.id]) || 0;
-      const nextVal = cashNoteMode === 'add' ? current + amt : amt;
+      const nextVal = (cashNoteMode === 'add' || current === amt) ? current + amt : amt;
       return {
         ...prev,
         [cashMethod.id]: nextVal
@@ -233,37 +233,43 @@ export const SplitPaymentModal: React.FC = () => {
   const currentWaiterDisplay = selectedWaiter || activeSettlingTable.waiter;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
-      <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200">
-        {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="px-2.5 py-0.5 rounded-md bg-[#004b9b] text-white font-extrabold text-sm">
-                {activeSettlingTable.name}
-              </span>
-              <h3 className="font-extrabold text-slate-900 text-lg">Bill Settlement & Split Payment</h3>
-              <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-black text-xs border border-amber-300 font-mono tracking-wider">
-                Ref: {activeSettlingTable.orderRef || (activeSettlingTable.orderCreatedAt ? ('ORD-' + String(activeSettlingTable.orderCreatedAt).slice(-5)) : 'ORD-NEW')}
-              </span>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in overflow-y-auto">
+      <div className="bg-white rounded-2xl max-w-xl w-full shadow-2xl border border-slate-200 flex flex-col max-h-[92vh] overflow-hidden my-auto">
+        {/* Sticky Header */}
+        <div className="shrink-0 p-4 sm:p-5 pb-3 border-b border-slate-100 bg-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-2.5 py-0.5 rounded-md bg-[#004b9b] text-white font-extrabold text-sm">
+                  {activeSettlingTable.name}
+                </span>
+                <h3 className="font-extrabold text-slate-900 text-lg">Bill Settlement & Split Payment</h3>
+                <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-black text-xs border border-amber-300 font-mono tracking-wider">
+                  Ref: {activeSettlingTable.orderRef || (activeSettlingTable.orderCreatedAt ? ('ORD-' + String(activeSettlingTable.orderCreatedAt).slice(-5)) : 'ORD-NEW')}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-2">
+                <span>Order Taker: <strong className="text-slate-800 font-bold">{activeSettlingTable.orderCreatedBy || 'Staff'} {activeSettlingTable.orderCreatedRole ? `(${activeSettlingTable.orderCreatedRole})` : ''}</strong></span>
+                <span>• Waiter: <strong className="text-[#004b9b] font-bold">{currentWaiterDisplay && currentWaiterDisplay !== 'Staff' && currentWaiterDisplay !== 'N/A' ? currentWaiterDisplay : 'Not Assigned'}</strong></span>
+                <span>• Customer: <strong className="text-slate-800 font-semibold">{effectiveCustomer || 'Walk-in Customer'}</strong></span>
+              </p>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-2">
-              <span>Order Taker: <strong className="text-slate-800 font-bold">{activeSettlingTable.orderCreatedBy || 'Staff'} {activeSettlingTable.orderCreatedRole ? `(${activeSettlingTable.orderCreatedRole})` : ''}</strong></span>
-              <span>• Waiter: <strong className="text-[#004b9b] font-bold">{currentWaiterDisplay && currentWaiterDisplay !== 'Staff' && currentWaiterDisplay !== 'N/A' ? currentWaiterDisplay : 'Not Assigned'}</strong></span>
-              <span>• Customer: <strong className="text-slate-800 font-semibold">{effectiveCustomer || 'Walk-in Customer'}</strong></span>
-            </p>
+            <button
+              id="close-split-payment-modal"
+              onClick={closeSettleModal}
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
-          <button
-            id="close-split-payment-modal"
-            onClick={closeSettleModal}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
-        {/* Assigned Waiter & Customer Quick Link Bar */}
-        <div className="mt-3 p-2 px-3 bg-slate-50 border border-slate-200 rounded-xl grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {/* Form enclosing scrollable body and sticky action footer */}
+        <form onSubmit={handleSettle} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          {/* Scrollable Body Content */}
+          <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5">
+            {/* Assigned Waiter & Customer Quick Link Bar */}
+            <div className="p-2 px-3 bg-slate-50 border border-slate-200 rounded-xl grid grid-cols-1 sm:grid-cols-2 gap-2">
           <div className="flex items-center justify-between gap-1.5">
             <div className="flex items-center gap-1 text-xs font-bold text-slate-700 shrink-0">
               <UserCheck className="w-3.5 h-3.5 text-[#004b9b]" />
@@ -467,57 +473,28 @@ export const SplitPaymentModal: React.FC = () => {
           </div>
         </div>
 
-        {/* Quick Cash Tender Notes (দ্রুত নগদ নোট শর্টকাট) */}
+        {/* Quick Cash Tender Notes */}
         {cashMethod && (
-          <div className="mb-4 p-3 bg-gradient-to-r from-emerald-50/70 via-slate-50 to-emerald-50/70 border border-emerald-200/80 rounded-xl shadow-2xs">
+          <div className="p-3 bg-gradient-to-r from-emerald-50/70 via-slate-50 to-emerald-50/70 border border-emerald-200/80 rounded-xl shadow-2xs">
             <div className="flex items-center justify-between gap-2 mb-2">
               <div className="flex items-center gap-1.5">
                 <Banknote className="w-4 h-4 text-emerald-700" />
-                <span className="text-xs font-extrabold text-slate-800">Quick Cash Tender (নোট শর্টকাট)</span>
-                <span className="text-[10px] text-emerald-850 bg-emerald-100 font-bold px-1.5 py-0.2 rounded-full border border-emerald-200">
-                  {cashNoteMode === 'set' ? 'নোট সিলেক্ট' : '+ যোগ মোড'}
-                </span>
+                <span className="text-xs font-extrabold text-slate-800">Quick Cash Tender</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <div className="bg-slate-200 p-0.5 rounded-lg flex items-center text-[10px] font-bold">
-                  <button
-                    type="button"
-                    onClick={() => setCashNoteMode('set')}
-                    className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
-                      cashNoteMode === 'set'
-                        ? 'bg-white text-emerald-900 shadow-2xs font-black'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                    title="ক্লিক করলে সরাসরি এই নোটের টাকা বসবে"
-                  >
-                    Set Note
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCashNoteMode('add')}
-                    className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
-                      cashNoteMode === 'add'
-                        ? 'bg-white text-emerald-900 shadow-2xs font-black'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                    title="ক্লিক করলে আগের টাকার সাথে এই নোট যোগ হবে"
-                  >
-                    + Add
-                  </button>
-                </div>
                 <button
                   type="button"
                   onClick={handleExactCash}
-                  className="px-2 py-1 text-[10px] font-black bg-emerald-100 hover:bg-emerald-200 text-emerald-900 rounded-md border border-emerald-300 transition cursor-pointer shadow-2xs"
+                  className="px-2.5 py-1 text-[11px] font-black bg-emerald-100 hover:bg-emerald-200 text-emerald-900 rounded-lg border border-emerald-300 transition cursor-pointer shadow-2xs"
                   title="বিল সমপরিমাণ ক্যাশ বসান"
                 >
-                  Exact (৳{netTotal.toLocaleString()})
+                  Exact (<span className="text-[9px] font-normal opacity-75">৳</span>{netTotal.toLocaleString()})
                 </button>
                 {(Number(splitAmounts[cashMethod.id]) || 0) > 0 && (
                   <button
                     type="button"
                     onClick={handleResetCash}
-                    className="px-2 py-1 text-[10px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-md border border-rose-200 transition cursor-pointer"
+                    className="px-2 py-1 text-[11px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg border border-rose-200 transition cursor-pointer"
                     title="ক্যাশ ক্লিয়ার করুন"
                   >
                     Reset
@@ -535,13 +512,14 @@ export const SplitPaymentModal: React.FC = () => {
                     type="button"
                     id={`quick-tender-${amt}`}
                     onClick={() => handleCashDenomination(amt)}
-                    className={`py-2 px-1 rounded-xl text-xs font-black transition cursor-pointer flex flex-col items-center justify-center border shadow-2xs ${
+                    className={`py-2 px-1 rounded-xl text-xs font-black transition cursor-pointer flex items-center justify-center gap-0.5 border shadow-2xs ${
                       isSelected
                         ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-400 scale-[1.03]'
                         : 'bg-white hover:bg-emerald-50 text-slate-800 hover:text-emerald-800 border-slate-300 hover:border-emerald-400 active:scale-95'
                     }`}
                   >
-                    <span className="font-mono">{cashNoteMode === 'add' ? `+৳${amt}` : `৳${amt}`}</span>
+                    <span className="text-[10px] font-normal opacity-70">৳</span>
+                    <span className="font-mono text-xs">{amt}</span>
                   </button>
                 );
               })}
@@ -549,8 +527,8 @@ export const SplitPaymentModal: React.FC = () => {
           </div>
         )}
 
-        {/* Multi-Split Payment Form */}
-        <form onSubmit={handleSettle} className="space-y-3">
+        {/* Multi-Split Payment Form Content */}
+        <div className="space-y-3">
           {/* Customer Advance Adjustment Field */}
           {availableAdvance > 0 && (
             <div className="p-3 bg-emerald-50/80 border-2 border-emerald-300 rounded-xl mb-3 shadow-xs">
@@ -685,48 +663,50 @@ export const SplitPaymentModal: React.FC = () => {
               </div>
             </div>
           )}
-
-          {/* Action buttons */}
-          <div className="pt-4 flex gap-3">
-            <button
-              type="button"
-              onClick={closeSettleModal}
-              className="flex-1 py-3 rounded-xl border border-slate-300 text-slate-700 font-bold hover:bg-slate-100 text-sm transition cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              id="submit-settle-payment"
-              disabled={totalEntered < netTotal || isSubmitting || isAlreadySettled}
-              className={`flex-1 py-3 rounded-xl font-extrabold text-sm shadow-md transition flex items-center justify-center gap-2 ${
-                isAlreadySettled
-                  ? 'bg-slate-200 border border-slate-300 text-slate-500 cursor-not-allowed shadow-none'
-                  : totalEntered >= netTotal && !isSubmitting
-                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer' 
-                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-              }`}
-            >
-              {isAlreadySettled ? (
-                <>
-                  <Lock className="w-4 h-4 text-slate-500" />
-                  <span>Already Settled & Paid</span>
-                </>
-              ) : isSubmitting ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/60 border-t-white rounded-full animate-spin" />
-                  <span>Processing Settlement...</span>
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="w-5 h-5" />
-                  <span>Confirm Payment & Settle Bill</span>
-                </>
-              )}
-            </button>
-          </div>
-        </form>
+        </div>
       </div>
-    </div>
+
+      {/* Sticky Action Buttons Footer */}
+      <div className="shrink-0 p-3 sm:p-4 bg-slate-50 border-t border-slate-200 flex gap-3 z-10 shadow-xs">
+        <button
+          type="button"
+          onClick={closeSettleModal}
+          className="flex-1 py-3 rounded-xl border border-slate-300 text-slate-700 font-bold hover:bg-slate-100 text-sm transition cursor-pointer"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          id="submit-settle-payment"
+          disabled={totalEntered < netTotal || isSubmitting || isAlreadySettled}
+          className={`flex-1 py-3 rounded-xl font-extrabold text-sm shadow-md transition flex items-center justify-center gap-2 ${
+            isAlreadySettled
+              ? 'bg-slate-200 border border-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+              : totalEntered >= netTotal && !isSubmitting
+                ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer' 
+                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+          }`}
+        >
+          {isAlreadySettled ? (
+            <>
+              <Lock className="w-4 h-4 text-slate-500" />
+              <span>Already Settled & Paid</span>
+            </>
+          ) : isSubmitting ? (
+            <>
+              <div className="w-4 h-4 border-2 border-white/60 border-t-white rounded-full animate-spin" />
+              <span>Processing Settlement...</span>
+            </>
+          ) : (
+            <>
+              <CheckCircle2 className="w-5 h-5" />
+              <span>Confirm Payment & Settle Bill</span>
+            </>
+          )}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
   );
 };
