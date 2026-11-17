@@ -4713,7 +4713,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return;
     }
 
-    let activeSerialConfig = { ...(data.serialConfig || DEFAULT_SERIAL_CONFIG) };
+    let activeSerialConfig = { ...(dataRef.current?.serialConfig || data.serialConfig || DEFAULT_SERIAL_CONFIG) };
     let baseKotNo = table.kotBaseSerial;
     let serialConfigChanged = false;
 
@@ -4730,6 +4730,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
       activeSerialConfig.kotNextNumber = num + 1;
       serialConfigChanged = true;
+      if (dataRef.current) {
+        dataRef.current.serialConfig = { ...(dataRef.current.serialConfig || {}), ...activeSerialConfig };
+      }
     }
 
     const nextKotCount = (table.kotCount || 0) + 1;
@@ -5737,7 +5740,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     // Auto-dispatch KOT to kitchen handled via receipt hardware print below without conflicting network KOT_SUBMIT
     const changeReturn = Math.max(0, totalEntered - netTotal);
     const cashRetained = Math.max(0, computedCash - changeReturn);
-    let activeSerialConfig = { ...(data.serialConfig || DEFAULT_SERIAL_CONFIG) };
+    let activeSerialConfig = { ...(dataRef.current?.serialConfig || data.serialConfig || DEFAULT_SERIAL_CONFIG) };
     let serialConfigChanged = false;
     let invoiceNo = table.linkedInvoiceNo;
     const isAlreadyInSales = invoiceNo && (dataRef.current?.sales || data.sales || []).some((s: any) => s.invoiceNo === invoiceNo);
@@ -5755,6 +5758,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
       activeSerialConfig.posInvoiceNextNumber = num + 1;
       serialConfigChanged = true;
+      if (dataRef.current) {
+        dataRef.current.serialConfig = { ...(dataRef.current.serialConfig || {}), ...activeSerialConfig };
+      }
     }
 
     const unprintedItems = table.cart.filter(item => {
@@ -5781,6 +5787,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
         activeSerialConfig.kotNextNumber = num + 1;
         serialConfigChanged = true;
+        if (dataRef.current) {
+          dataRef.current.serialConfig = { ...(dataRef.current.serialConfig || {}), ...activeSerialConfig };
+        }
       }
       effectiveKotCount = (effectiveKotCount || 0) + 1;
 

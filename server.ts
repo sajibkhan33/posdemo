@@ -2253,7 +2253,10 @@ async function startServer() {
       if (serialConfig && typeof serialConfig === 'object' && cachedState) {
         cachedState.serialConfig = {
           ...(cachedState.serialConfig || {}),
-          ...serialConfig
+          ...serialConfig,
+          posInvoiceNextNumber: Math.max(cachedState.serialConfig?.posInvoiceNextNumber || 1, serialConfig.posInvoiceNextNumber || 1),
+          kotNextNumber: Math.max(cachedState.serialConfig?.kotNextNumber || 1, serialConfig.kotNextNumber || 1),
+          orderRefNextNumber: Math.max(cachedState.serialConfig?.orderRefNextNumber || 1, serialConfig.orderRefNextNumber || 1)
         };
       }
 
