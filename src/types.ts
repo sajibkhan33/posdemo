@@ -107,6 +107,7 @@ export interface PrintTemplate {
   showDateTime: boolean;
   showPricesOnKot: boolean;
   showPrices?: boolean;
+  showTotalPriceOnKot?: boolean;
   showNotes: boolean;
   fontSize: 'sm' | 'base' | 'lg';
   footerMessage?: string; // e.g. "Thank you for dining with us!", "⚡ Fast Kitchen Dispatch"
@@ -855,6 +856,7 @@ export interface PrintableReceipt {
   isPaid?: boolean;
   isDirectPrint?: boolean;
   showPrices?: boolean;
+  showTotalPrice?: boolean;
   paperWidth?: ThermalPaperWidth;
   headerTitle?: string;
   showLogo?: boolean;

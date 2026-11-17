@@ -493,8 +493,72 @@ function buildKotEscPosBuffer(req, slip, index, total, targetPrinter) {
 
   // 5. Items Grid
   const shouldShowPrices = Boolean(slip.showPrices || req.showPrices);
+  const shouldShowTotalPrice = Boolean(slip.showTotalPrice || req.showTotalPrice);
 
-  if (shouldShowPrices) {
+  if (shouldShowPrices && shouldShowTotalPrice) {
+    // 4 Columns: ITEM, QTY, PRICE, TOTAL
+    pushBytes([0x1B, 0x45, 0x01]); // Bold ON
+    if (width === 48) {
+      const colItemH = 'ITEM'.padEnd(21, ' ');
+      const colQtyH = ' QTY ';
+      const colPriceH = '    PRICE';
+      const colTotalH = '     TOTAL';
+      pushStr(colItemH + ' ' + colQtyH + ' ' + colPriceH + ' ' + colTotalH + '\n');
+    } else {
+      const colItemH = 'ITEM'.padEnd(12, ' ');
+      const colQtyH = 'QTY';
+      const colPriceH = ' PRICE';
+      const colTotalH = '  TOTAL';
+      pushStr(colItemH + ' ' + colQtyH + ' ' + colPriceH + ' ' + colTotalH + '\n');
+    }
+    pushBytes([0x1B, 0x45, 0x00]); // Bold OFF
+    pushStr(divider);
+
+    // Food Items with Unit Price and Total Price
+    const nameLimit = width === 48 ? 21 : 12;
+    for (const item of (slip.items || [])) {
+      const itemPrice = Number(item.price || 0);
+      const itemTotal = itemPrice * Number(item.qty || 1);
+
+      let firstLineName = (item.name || '').trim();
+      let remainder = '';
+      if (firstLineName.length > nameLimit) {
+        const lastSpace = firstLineName.lastIndexOf(' ', nameLimit);
+        if (lastSpace > 6) {
+          remainder = firstLineName.slice(lastSpace + 1).trim();
+          firstLineName = firstLineName.slice(0, lastSpace);
+        } else {
+          remainder = firstLineName.slice(nameLimit).trim();
+          firstLineName = firstLineName.slice(0, nameLimit);
+        }
+      }
+
+      if (width === 48) {
+        const nameCol = firstLineName.padEnd(21, ' ');
+        const qtyCol = (item.qty + 'x').padStart(4, ' ').padEnd(5, ' ');
+        const priceCol = itemPrice.toFixed(2).padStart(9, ' ');
+        const totalCol = itemTotal.toFixed(2).padStart(10, ' ');
+        pushBytes([0x1B, 0x45, 0x01]); // Bold ON
+        pushStr(nameCol + ' ' + qtyCol + ' ' + priceCol + ' ' + totalCol + '\n');
+        pushBytes([0x1B, 0x45, 0x00]); // Bold OFF
+      } else {
+        const nameCol = firstLineName.padEnd(12, ' ');
+        const qtyCol = (item.qty + 'x').padStart(3, ' ');
+        const priceCol = itemPrice.toFixed(0).padStart(6, ' ');
+        const totalCol = itemTotal.toFixed(0).padStart(7, ' ');
+        pushBytes([0x1B, 0x45, 0x01]); // Bold ON
+        pushStr(nameCol + ' ' + qtyCol + ' ' + priceCol + ' ' + totalCol + '\n');
+        pushBytes([0x1B, 0x45, 0x00]); // Bold OFF
+      }
+
+      if (remainder) pushStr('  ' + remainder + '\n');
+      if (item.variation) pushStr('   - Cut: ' + item.variation + '\n');
+      if (item.addons && item.addons.length > 0) pushStr('   - Extras: ' + item.addons.join(', ') + '\n');
+      if (item.notes) pushStr('   - Note: ' + item.notes + '\n');
+    }
+
+    pushStr(divider);
+  } else if (shouldShowPrices) {
     // 3 Columns: ITEM (starts col 1), QTY (center), PRICE (ends col 48)
     pushBytes([0x1B, 0x45, 0x01]); // Bold ON
     if (width === 48) {
@@ -542,6 +606,65 @@ function buildKotEscPosBuffer(req, slip, index, total, targetPrinter) {
         const priceCol = itemPrice.toFixed(2).padStart(11, ' ');
         pushBytes([0x1B, 0x45, 0x01]); // Bold ON
         pushStr(nameCol + ' ' + qtyCol + ' ' + priceCol + '\n');
+        pushBytes([0x1B, 0x45, 0x00]); // Bold OFF
+      }
+
+      if (remainder) pushStr('  ' + remainder + '\n');
+      if (item.variation) pushStr('   - Cut: ' + item.variation + '\n');
+      if (item.addons && item.addons.length > 0) pushStr('   - Extras: ' + item.addons.join(', ') + '\n');
+      if (item.notes) pushStr('   - Note: ' + item.notes + '\n');
+    }
+
+    pushStr(divider);
+  } else if (shouldShowTotalPrice) {
+    // 3 Columns: ITEM (starts col 1), QTY (center), TOTAL (ends col 48)
+    pushBytes([0x1B, 0x45, 0x01]); // Bold ON
+    if (width === 48) {
+      const colItemH = 'ITEM'.padEnd(28, ' ');
+      const colQtyH = ' QTY  ';
+      const colPriceH = '       TOTAL';
+      pushStr(colItemH + ' ' + colQtyH + ' ' + colPriceH + '\n');
+    } else {
+      const colItemH = 'ITEM'.padEnd(14, ' ');
+      const colQtyH = ' QTY ';
+      const colPriceH = '     TOTAL';
+      pushStr(colItemH + ' ' + colQtyH + ' ' + colPriceH + '\n');
+    }
+    pushBytes([0x1B, 0x45, 0x00]); // Bold OFF
+    pushStr(divider);
+
+    // Food Items with Total Price Only
+    const nameLimit = width === 48 ? 28 : 14;
+    for (const item of (slip.items || [])) {
+      const itemPrice = Number(item.price || 0);
+      const itemTotal = itemPrice * Number(item.qty || 1);
+
+      let firstLineName = (item.name || '').trim();
+      let remainder = '';
+      if (firstLineName.length > nameLimit) {
+        const lastSpace = firstLineName.lastIndexOf(' ', nameLimit);
+        if (lastSpace > 8) {
+          remainder = firstLineName.slice(lastSpace + 1).trim();
+          firstLineName = firstLineName.slice(0, lastSpace);
+        } else {
+          remainder = firstLineName.slice(nameLimit).trim();
+          firstLineName = firstLineName.slice(0, nameLimit);
+        }
+      }
+
+      if (width === 48) {
+        const nameCol = firstLineName.padEnd(28, ' ');
+        const qtyCol = (item.qty + 'x').padStart(4, ' ').padEnd(6, ' ');
+        const totalCol = itemTotal.toFixed(2).padStart(12, ' ');
+        pushBytes([0x1B, 0x45, 0x01]); // Bold ON
+        pushStr(nameCol + ' ' + qtyCol + ' ' + totalCol + '\n');
+        pushBytes([0x1B, 0x45, 0x00]); // Bold OFF
+      } else {
+        const nameCol = firstLineName.padEnd(14, ' ');
+        const qtyCol = (item.qty + 'x').padStart(4, ' ').padEnd(5, ' ');
+        const totalCol = itemTotal.toFixed(2).padStart(11, ' ');
+        pushBytes([0x1B, 0x45, 0x01]); // Bold ON
+        pushStr(nameCol + ' ' + qtyCol + ' ' + totalCol + '\n');
         pushBytes([0x1B, 0x45, 0x00]); // Bold OFF
       }
 

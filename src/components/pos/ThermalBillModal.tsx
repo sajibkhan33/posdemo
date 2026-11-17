@@ -923,7 +923,8 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
 
         {/* Food Items Table with Uniform Font Sizes */}
         {(() => {
-          const isKotPricesEnabled = Boolean(activeTemplate?.showPricesOnKot || printableReceipt?.showPrices);
+          const isKotPricesEnabled = Boolean(activeTemplate?.showPricesOnKot ?? printableReceipt?.showPrices);
+          const isKotTotalEnabled = Boolean(activeTemplate?.showTotalPriceOnKot ?? printableReceipt?.showTotalPrice);
           return (
             <>
               <div className="py-2 border-b border-dashed border-slate-800">
@@ -931,8 +932,9 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
                   <thead>
                     <tr className="border-b border-slate-300 text-slate-500 font-semibold text-xs">
                       <th className="py-1">Food Item &amp; Customization</th>
-                      <th className={`py-1 ${isKotPricesEnabled ? 'text-center' : 'text-right'}`}>Qty</th>
+                      <th className={`py-1 ${isKotPricesEnabled || isKotTotalEnabled ? 'text-center' : 'text-right'}`}>Qty</th>
                       {isKotPricesEnabled && <th className="py-1 text-right">Price</th>}
+                      {isKotTotalEnabled && <th className="py-1 text-right">Total</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -958,12 +960,17 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
                             </div>
                           )}
                         </td>
-                        <td className={`py-1.5 font-bold text-xs text-slate-900 align-top ${isKotPricesEnabled ? 'text-center' : 'text-right'}`}>
+                        <td className={`py-1.5 font-bold text-xs text-slate-900 align-top ${isKotPricesEnabled || isKotTotalEnabled ? 'text-center' : 'text-right'}`}>
                           {item.qty}x {isCancelKot ? 'VOID' : ''}
                         </td>
                         {isKotPricesEnabled && (
                           <td className="py-1.5 text-right font-bold text-xs text-slate-900 align-top">
                             ৳{Number(item.price || 0).toLocaleString()}
+                          </td>
+                        )}
+                        {isKotTotalEnabled && (
+                          <td className="py-1.5 text-right font-bold text-xs text-slate-900 align-top">
+                            ৳{Number((item.price || 0) * (item.qty || 1)).toLocaleString()}
                           </td>
                         )}
                       </tr>

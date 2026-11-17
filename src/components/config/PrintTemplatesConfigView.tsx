@@ -77,6 +77,7 @@ export const PrintTemplatesConfigView: React.FC = () => {
   const [showCustomer, setShowCustomer] = useState(true);
   const [showDateTime, setShowDateTime] = useState(true);
   const [showPricesOnKot, setShowPricesOnKot] = useState(true);
+  const [showTotalPriceOnKot, setShowTotalPriceOnKot] = useState(false);
   const [showNotes, setShowNotes] = useState(true);
   const [fontSize, setFontSize] = useState<'sm' | 'base' | 'lg'>('base');
   const [footerMessage, setFooterMessage] = useState('⚡ Fast Kitchen Dispatch Required');
@@ -107,6 +108,7 @@ export const PrintTemplatesConfigView: React.FC = () => {
     setShowCustomer(base ? base.showCustomer !== false : true);
     setShowDateTime(base ? base.showDateTime !== false : true);
     setShowPricesOnKot(base ? Boolean(base.showPricesOnKot) : true);
+    setShowTotalPriceOnKot(base ? Boolean(base.showTotalPriceOnKot) : false);
     setShowNotes(base ? base.showNotes !== false : true);
     setFontSize(base?.fontSize || 'base');
     const currentRestName = profile?.name || 'Restaurant POS';
@@ -139,6 +141,7 @@ export const PrintTemplatesConfigView: React.FC = () => {
     setShowCustomer(t.showCustomer !== false);
     setShowDateTime(t.showDateTime !== false);
     setShowPricesOnKot(Boolean(t.showPricesOnKot));
+    setShowTotalPriceOnKot(Boolean(t.showTotalPriceOnKot));
     setShowNotes(t.showNotes !== false);
     setFontSize(t.fontSize || 'base');
     setFooterMessage(t.footerMessage || '');
@@ -176,6 +179,7 @@ export const PrintTemplatesConfigView: React.FC = () => {
       showCustomer,
       showDateTime,
       showPricesOnKot: Boolean(showPricesOnKot),
+      showTotalPriceOnKot: Boolean(showTotalPriceOnKot),
       showNotes,
       fontSize,
       footerMessage: footerMessage.trim(),
@@ -743,14 +747,23 @@ export const PrintTemplatesConfigView: React.FC = () => {
                       />
                       <span>Show Customer</span>
                     </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
+                    <label className="flex items-center gap-1.5 cursor-pointer" title="Print single unit price for each item">
                       <input
                         type="checkbox"
                         checked={showPricesOnKot}
                         onChange={e => setShowPricesOnKot(e.target.checked)}
                         className="w-3.5 h-3.5 rounded text-amber-500"
                       />
-                      <span>Show Prices</span>
+                      <span>Show Unit Price</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer" title="Print total amount (Qty × Price) for each item">
+                      <input
+                        type="checkbox"
+                        checked={showTotalPriceOnKot}
+                        onChange={e => setShowTotalPriceOnKot(e.target.checked)}
+                        className="w-3.5 h-3.5 rounded text-amber-500"
+                      />
+                      <span>Show Total Price</span>
                     </label>
                     <label className="flex items-center gap-1.5 cursor-pointer">
                       <input
@@ -947,6 +960,7 @@ export const PrintTemplatesConfigView: React.FC = () => {
                           <th className="py-0.5">Item</th>
                           <th className="py-0.5 text-center">Qty</th>
                           {showPricesOnKot && <th className="py-0.5 text-right">Price</th>}
+                          {showTotalPriceOnKot && <th className="py-0.5 text-right">Total</th>}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -956,12 +970,14 @@ export const PrintTemplatesConfigView: React.FC = () => {
                             {showNotes && <div className="text-[9px] text-slate-500">+ Extra Cheese</div>}
                           </td>
                           <td className="py-1 text-center font-extrabold text-rose-700">2x</td>
-                          {showPricesOnKot && <td className="py-1 text-right font-bold">৳580</td>}
+                          {showPricesOnKot && <td className="py-1 text-right font-bold">৳290</td>}
+                          {showTotalPriceOnKot && <td className="py-1 text-right font-bold text-amber-800">৳580</td>}
                         </tr>
                         <tr>
                           <td className="py-1 font-bold font-sans">Mineral Water 500ml</td>
                           <td className="py-1 text-center font-extrabold text-rose-700">1x</td>
                           {showPricesOnKot && <td className="py-1 text-right font-bold">৳30</td>}
+                          {showTotalPriceOnKot && <td className="py-1 text-right font-bold text-amber-800">৳30</td>}
                         </tr>
                       </tbody>
                     </table>

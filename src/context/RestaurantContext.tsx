@@ -611,6 +611,7 @@ export const DEFAULT_PRINT_TEMPLATES: PrintTemplate[] = [
     showCustomer: true,
     showDateTime: true,
     showPricesOnKot: true,
+    showTotalPriceOnKot: false,
     showNotes: true,
     fontSize: "base",
     footerMessage: "⚡ Fast Kitchen Dispatch Required",
@@ -639,6 +640,7 @@ export const DEFAULT_PRINT_TEMPLATES: PrintTemplate[] = [
     showCustomer: true,
     showDateTime: true,
     showPricesOnKot: true,
+    showTotalPriceOnKot: false,
     showNotes: true,
     fontSize: "sm",
     footerMessage: "🍹 Prepare Fresh Drinks",
@@ -667,6 +669,7 @@ export const DEFAULT_PRINT_TEMPLATES: PrintTemplate[] = [
     showCustomer: true,
     showDateTime: true,
     showPricesOnKot: true,
+    showTotalPriceOnKot: false,
     showNotes: true,
     fontSize: "base",
     footerMessage: "Thank you for dining with us!",
@@ -695,6 +698,7 @@ export const DEFAULT_PRINT_TEMPLATES: PrintTemplate[] = [
     showCustomer: true,
     showDateTime: true,
     showPricesOnKot: true,
+    showTotalPriceOnKot: false,
     showNotes: true,
     fontSize: "sm",
     footerMessage: "Enjoy Your Meal! Order again soon.",
@@ -3940,6 +3944,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       ...tpl,
       id,
       showPricesOnKot: Boolean(tpl.showPricesOnKot),
+      showTotalPriceOnKot: Boolean(tpl.showTotalPriceOnKot),
       isActive: tpl.isActive !== undefined ? tpl.isActive : true
     };
     lastLocalEditTimeRef.current = Date.now();
@@ -3968,7 +3973,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             return {
               ...t,
               ...updates,
-              showPricesOnKot: updates.showPricesOnKot !== undefined ? Boolean(updates.showPricesOnKot) : Boolean(t.showPricesOnKot)
+              showPricesOnKot: updates.showPricesOnKot !== undefined ? Boolean(updates.showPricesOnKot) : Boolean(t.showPricesOnKot),
+              showTotalPriceOnKot: updates.showTotalPriceOnKot !== undefined ? Boolean(updates.showTotalPriceOnKot) : Boolean(t.showTotalPriceOnKot)
             };
           }
           if (updates.isDefault && (t.templateType === targetType || t.templateType === 'BOTH')) {
@@ -4819,7 +4825,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         receiptType: 'KOT',
         isDirectPrint: false,
         targetTemplateId: defaultPrimaryKotTemplate?.id,
-        showPrices: isGlobalKotPricesEnabled
+        showPrices: Boolean(defaultPrimaryKotTemplate?.showPricesOnKot),
+        showTotalPrice: Boolean(defaultPrimaryKotTemplate?.showTotalPriceOnKot)
       });
     } else {
       // Direct submit / print: dispatch directly to hardware printer in background
@@ -4856,12 +4863,14 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             const deptItems = enriched.filter(i => i.department === dept);
             const deptPrinter = getPrinterForDept(dept);
             const deptTemplate = getTemplateForDept(dept);
-            const showPrices = Boolean(deptTemplate?.showPricesOnKot || isGlobalKotPricesEnabled);
+            const showPrices = Boolean(deptTemplate?.showPricesOnKot);
+            const showTotalPrice = Boolean(deptTemplate?.showTotalPriceOnKot);
             const showWaiter = deptTemplate?.showWaiter !== undefined ? Boolean(deptTemplate.showWaiter) : (defaultPrimaryKotTemplate?.showWaiter !== false);
             return {
               station: dept,
               targetPrinterName: deptPrinter?.name,
               showPrices,
+              showTotalPrice,
               showWaiter,
               showCustomer: Boolean(deptTemplate?.showCustomer ?? defaultPrimaryKotTemplate?.showCustomer),
               showDateTime: deptTemplate?.showDateTime !== false,
@@ -4879,7 +4888,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         : [{
             station: orderDepartments[0] || 'Main Kitchen',
             targetPrinterName: getPrinterForDept(orderDepartments[0] || 'Main Kitchen')?.name,
-            showPrices: Boolean(getTemplateForDept(orderDepartments[0] || 'Main Kitchen')?.showPricesOnKot || isGlobalKotPricesEnabled),
+            showPrices: Boolean(getTemplateForDept(orderDepartments[0] || 'Main Kitchen')?.showPricesOnKot),
+            showTotalPrice: Boolean(getTemplateForDept(orderDepartments[0] || 'Main Kitchen')?.showTotalPriceOnKot),
             showWaiter: getTemplateForDept(orderDepartments[0] || 'Main Kitchen')?.showWaiter !== undefined 
               ? Boolean(getTemplateForDept(orderDepartments[0] || 'Main Kitchen')?.showWaiter) 
               : (defaultPrimaryKotTemplate?.showWaiter !== false),
@@ -5819,6 +5829,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               station: dept,
               targetPrinterName: deptPrinter?.name,
               showPrices: Boolean(deptTemplate?.showPricesOnKot),
+              showTotalPrice: Boolean(deptTemplate?.showTotalPriceOnKot),
               showWaiter: deptTemplate?.showWaiter !== false,
               showCustomer: Boolean(deptTemplate?.showCustomer),
               showDateTime: deptTemplate?.showDateTime !== false,
@@ -5836,7 +5847,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         : [{
             station: orderDepartments[0] || 'Main Kitchen',
             targetPrinterName: getPrinterForDept(orderDepartments[0] || 'Main Kitchen')?.name,
-            showPrices: false,
+            showPrices: Boolean(getTemplateForDept(orderDepartments[0] || 'Main Kitchen')?.showPricesOnKot),
+            showTotalPrice: Boolean(getTemplateForDept(orderDepartments[0] || 'Main Kitchen')?.showTotalPriceOnKot),
             showWaiter: true,
             showCustomer: false,
             showDateTime: true,
