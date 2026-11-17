@@ -2250,14 +2250,22 @@ async function startServer() {
       const { tables, newSale, action = 'TABLES_UPDATE', serialConfig, sender, modifiedTableId } = req.body;
       const now = Date.now();
 
+      const isExplicitSerialOverride = (action === 'SERIAL_CONFIG_OVERRIDE' || action === 'SERIAL_CONFIG_UPDATE');
       if (serialConfig && typeof serialConfig === 'object' && cachedState) {
-        cachedState.serialConfig = {
-          ...(cachedState.serialConfig || {}),
-          ...serialConfig,
-          posInvoiceNextNumber: Math.max(cachedState.serialConfig?.posInvoiceNextNumber || 1, serialConfig.posInvoiceNextNumber || 1),
-          kotNextNumber: Math.max(cachedState.serialConfig?.kotNextNumber || 1, serialConfig.kotNextNumber || 1),
-          orderRefNextNumber: Math.max(cachedState.serialConfig?.orderRefNextNumber || 1, serialConfig.orderRefNextNumber || 1)
-        };
+        if (isExplicitSerialOverride) {
+          cachedState.serialConfig = {
+            ...(cachedState.serialConfig || {}),
+            ...serialConfig
+          };
+        } else {
+          cachedState.serialConfig = {
+            ...(cachedState.serialConfig || {}),
+            ...serialConfig,
+            posInvoiceNextNumber: Math.max(cachedState.serialConfig?.posInvoiceNextNumber || 1, serialConfig.posInvoiceNextNumber || 1),
+            kotNextNumber: Math.max(cachedState.serialConfig?.kotNextNumber || 1, serialConfig.kotNextNumber || 1),
+            orderRefNextNumber: Math.max(cachedState.serialConfig?.orderRefNextNumber || 1, serialConfig.orderRefNextNumber || 1)
+          };
+        }
       }
 
       if (Array.isArray(tables) && cachedState) {
@@ -2606,9 +2614,18 @@ async function startServer() {
           isTableStructureChanged ? 'TABLES_CONFIG_UPDATE' : 'TABLES_UPDATE'
         );
 
+        const mergedSerialConfig = (clientData.serialConfig && cachedState?.serialConfig && !isPurge) ? {
+          ...cachedState.serialConfig,
+          ...clientData.serialConfig,
+          posInvoiceNextNumber: Math.max(cachedState.serialConfig.posInvoiceNextNumber || 1, clientData.serialConfig.posInvoiceNextNumber || 1),
+          kotNextNumber: Math.max(cachedState.serialConfig.kotNextNumber || 1, clientData.serialConfig.kotNextNumber || 1),
+          orderRefNextNumber: Math.max(cachedState.serialConfig.orderRefNextNumber || 1, clientData.serialConfig.orderRefNextNumber || 1)
+        } : (clientData.serialConfig || cachedState?.serialConfig);
+
         cachedState = {
           ...cachedState,
           ...clientData,
+          serialConfig: mergedSerialConfig,
           sales: mergedSales,
           tables: mergedTables
         };

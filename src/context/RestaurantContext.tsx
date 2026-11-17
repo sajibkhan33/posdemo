@@ -2478,6 +2478,14 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
 
     if (result.data) {
+      if (!isInitial && dataRef.current?.serialConfig && result.data.serialConfig) {
+        result.data.serialConfig = {
+          ...result.data.serialConfig,
+          posInvoiceNextNumber: Math.max(dataRef.current.serialConfig.posInvoiceNextNumber || 1, result.data.serialConfig.posInvoiceNextNumber || 1),
+          kotNextNumber: Math.max(dataRef.current.serialConfig.kotNextNumber || 1, result.data.serialConfig.kotNextNumber || 1),
+          orderRefNextNumber: Math.max(dataRef.current.serialConfig.orderRefNextNumber || 1, result.data.serialConfig.orderRefNextNumber || 1)
+        };
+      }
       if (!result.data.printTemplates || result.data.printTemplates.length === 0) {
         result.data.printTemplates = (dataRef.current.printTemplates && dataRef.current.printTemplates.length > 0)
           ? dataRef.current.printTemplates
@@ -2681,17 +2689,13 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       let mergedSerialConfig = prev.serialConfig;
       if (incomingSerialConfig) {
-        if (!updatedSales || updatedSales.length === 0) {
-          mergedSerialConfig = incomingSerialConfig;
-        } else {
-          mergedSerialConfig = {
-            ...prev.serialConfig,
-            ...incomingSerialConfig,
-            posInvoiceNextNumber: Math.max(prev.serialConfig?.posInvoiceNextNumber || 1, incomingSerialConfig.posInvoiceNextNumber || 1),
-            kotNextNumber: Math.max(prev.serialConfig?.kotNextNumber || 1, incomingSerialConfig.kotNextNumber || 1),
-            orderRefNextNumber: Math.max(prev.serialConfig?.orderRefNextNumber || 1, incomingSerialConfig.orderRefNextNumber || 1)
-          };
-        }
+        mergedSerialConfig = {
+          ...prev.serialConfig,
+          ...incomingSerialConfig,
+          posInvoiceNextNumber: Math.max(dataRef.current?.serialConfig?.posInvoiceNextNumber || prev.serialConfig?.posInvoiceNextNumber || 1, incomingSerialConfig.posInvoiceNextNumber || 1),
+          kotNextNumber: Math.max(dataRef.current?.serialConfig?.kotNextNumber || prev.serialConfig?.kotNextNumber || 1, incomingSerialConfig.kotNextNumber || 1),
+          orderRefNextNumber: Math.max(dataRef.current?.serialConfig?.orderRefNextNumber || prev.serialConfig?.orderRefNextNumber || 1, incomingSerialConfig.orderRefNextNumber || 1)
+        };
       }
 
       const next = {
@@ -2916,8 +2920,17 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 return st;
               });
             }
+            const safeSerialConfig = (incomingData.serialConfig && prev.serialConfig) ? {
+              ...prev.serialConfig,
+              ...incomingData.serialConfig,
+              posInvoiceNextNumber: Math.max(dataRef.current?.serialConfig?.posInvoiceNextNumber || prev.serialConfig.posInvoiceNextNumber || 1, incomingData.serialConfig.posInvoiceNextNumber || 1),
+              kotNextNumber: Math.max(dataRef.current?.serialConfig?.kotNextNumber || prev.serialConfig.kotNextNumber || 1, incomingData.serialConfig.kotNextNumber || 1),
+              orderRefNextNumber: Math.max(dataRef.current?.serialConfig?.orderRefNextNumber || prev.serialConfig.orderRefNextNumber || 1, incomingData.serialConfig.orderRefNextNumber || 1)
+            } : (incomingData.serialConfig || prev.serialConfig);
+
             const next = {
               ...incomingData,
+              serialConfig: safeSerialConfig,
               tables: mergedTables
             };
             dataRef.current = next;

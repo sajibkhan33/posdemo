@@ -78,7 +78,7 @@ export const SerialConfigView: React.FC = () => {
       fetch('/api/restaurant/pos-sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serialConfig: formData })
+        body: JSON.stringify({ serialConfig: formData, action: 'SERIAL_CONFIG_OVERRIDE' })
       }).catch(() => {});
     } catch {}
     setSaveSuccess(true);
@@ -111,7 +111,7 @@ export const SerialConfigView: React.FC = () => {
         fetch('/api/restaurant/pos-sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ serialConfig: defaults })
+          body: JSON.stringify({ serialConfig: defaults, action: 'SERIAL_CONFIG_OVERRIDE' })
         }).catch(() => {});
       } catch {}
       setSaveSuccess(true);
