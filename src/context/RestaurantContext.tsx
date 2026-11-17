@@ -2614,6 +2614,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           discountVal: 0,
           cart: [],
           orderRef: undefined,
+          kotBaseSerial: undefined,
           kotCount: 0,
           billCount: 0,
           billedAt: undefined,
@@ -4259,63 +4260,18 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         });
       }
 
-      const todayDateStr = prev.businessDay?.date || new Date().toISOString().split('T')[0];
-      const { updated: resetCheckedConfig, changed: resetChanged } = checkAndResetSerialConfig(
-        prev.serialConfig || DEFAULT_SERIAL_CONFIG,
-        todayDateStr
-      );
-      let activeSerialConfig = { ...resetCheckedConfig };
-      if (activeSerialConfig.kotPrefix === 'KOT-ORD-') activeSerialConfig.kotPrefix = 'KOT-';
-      let serialAllocated = resetChanged;
-
       const updatedTables = prev.tables.map(t => {
         if (t.id !== tableId) return t;
         const isStartingNewOrder = t.status === 'free' || !t.cart || t.cart.length === 0;
         const assignedWaiter = t.waiter || (currentUser?.role === 'WAITER' ? currentUser.name : '');
-        
-        let orderRef = isStartingNewOrder ? undefined : t.orderRef;
-        let kotBaseSerial = isStartingNewOrder ? undefined : t.kotBaseSerial;
-
-        const existingOrderRefs = new Set([
-          ...(prev.sales || []).map((s: any) => s.orderRef),
-          ...(prev.tables || []).map((tbl: any) => tbl.orderRef)
-        ].filter(Boolean));
-
-        if (!orderRef || existingOrderRefs.has(orderRef)) {
-          let num = activeSerialConfig.orderRefNextNumber || 1;
-          let candidate = `${activeSerialConfig.orderRefPrefix || 'ORD-'}${String(num).padStart(activeSerialConfig.orderRefPadding || 4, '0')}`;
-          while (existingOrderRefs.has(candidate)) {
-            num++;
-            candidate = `${activeSerialConfig.orderRefPrefix || 'ORD-'}${String(num).padStart(activeSerialConfig.orderRefPadding || 4, '0')}`;
-          }
-          orderRef = candidate;
-          activeSerialConfig.orderRefNextNumber = num + 1;
-          serialAllocated = true;
-        }
-
-        if (!kotBaseSerial || kotBaseSerial.startsWith('KOT-ORD-')) {
-          const num = activeSerialConfig.kotNextNumber || 1;
-          const padded = String(num).padStart(activeSerialConfig.kotPadding || 4, '0');
-          const effKotPrefix = (activeSerialConfig.kotPrefix && activeSerialConfig.kotPrefix !== 'KOT-ORD-') ? activeSerialConfig.kotPrefix : 'KOT-';
-          if (activeSerialConfig.kotIncludeDate) {
-            const dateStr = todayDateStr.replace(/-/g, '');
-            kotBaseSerial = `${effKotPrefix}${dateStr}-${padded}`;
-          } else {
-            kotBaseSerial = `${effKotPrefix}${padded}`;
-          }
-          activeSerialConfig.kotNextNumber = num + 1;
-          serialAllocated = true;
-        }
-
-        orderRef = kotBaseSerial;
 
         return {
           ...t,
           status: t.status === 'free' ? 'hold' : t.status,
           cart: existingCart,
           waiter: assignedWaiter,
-          orderRef,
-          kotBaseSerial,
+          orderRef: isStartingNewOrder ? undefined : t.orderRef,
+          kotBaseSerial: isStartingNewOrder ? undefined : t.kotBaseSerial,
           orderCreatedBy: isStartingNewOrder ? (currentUser?.name || 'Cashier') : (t.orderCreatedBy || currentUser?.name || 'Cashier'),
           orderCreatedRole: isStartingNewOrder ? (currentUser?.role || 'CASHIER') : (t.orderCreatedRole || currentUser?.role || 'CASHIER'),
           orderCreatedId: isStartingNewOrder ? currentUser?.id : (t.orderCreatedId || currentUser?.id),
@@ -4334,8 +4290,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       const nextState = { 
         ...prev, 
-        tables: updatedTables,
-        serialConfig: serialAllocated ? activeSerialConfig : prev.serialConfig
+        tables: updatedTables
       };
       dataRef.current = nextState;
       return nextState;
@@ -4539,7 +4494,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         orderCreatedId: undefined,
         orderCreatedAt: undefined,
         billedAt: undefined,
-        billedAtTime: undefined
+        billedAtTime: undefined,
+        kotBaseSerial: undefined,
+        kotCount: 0,
+        billCount: 0,
+        orderRef: undefined
       } : t);
       const nextState = {
         ...prev,
@@ -5258,6 +5217,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           billedAt: undefined,
           billedAtTime: undefined,
           orderRef: undefined,
+          kotBaseSerial: undefined,
           kotCount: 0,
           billCount: 0
         } : t);
@@ -7121,7 +7081,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         orderCreatedId: undefined,
         orderCreatedAt: undefined,
         billedAt: undefined,
-        billedAtTime: undefined
+        billedAtTime: undefined,
+        kotBaseSerial: undefined,
+        kotCount: 0,
+        billCount: 0,
+        orderRef: undefined
       } : t)
     }));
     setActiveTab('sales');
