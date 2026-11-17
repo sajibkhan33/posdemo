@@ -21,7 +21,10 @@ import {
   AlertTriangle,
   Undo2,
   Check,
-  ArrowRightLeft
+  ArrowRightLeft,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import { SaleRecord } from '../../types';
 
@@ -46,6 +49,8 @@ export const SalesLedgerView: React.FC = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'VOIDED'>('ALL');
+  const [sortField, setSortField] = useState<'invoice' | 'kot' | 'time'>('invoice');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [isDueModalOpen, setIsDueModalOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reassignSale, setReassignSale] = useState<{ id: number; invoiceNo: string; waiterName: string } | null>(null);
@@ -117,8 +122,46 @@ export const SalesLedgerView: React.FC = () => {
     return true;
   });
 
-  const activeFilteredSales = filteredSales.filter(isSaleActive);
-  const voidedFilteredSales = filteredSales.filter(s => !isSaleActive(s));
+  // Helper to extract KOT serial for display and sorting
+  const extractKotSerial = (s: SaleRecord): string => {
+    return (
+      s.kotBaseSerial || 
+      (s.orderRef?.startsWith('KOT-') ? s.orderRef : null) || 
+      (s.details?.match(/KOT:\s*([^):#\s]+)/i)?.[1]?.trim()) || 
+      (s.orderRef ? s.orderRef.replace(/^ORD-/, 'KOT-') : null) || 
+      (s.details?.match(/Ref:\s*([^):]+)/i)?.[1]?.trim()?.replace(/^ORD-/, 'KOT-')) || 
+      (s.invoiceNo ? 'KOT-' + s.invoiceNo.replace(/\D/g, '').padStart(4, '0').slice(-4) : 'KOT-0001')
+    );
+  };
+
+  // Sort sales: default is Descending by POS Invoice (POS-0026 -> POS-0001)
+  const sortedSales = [...filteredSales].sort((a, b) => {
+    if (sortField === 'kot') {
+      const kotA = extractKotSerial(a);
+      const kotB = extractKotSerial(b);
+      const numA = parseInt(kotA.replace(/\D/g, '') || '0', 10);
+      const numB = parseInt(kotB.replace(/\D/g, '') || '0', 10);
+      if (numA !== numB) {
+        return sortOrder === 'desc' ? numB - numA : numA - numB;
+      }
+      return sortOrder === 'desc' ? (b.createdAt || 0) - (a.createdAt || 0) : (a.createdAt || 0) - (b.createdAt || 0);
+    }
+
+    if (sortField === 'time') {
+      return sortOrder === 'desc' ? (b.createdAt || 0) - (a.createdAt || 0) : (a.createdAt || 0) - (b.createdAt || 0);
+    }
+
+    // Default: 'invoice'
+    const numA = parseInt((a.invoiceNo || '').replace(/\D/g, '') || '0', 10);
+    const numB = parseInt((b.invoiceNo || '').replace(/\D/g, '') || '0', 10);
+    if (numA !== numB) {
+      return sortOrder === 'desc' ? numB - numA : numA - numB;
+    }
+    return sortOrder === 'desc' ? (b.createdAt || 0) - (a.createdAt || 0) : (a.createdAt || 0) - (b.createdAt || 0);
+  });
+
+  const activeFilteredSales = sortedSales.filter(isSaleActive);
+  const voidedFilteredSales = sortedSales.filter(s => !isSaleActive(s));
 
   const totalFilteredSales = activeFilteredSales.reduce((sum, s) => sum + (s.total || 0), 0);
   const totalFilteredCash = activeFilteredSales.reduce((sum, s) => sum + (s.cash || 0), 0);
@@ -355,7 +398,7 @@ export const SalesLedgerView: React.FC = () => {
           : 'All Recorded Transactions';
     const filterNote = search.trim() ? `Search Filter: "${search.trim()}"` : '';
 
-    const rowsHtml = filteredSales.map((s, idx) => {
+    const rowsHtml = sortedSales.map((s, idx) => {
       const active = isSaleActive(s);
       let payments = '';
       if (s.paymentBreakdown && Object.keys(s.paymentBreakdown).length > 0) {
@@ -647,6 +690,54 @@ export const SalesLedgerView: React.FC = () => {
             </button>
           </div>
 
+          {/* Quick Sort Controls */}
+          <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => {
+                if (sortField === 'invoice') {
+                  setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc');
+                } else {
+                  setSortField('invoice');
+                  setSortOrder('desc');
+                }
+              }}
+              className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 ${
+                sortField === 'invoice' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
+              }`}
+              title="Sort by POS Invoice number (Click to toggle Descending / Ascending)"
+            >
+              <span>POS Invoice</span>
+              {sortField === 'invoice' ? (
+                sortOrder === 'desc' ? <ArrowDown className="w-3.5 h-3.5 text-blue-600" /> : <ArrowUp className="w-3.5 h-3.5 text-blue-600" />
+              ) : (
+                <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (sortField === 'kot') {
+                  setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc');
+                } else {
+                  setSortField('kot');
+                  setSortOrder('desc');
+                }
+              }}
+              className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 ${
+                sortField === 'kot' ? 'bg-white text-amber-800 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
+              }`}
+              title="Sort by Kitchen KOT sequence (Click to toggle Descending / Ascending)"
+            >
+              <span>KOT Order</span>
+              {sortField === 'kot' ? (
+                sortOrder === 'desc' ? <ArrowDown className="w-3.5 h-3.5 text-amber-700" /> : <ArrowUp className="w-3.5 h-3.5 text-amber-700" />
+              ) : (
+                <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+              )}
+            </button>
+          </div>
+
           {/* Mark 2: View Report Button (Print, Export to PDF) */}
           <button
             id="btn-view-sales-report"
@@ -666,8 +757,66 @@ export const SalesLedgerView: React.FC = () => {
           <table className="w-full text-xs text-left border-collapse">
             <thead className="bg-slate-900 text-slate-300 border-b border-slate-800 text-[11px]">
               <tr>
-                <th className="py-2.5 px-3 font-bold">Invoice & Date</th>
-                <th className="py-2.5 px-3 font-bold">Details / Customer</th>
+                <th 
+                  className="py-2.5 px-3 font-bold select-none cursor-pointer hover:bg-slate-800 transition"
+                  onClick={() => {
+                    if (sortField === 'invoice') {
+                      setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc');
+                    } else {
+                      setSortField('invoice');
+                      setSortOrder('desc');
+                    }
+                  }}
+                  title="Click to sort by POS Invoice (Latest to Oldest / Oldest to Latest)"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>Invoice & Date</span>
+                    {sortField === 'invoice' ? (
+                      sortOrder === 'desc' ? (
+                        <span className="flex items-center text-[10px] text-blue-300 font-mono bg-slate-800 px-1.5 py-0.5 rounded border border-blue-500/30">
+                          <ArrowDown className="w-3 h-3 mr-0.5 text-blue-400" /> Desc
+                        </span>
+                      ) : (
+                        <span className="flex items-center text-[10px] text-emerald-300 font-mono bg-slate-800 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                          <ArrowUp className="w-3 h-3 mr-0.5 text-emerald-400" /> Asc
+                        </span>
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-slate-500 opacity-60" />
+                    )}
+                  </div>
+                </th>
+                <th 
+                  className="py-2.5 px-3 font-bold select-none cursor-pointer hover:bg-slate-800 transition"
+                  onClick={() => {
+                    if (sortField === 'kot') {
+                      setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc');
+                    } else {
+                      setSortField('kot');
+                      setSortOrder('desc');
+                    }
+                  }}
+                  title="Click to sort by Kitchen KOT sequence"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>Details / Customer</span>
+                    {sortField === 'kot' ? (
+                      sortOrder === 'desc' ? (
+                        <span className="flex items-center text-[10px] text-amber-300 font-mono bg-slate-800 px-1.5 py-0.5 rounded border border-amber-500/30">
+                          <ArrowDown className="w-3 h-3 mr-0.5 text-amber-400" /> KOT Desc
+                        </span>
+                      ) : (
+                        <span className="flex items-center text-[10px] text-emerald-300 font-mono bg-slate-800 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                          <ArrowUp className="w-3 h-3 mr-0.5 text-emerald-400" /> KOT Asc
+                        </span>
+                      )
+                    ) : (
+                      <span className="text-[10px] text-slate-400 font-normal hover:text-amber-300 inline-flex items-center gap-0.5">
+                        <ArrowUpDown className="w-3 h-3 text-slate-500 opacity-60" /> KOT
+                      </span>
+                    )}
+                  </div>
+                </th>
                 <th className="py-2.5 px-3 font-bold">Payment Methods Breakdown</th>
                 <th className="py-2.5 px-3 font-bold text-center">Status / Undo</th>
                 <th className="py-2.5 px-2.5 font-bold text-right">Due / Collected</th>
@@ -676,14 +825,14 @@ export const SalesLedgerView: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {filteredSales.length === 0 ? (
+              {sortedSales.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-slate-400">
                     No sales records found.
                   </td>
                 </tr>
               ) : (
-                filteredSales.map(sale => {
+                sortedSales.map(sale => {
                   let paymentItems: { label: string; amt: number; color: string }[] = [];
                   if (sale.paymentBreakdown && Object.keys(sale.paymentBreakdown).length > 0) {
                     paymentItems = Object.entries(sale.paymentBreakdown)
@@ -733,12 +882,7 @@ export const SalesLedgerView: React.FC = () => {
                           <span className="text-[10px] text-slate-500 font-mono">{sale.date}</span>
                           <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-bold bg-amber-50 text-amber-800 border border-amber-200 inline-flex items-center gap-1">
                             <span>
-                              {sale.kotBaseSerial || 
-                               (sale.orderRef?.startsWith('KOT-') ? sale.orderRef : null) || 
-                               (sale.details?.match(/KOT:\s*([^):#\s]+)/i)?.[1]?.trim()) || 
-                               (sale.orderRef ? sale.orderRef.replace(/^ORD-/, 'KOT-') : null) || 
-                               (sale.details?.match(/Ref:\s*([^):]+)/i)?.[1]?.trim()?.replace(/^ORD-/, 'KOT-')) || 
-                               (sale.invoiceNo ? 'KOT-' + sale.invoiceNo.replace(/\D/g, '').padStart(4, '0').slice(-4) : 'KOT-0001')}
+                              {extractKotSerial(sale)}
                             </span>
                             {(sale.kotCount && sale.kotCount > 1) ? (
                               <span className="text-[8px] px-1 py-0.2 bg-amber-200 text-amber-900 rounded font-black">
@@ -1389,14 +1533,14 @@ export const SalesLedgerView: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                      {filteredSales.length === 0 ? (
+                      {sortedSales.length === 0 ? (
                         <tr>
                           <td colSpan={6} className="py-8 text-center text-slate-400">
                             No sales records found for this period.
                           </td>
                         </tr>
                       ) : (
-                        filteredSales.map((sale, idx) => {
+                        sortedSales.map((sale, idx) => {
                           const active = isSaleActive(sale);
                           let payments: string[] = [];
                           if (sale.paymentBreakdown && Object.keys(sale.paymentBreakdown).length > 0) {
