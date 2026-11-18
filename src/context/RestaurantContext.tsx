@@ -5000,6 +5000,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     };
 
     // Update cart and linked sale in state
+    lastLocalEditTimeRef.current = Date.now();
+    let nextTablesToSync: Table[] = [];
+
     setData(prev => {
       let updatedSales = prev.sales;
       if (table.linkedSaleId) {
@@ -5023,6 +5026,35 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           const newRefundAmount = (s.refundAmount || 0) + itemRefundAmt;
           const isFullyRefunded = updatedItems.length === 0 || newTotal === 0;
 
+          // Clean & deduct paymentBreakdown accurately
+          let updatedBreakdown: Record<string, number> = {};
+          if (s.paymentBreakdown) {
+            for (const [key, val] of Object.entries(s.paymentBreakdown)) {
+              const numVal = Number(val) || 0;
+              if (numVal <= 0) continue;
+              const normalizedKey = key.toLowerCase();
+              updatedBreakdown[normalizedKey] = (updatedBreakdown[normalizedKey] || 0) + numVal;
+            }
+            const methodKey = refundMethod.toLowerCase();
+            const deductKey = updatedBreakdown[methodKey] !== undefined ? methodKey : Object.keys(updatedBreakdown)[0];
+            if (deductKey && updatedBreakdown[deductKey] !== undefined) {
+              updatedBreakdown[deductKey] = Math.max(0, updatedBreakdown[deductKey] - itemRefundAmt);
+            }
+          } else {
+            updatedBreakdown = {
+              cash: Math.max(0, (s.cash || 0) - cashDeduct)
+            };
+          }
+
+          // Update details summary text
+          let updatedDetails = s.details;
+          if (updatedDetails && updatedItems.length > 0) {
+            const prefixMatch = updatedDetails.match(/^(.*:\s*)/);
+            const prefix = prefixMatch ? prefixMatch[1] : '';
+            const itemsSummary = updatedItems.map(i => `${i.name} (${i.qty})`).join(', ');
+            updatedDetails = prefix ? `${prefix}${itemsSummary}` : itemsSummary;
+          }
+
           const refundLog = {
             itemId: targetItem!.id,
             itemName: targetItem!.name,
@@ -5042,7 +5074,10 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             card: Math.max(0, (s.card || 0) - cardDeduct),
             bkash: Math.max(0, (s.bkash || 0) - bkashDeduct),
             nagad: Math.max(0, (s.nagad || 0) - nagadDeduct),
+            paymentBreakdown: updatedBreakdown,
+            details: updatedDetails,
             total: newTotal,
+            netRestaurantRevenue: newTotal,
             refundAmount: newRefundAmount,
             refundStatus: 'REFUNDED' as const,
             status: isFullyRefunded ? ('VOIDED' as const) : s.status,
@@ -5093,8 +5128,13 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         };
       });
 
+      nextTablesToSync = updatedTables;
       return { ...prev, sales: updatedSales, tables: updatedTables };
     });
+
+    if (nextTablesToSync.length > 0) {
+      syncPosTablesToServer(nextTablesToSync, undefined, 'TABLES_UPDATE', undefined, tableId);
+    }
 
     // Direct hardware dispatch Cancel KOT without opening preview modal
     const printers = data?.printers || [];
