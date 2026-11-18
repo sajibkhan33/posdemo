@@ -2404,10 +2404,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           const tableSettledRefs = settledOrderRefsByTable.get(t.id) || (!t.id && t.name ? settledOrderRefsByTable.get(t.name) : undefined);
           const isTSettled = Boolean(t.orderRef && tableSettledRefs && tableSettledRefs.has(t.orderRef));
           const isLtSettled = Boolean(lt?.orderRef && (!t.orderRef || lt.orderRef === t.orderRef) && tableSettledRefs && tableSettledRefs.has(lt.orderRef));
-          const isOrderAlreadySettled = (isTSettled || isLtSettled) && !t.isPaidOrder && !t.linkedSaleId;
+          const isReopenedPaidOrder = Boolean(t.isPaidOrder || t.linkedSaleId || lt?.isPaidOrder || lt?.linkedSaleId);
+          const isOrderAlreadySettled = (isTSettled || isLtSettled) && !isReopenedPaidOrder;
 
           const existingInvoiceSet = new Set((salesList || []).map((s: any) => s.invoiceNo).filter(Boolean));
-          if (t.linkedInvoiceNo && existingInvoiceSet.has(t.linkedInvoiceNo) && !t.isPaidOrder && !t.linkedSaleId) {
+          if (t.linkedInvoiceNo && existingInvoiceSet.has(t.linkedInvoiceNo) && !isReopenedPaidOrder) {
             t.linkedInvoiceNo = undefined;
           }
 
@@ -2437,6 +2438,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
           // CRITICAL: If incoming server table is 'free', accept it! NEVER restore an old cart if table is freed!
           if (t.status === 'free') {
+            if (isReopenedPaidOrder && lt && (lt.cart?.length || 0) > 0) return lt;
             if (lt.status === 'free') return t;
             if (isOrderAlreadySettled) return t;
             const hasLocalCart = (lt.cart?.length || 0) > 0;
@@ -2605,10 +2607,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const tableSettledRefs = settledOrderRefsByTable.get(st.id) || (!st.id && st.name ? settledOrderRefsByTable.get(st.name) : undefined);
       const isStSettled = Boolean(st.orderRef && tableSettledRefs && tableSettledRefs.has(st.orderRef));
       const isLtSettled = Boolean(lt?.orderRef && (!st.orderRef || lt.orderRef === st.orderRef) && tableSettledRefs && tableSettledRefs.has(lt.orderRef));
-      const isOrderAlreadySettled = (isStSettled || isLtSettled) && !st.isPaidOrder && !st.linkedSaleId;
+      const isReopenedPaidOrder = Boolean(st.isPaidOrder || st.linkedSaleId || lt?.isPaidOrder || lt?.linkedSaleId);
+      const isOrderAlreadySettled = (isStSettled || isLtSettled) && !isReopenedPaidOrder;
 
       const existingInvoiceSet = new Set((salesList || []).map((s: any) => s.invoiceNo).filter(Boolean));
-      if (st.linkedInvoiceNo && existingInvoiceSet.has(st.linkedInvoiceNo) && !st.isPaidOrder && !st.linkedSaleId) {
+      if (st.linkedInvoiceNo && existingInvoiceSet.has(st.linkedInvoiceNo) && !isReopenedPaidOrder) {
         st.linkedInvoiceNo = undefined;
       }
 
@@ -2647,6 +2650,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const hasUnprintedDraft = hasLocalCart && lt.cart.some((item: any) => !item.kotPrinted || (item.kotPrintedQty || 0) < item.qty);
 
       if (st.status === 'free') {
+        if (isReopenedPaidOrder && lt && (lt.cart?.length || 0) > 0) return lt;
         if (lt.status === 'free') return st;
         if (isOrderAlreadySettled) return st;
         // 1. If actively open on this POS screen with items, NEVER wipe it to free!
@@ -7126,6 +7130,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       };
     });
 
+    tableLocalEditTimeMapRef.current.set(targetTable.id, Date.now());
     lastLocalEditTimeRef.current = Date.now();
     setData(prev => ({
       ...prev,
