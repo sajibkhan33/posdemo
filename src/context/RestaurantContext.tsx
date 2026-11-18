@@ -7063,31 +7063,36 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       kotPrintedTimestamp: itm.kotPrintedTimestamp || Date.now()
     }));
 
+    const updatedTables = data.tables.map(t => {
+      if (t.id !== targetTable.id) return t;
+      return {
+        ...t,
+        status: 'hold' as const,
+        waiter: (sale.waiterName && sale.waiterName !== 'Staff' && sale.waiterName !== 'N/A') ? sale.waiterName : (t.waiter || ''),
+        customer: sale.dueCustomer || 'Walk-in Customer',
+        cart: restoredCart,
+        discountVal: sale.discountVal || 0,
+        discountType: sale.discountType || 'taka',
+        linkedSaleId: sale.id,
+        linkedInvoiceNo: sale.invoiceNo,
+        isPaidOrder: true,
+        paidAmount: sale.total,
+        orderCreatedBy: sale.orderCreatedBy || sale.sellerName,
+        orderCreatedRole: sale.orderCreatedRole || sale.sellerRole,
+        orderCreatedAt: sale.createdAt || Date.now(),
+        kotBaseSerial: sale.kotBaseSerial || (sale.orderRef?.startsWith('KOT-') ? sale.orderRef : (sale.details?.match(/KOT:\s*([^):#\s]+)/i)?.[1]?.trim())) || (sale.orderRef ? sale.orderRef.replace(/^ORD-/, 'KOT-') : undefined),
+        kotCount: sale.kotCount || (sale.details?.match(/KOT:[^#]+#(\d+)/i) ? parseInt(sale.details.match(/KOT:[^#]+#(\d+)/i)![1]) : 1),
+        orderRef: sale.kotBaseSerial || sale.orderRef
+      };
+    });
+
+    lastLocalEditTimeRef.current = Date.now();
     setData(prev => ({
       ...prev,
-      tables: prev.tables.map(t => {
-        if (t.id !== targetTable.id) return t;
-        return {
-          ...t,
-          status: 'hold' as const,
-          waiter: (sale.waiterName && sale.waiterName !== 'Staff' && sale.waiterName !== 'N/A') ? sale.waiterName : (t.waiter || ''),
-          customer: sale.dueCustomer || 'Walk-in Customer',
-          cart: restoredCart,
-          discountVal: sale.discountVal || 0,
-          discountType: sale.discountType || 'taka',
-          linkedSaleId: sale.id,
-          linkedInvoiceNo: sale.invoiceNo,
-          isPaidOrder: true,
-          paidAmount: sale.total,
-          orderCreatedBy: sale.orderCreatedBy || sale.sellerName,
-          orderCreatedRole: sale.orderCreatedRole || sale.sellerRole,
-          orderCreatedAt: sale.createdAt || Date.now(),
-          kotBaseSerial: sale.kotBaseSerial || (sale.orderRef?.startsWith('KOT-') ? sale.orderRef : (sale.details?.match(/KOT:\s*([^):#\s]+)/i)?.[1]?.trim())) || (sale.orderRef ? sale.orderRef.replace(/^ORD-/, 'KOT-') : undefined),
-          kotCount: sale.kotCount || (sale.details?.match(/KOT:[^#]+#(\d+)/i) ? parseInt(sale.details.match(/KOT:[^#]+#(\d+)/i)![1]) : 1),
-          orderRef: sale.kotBaseSerial || sale.orderRef
-        };
-      })
+      tables: updatedTables
     }));
+
+    syncPosTablesToServer(updatedTables, undefined, 'TABLES_UPDATE', undefined, targetTable.id);
 
     setActiveTableId(targetTable.id);
     setPosView('order');
@@ -7096,32 +7101,36 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const finishLinkedOrderInPos = (tableId: string) => {
+    const updatedTables = data.tables.map(t => t.id === tableId ? {
+      ...t,
+      status: 'free' as const,
+      cart: [],
+      waiter: '',
+      customer: 'Walk-in Customer',
+      discountVal: 0,
+      channelOrAgentId: 'dine_in',
+      linkedSaleId: undefined,
+      linkedInvoiceNo: undefined,
+      isPaidOrder: false,
+      paidAmount: 0,
+      orderCreatedBy: undefined,
+      orderCreatedRole: undefined,
+      orderCreatedId: undefined,
+      orderCreatedAt: undefined,
+      billedAt: undefined,
+      billedAtTime: undefined,
+      kotBaseSerial: undefined,
+      kotCount: 0,
+      billCount: 0,
+      orderRef: undefined
+    } : t);
+
+    lastLocalEditTimeRef.current = Date.now();
     setData(prev => ({
       ...prev,
-      tables: prev.tables.map(t => t.id === tableId ? {
-        ...t,
-        status: 'free',
-        cart: [],
-        waiter: '',
-        customer: 'Walk-in Customer',
-        discountVal: 0,
-        channelOrAgentId: 'dine_in',
-        linkedSaleId: undefined,
-        linkedInvoiceNo: undefined,
-        isPaidOrder: false,
-        paidAmount: 0,
-        orderCreatedBy: undefined,
-        orderCreatedRole: undefined,
-        orderCreatedId: undefined,
-        orderCreatedAt: undefined,
-        billedAt: undefined,
-        billedAtTime: undefined,
-        kotBaseSerial: undefined,
-        kotCount: 0,
-        billCount: 0,
-        orderRef: undefined
-      } : t)
+      tables: updatedTables
     }));
+    syncPosTablesToServer(updatedTables, undefined, 'TABLES_UPDATE', undefined, tableId);
     setActiveTab('sales');
   };
 
