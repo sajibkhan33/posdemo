@@ -13,6 +13,13 @@ namespace BDHosttPOSPrinterInstaller
         [STAThread]
         static void Main(string[] args)
         {
+            if (args != null && args.Length > 0 && (args[0].Equals("/silent", StringComparison.OrdinalIgnoreCase) || args[0].Equals("/s", StringComparison.OrdinalIgnoreCase)))
+            {
+                InstallerForm form = new InstallerForm();
+                form.RunSilentInstallation();
+                return;
+            }
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new InstallerForm());
@@ -41,7 +48,7 @@ namespace BDHosttPOSPrinterInstaller
         private void InitializeComponent()
         {
             this.Text = "BD HOSTT POS - Printer Bridge 1-Click Setup";
-            this.Size = new Size(520, 380);
+            this.Size = new Size(540, 420);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
@@ -82,11 +89,11 @@ namespace BDHosttPOSPrinterInstaller
             lblStatus.Font = new Font("Segoe UI", 9.5F, FontStyle.Bold);
             lblStatus.ForeColor = Color.FromArgb(30, 41, 59);
             lblStatus.Location = new Point(25, 100);
-            lblStatus.Size = new Size(460, 25);
+            lblStatus.Size = new Size(475, 25);
 
             progressBar = new ProgressBar();
             progressBar.Location = new Point(25, 130);
-            progressBar.Size = new Size(455, 22);
+            progressBar.Size = new Size(475, 22);
             progressBar.Style = ProgressBarStyle.Marquee;
             progressBar.MarqueeAnimationSpeed = 30;
 
@@ -95,7 +102,7 @@ namespace BDHosttPOSPrinterInstaller
             lblDetails.Font = new Font("Segoe UI", 8.5F, FontStyle.Regular);
             lblDetails.ForeColor = Color.FromArgb(100, 116, 139);
             lblDetails.Location = new Point(25, 165);
-            lblDetails.Size = new Size(455, 95);
+            lblDetails.Size = new Size(475, 135);
 
             btnAction = new Button();
             btnAction.Text = "Install Now";
@@ -104,7 +111,7 @@ namespace BDHosttPOSPrinterInstaller
             btnAction.ForeColor = Color.White;
             btnAction.FlatStyle = FlatStyle.Flat;
             btnAction.FlatAppearance.BorderSize = 0;
-            btnAction.Location = new Point(340, 280);
+            btnAction.Location = new Point(360, 315);
             btnAction.Size = new Size(140, 38);
             btnAction.Cursor = Cursors.Hand;
             btnAction.Click += new EventHandler(BtnAction_Click);
@@ -144,6 +151,32 @@ namespace BDHosttPOSPrinterInstaller
             if (!string.IsNullOrEmpty(details))
             {
                 lblDetails.Text = details;
+            }
+        }
+
+        public void RunSilentInstallation()
+        {
+            try
+            {
+                if (!IsNodeInstalled())
+                {
+                    TryInstallNodeViaWinget();
+                }
+                StopExistingAgent();
+                if (!Directory.Exists(installDir)) Directory.CreateDirectory(installDir);
+                string scriptsDir = Path.Combine(installDir, "scripts");
+                if (!Directory.Exists(scriptsDir)) Directory.CreateDirectory(scriptsDir);
+                ExtractEmbeddedPayload();
+                CreateShortcuts();
+                StartAgentSilently();
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    File.AppendAllText(Path.Combine(installDir, "install_silent_error.log"), ex.ToString());
+                }
+                catch {}
             }
         }
 
@@ -370,32 +403,54 @@ namespace BDHosttPOSPrinterInstaller
             try { if (File.Exists(legacy1)) File.Delete(legacy1); } catch {}
             try { if (File.Exists(legacy2)) File.Delete(legacy2); } catch {}
 
-            // Create using Windows Script Host COM object via reflection
-            Type shellType = Type.GetTypeFromProgID("WScript.Shell");
-            if (shellType != null)
+            // 1. Direct COM invoke via WScript.Shell
+            try
             {
-                object shell = Activator.CreateInstance(shellType);
+                Type shellType = Type.GetTypeFromProgID("WScript.Shell");
+                if (shellType != null)
+                {
+                    object shell = Activator.CreateInstance(shellType);
 
-                // 1. Startup Shortcut
-                string startupShortcutPath = Path.Combine(startupDir, "POSDEMOPrinterAgent.lnk");
-                CreateLnk(shell, startupShortcutPath, "wscript.exe", "\"" + vbsPath + "\"", installDir, "imageres.dll,46", "BD HOSTT POS Thermal Printer Background Agent");
+                    // 1a. Windows Startup Shortcut
+                    string startupShortcutPath = Path.Combine(startupDir, "POSDEMOPrinterAgent.lnk");
+                    CreateLnk(shell, startupShortcutPath, "wscript.exe", "\"" + vbsPath + "\"", installDir, "imageres.dll,46", "BD HOSTT POS Thermal Printer Background Agent");
 
-                // 2. Desktop Shortcut: Start Printer Agent
-                string startShortcutPath = Path.Combine(desktopDir, "Start Printer Agent.lnk");
-                CreateLnk(shell, startShortcutPath, "wscript.exe", "\"" + vbsPath + "\"", installDir, "imageres.dll,46", "Start BD HOSTT POS Thermal Printer Agent");
+                    // 1b. Desktop Shortcut: Start Printer Agent
+                    string startShortcutPath = Path.Combine(desktopDir, "Start Printer Agent.lnk");
+                    CreateLnk(shell, startShortcutPath, "wscript.exe", "\"" + vbsPath + "\"", installDir, "imageres.dll,46", "Start BD HOSTT POS Thermal Printer Agent");
 
-                // 3. Desktop Shortcut: Stop Printer Agent
-                string stopShortcutPath = Path.Combine(desktopDir, "Stop Printer Agent.lnk");
-                CreateLnk(shell, stopShortcutPath, stopBatPath, "", installDir, "imageres.dll,98", "Stop BD HOSTT POS Thermal Printer Agent");
+                    // 1c. Desktop Shortcut: Stop Printer Agent
+                    string stopShortcutPath = Path.Combine(desktopDir, "Stop Printer Agent.lnk");
+                    CreateLnk(shell, stopShortcutPath, stopBatPath, "", installDir, "imageres.dll,98", "Stop BD HOSTT POS Thermal Printer Agent");
+                }
             }
+            catch {}
+
+            // 2. Guaranteed fallback via PowerShell setup-autostart.ps1
+            try
+            {
+                string ps1 = Path.Combine(installDir, @"scripts\setup-autostart.ps1");
+                if (File.Exists(ps1))
+                {
+                    ProcessStartInfo psi = new ProcessStartInfo("powershell.exe", string.Format("-NoProfile -ExecutionPolicy Bypass -File \"{0}\"", ps1));
+                    psi.WorkingDirectory = installDir;
+                    psi.UseShellExecute = false;
+                    psi.CreateNoWindow = true;
+                    using (Process p = Process.Start(psi))
+                    {
+                        p.WaitForExit(10000);
+                    }
+                }
+            }
+            catch {}
         }
 
         private void CreateLnk(object shell, string shortcutPath, string targetPath, string arguments, string workingDir, string iconLocation, string description)
         {
             try
             {
-                MethodInfo createShortcut = shell.GetType().GetMethod("CreateShortcut");
-                object shortcut = createShortcut.Invoke(shell, new object[] { shortcutPath });
+                object shortcut = shell.GetType().InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, shell, new object[] { shortcutPath });
+                if (shortcut == null) return;
 
                 shortcut.GetType().InvokeMember("TargetPath", BindingFlags.SetProperty, null, shortcut, new object[] { targetPath });
                 if (!string.IsNullOrEmpty(arguments))
