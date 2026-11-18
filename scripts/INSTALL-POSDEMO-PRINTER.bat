@@ -104,9 +104,9 @@ timeout /t 2 /nobreak >nul
 echo ====================================================================
 echo   SUCCESS! BD HOSTT POS DEMO PRINTER IS READY AND RUNNING!
 echo.
-echo   * Connected Target : !APP_URL!
-echo   * Desktop shortcut : "POS DEMO Printer Agent"
-echo   * Starts automatically every time you start Windows
+echo   * Connected Target  : !APP_URL!
+echo   * Desktop shortcuts : "Start Printer Agent" & "Stop Printer Agent"
+echo   * Windows Startup   : Starts automatically every time you start Windows
 echo   * Zero terminal popups (completely silent in background)
 echo ====================================================================
 echo.

@@ -6,6 +6,11 @@ $zipPath = Join-Path $rootDir "cpanel_deploy.zip"
 
 Write-Host "Creating clean cPanel deployment package..." -ForegroundColor Cyan
 
+# 0. Ensure standalone EXE installer & ZIP package are built into public/downloads
+Write-Host "Building printer packages (EXE and ZIP)..." -ForegroundColor Cyan
+& (Join-Path $PSScriptRoot "build-printer-zip.ps1")
+& (Join-Path $PSScriptRoot "build-printer-installer-exe.ps1")
+
 # 1. Clean previous staging and zip
 if (Test-Path $stagingDir) { Remove-Item $stagingDir -Recurse -Force }
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }

@@ -250,22 +250,23 @@ export const PrinterBridgeModal: React.FC<PrinterBridgeModalProps> = ({ isOpen, 
 
           <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
             <a
-              href="/api/download/printer-agent-zip"
-              download={`${safeFileSlug}-Printer-Setup.zip`}
+              href="/api/download/printer-agent-exe"
+              download={`${safeFileSlug}-Printer-Setup.exe`}
               className="w-full sm:w-auto flex-1 py-2.5 px-4 bg-[#004b9b] hover:bg-[#005bb8] text-white text-xs font-black rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer text-center"
+              title="Download 1-Click Windows EXE Installer (No Unzip Needed)"
             >
               <Download className="w-4 h-4" />
-              <span>Download {brandName} Printer Setup (.ZIP)</span>
+              <span>Download {brandName} Printer Setup (.EXE)</span>
             </a>
 
             <a
-              href="/api/download/printer-installer-bat"
-              download={`INSTALL-${safeFileSlug.toUpperCase()}-PRINTER.bat`}
+              href="/api/download/printer-agent-zip"
+              download={`${safeFileSlug}-Printer-Setup.zip`}
               className="w-full sm:w-auto py-2.5 px-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer text-center"
-              title="Download standalone BAT installer"
+              title="Download standard ZIP package"
             >
               <FileText className="w-3.5 h-3.5 text-slate-500" />
-              <span>Direct .BAT</span>
+              <span>Download .ZIP</span>
             </a>
           </div>
         </div>
@@ -280,25 +281,25 @@ export const PrinterBridgeModal: React.FC<PrinterBridgeModalProps> = ({ isOpen, 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-left">
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
               <div className="w-5 h-5 rounded-full bg-[#004b9b] text-white font-bold text-[10px] flex items-center justify-center mb-1.5">1</div>
-              <div className="font-bold text-xs text-slate-800">Download & Unzip</div>
+              <div className="font-bold text-xs text-slate-800">Download (.EXE)</div>
               <div className="text-[11px] text-slate-500 mt-0.5">
-                Download the ZIP file and extract (unzip) it to any folder.
+                Download the standalone 1-click installer (.EXE) without needing to extract any zip.
               </div>
             </div>
 
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
               <div className="w-5 h-5 rounded-full bg-[#004b9b] text-white font-bold text-[10px] flex items-center justify-center mb-1.5">2</div>
-              <div className="font-bold text-xs text-slate-800">Run Installer</div>
+              <div className="font-bold text-xs text-slate-800">1-Click Install</div>
               <div className="text-[11px] text-slate-500 mt-0.5">
-                Double-click the <strong>INSTALL-{safeFileSlug.toUpperCase()}-PRINTER.bat</strong> file.
+                Double-click the downloaded <strong>.exe</strong> and click "Install Now" to set up automatically.
               </div>
             </div>
 
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
               <div className="w-5 h-5 rounded-full bg-emerald-600 text-white font-bold text-[10px] flex items-center justify-center mb-1.5">3</div>
-              <div className="font-bold text-xs text-slate-800">Auto Ready & Silent</div>
+              <div className="font-bold text-xs text-slate-800">Start & Stop Control</div>
               <div className="text-[11px] text-slate-500 mt-0.5">
-                A shortcut will appear on the desktop and it will automatically start with Windows!
+                Desktop shortcuts created for <strong>Start</strong> and <strong>Stop</strong>, and starts automatically with Windows!
               </div>
             </div>
           </div>

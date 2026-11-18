@@ -41,19 +41,35 @@ $s1.Description = "BD HOSTT POS DEMO Background Thermal Printer Agent"
 $s1.Save()
 Write-Host "      [OK] Added to Windows Startup folder." -ForegroundColor Green
 
-# 2. Add to Desktop Shortcut
-Write-Host "`n[2/3] Creating Desktop Shortcut for Easy Manual Start..." -ForegroundColor Yellow
+# 2. Add Desktop Shortcuts for Start & Stop Control
+Write-Host "`n[2/3] Creating Desktop Shortcuts (Start & Stop Control)..." -ForegroundColor Yellow
 $desktopFolder = [Environment]::GetFolderPath('Desktop')
-$desktopShortcut = Join-Path $desktopFolder "POS DEMO Printer Agent.lnk"
 
-$s2 = $wsh.CreateShortcut($desktopShortcut)
+# Clean up legacy shortcut if present
+$legacyDesktopShortcut = Join-Path $desktopFolder "POS DEMO Printer Agent.lnk"
+if (Test-Path $legacyDesktopShortcut) { Remove-Item -Force $legacyDesktopShortcut -ErrorAction SilentlyContinue }
+
+# 2a. Start Printer Agent Desktop Shortcut
+$startShortcut = Join-Path $desktopFolder "Start Printer Agent.lnk"
+$s2 = $wsh.CreateShortcut($startShortcut)
 $s2.TargetPath = "wscript.exe"
 $s2.Arguments = "`"$vbsPath`""
 $s2.WorkingDirectory = $rootDir
 $s2.IconLocation = "$env:SystemRoot\System32\imageres.dll,46"
-$s2.Description = "Start BD HOSTT POS DEMO Printer Service"
+$s2.Description = "Start BD HOSTT POS DEMO Thermal Printer Agent"
 $s2.Save()
-Write-Host "      [OK] Desktop shortcut created: 'POS DEMO Printer Agent'" -ForegroundColor Green
+Write-Host "      [OK] Desktop shortcut created: 'Start Printer Agent'" -ForegroundColor Green
+
+# 2b. Stop Printer Agent Desktop Shortcut
+$stopBatPath = Join-Path $rootDir "stop-printer-agent.bat"
+$stopShortcut = Join-Path $desktopFolder "Stop Printer Agent.lnk"
+$s3 = $wsh.CreateShortcut($stopShortcut)
+$s3.TargetPath = $stopBatPath
+$s3.WorkingDirectory = $rootDir
+$s3.IconLocation = "$env:SystemRoot\System32\imageres.dll,98"
+$s3.Description = "Stop BD HOSTT POS DEMO Thermal Printer Agent"
+$s3.Save()
+Write-Host "      [OK] Desktop shortcut created: 'Stop Printer Agent'" -ForegroundColor Green
 
 # 3. Launch the agent right away (detached via WMI Win32_Process so it survives shell exit)
 Write-Host "`n[3/3] Starting Printer Agent in Background now..." -ForegroundColor Yellow

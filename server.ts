@@ -1724,6 +1724,23 @@ async function startServer() {
     });
   });
 
+  // Download 1-Click Standalone Printer Agent Setup EXE
+  app.get("/api/download/printer-agent-exe", (req, res) => {
+    const brandSlug = "POSDEMO";
+    const candidates = [
+      path.join(process.cwd(), "public", "downloads", "POSDEMO-Printer-Setup.exe"),
+      path.join(process.cwd(), "dist", "downloads", "POSDEMO-Printer-Setup.exe")
+    ];
+    for (const exePath of candidates) {
+      if (fs.existsSync(exePath)) {
+        res.setHeader('Content-Disposition', `attachment; filename="${brandSlug}-Printer-Setup.exe"`);
+        res.setHeader('Content-Type', 'application/vnd.microsoft.portable-executable');
+        return res.sendFile(exePath);
+      }
+    }
+    return res.redirect("/api/download/printer-agent-zip");
+  });
+
   // Download 1-Click Printer Agent Setup ZIP
   app.get("/api/download/printer-agent-zip", (req, res) => {
     const brandSlug = "POSDEMO";
