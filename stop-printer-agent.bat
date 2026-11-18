@@ -6,4 +6,4 @@ cd /d "%~dp0"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\stop-agent.ps1"
 echo.
 echo Closing in 2 seconds...
-timeout /t 2 /nobreak >nul
+powershell -NoProfile -Command "Start-Sleep -Seconds 2" >nul 2>&1
