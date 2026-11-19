@@ -78,6 +78,10 @@ export const PrinterBridgeModal: React.FC<PrinterBridgeModalProps> = ({ isOpen, 
       setLocalAgentStatus('offline');
     }
 
+    try {
+      window.dispatchEvent(new CustomEvent('printer-status-changed', { detail: { online: detectedLocal } }));
+    } catch {}
+
     setIsChecking(false);
   };
 
@@ -120,24 +124,37 @@ export const PrinterBridgeModal: React.FC<PrinterBridgeModalProps> = ({ isOpen, 
     }
     setIsStoppingAgent(true);
     setStopAgentSuccess(null);
-    try {
-      try {
-        await fetch('http://127.0.0.1:9123/api/hardware/stop', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reason: 'user_requested_ui_stop' }),
-          signal: AbortSignal.timeout(3000)
-        });
-      } catch {}
 
-      await new Promise(r => setTimeout(r, 1000));
-      setLocalAgentStatus('offline');
-      setStopAgentSuccess('Printer Agent has been stopped. You can start it again anytime by pressing "Start Agent".');
-    } catch (err: any) {
-      alert('Failed to stop agent: ' + (err?.message || err));
-    } finally {
-      setIsStoppingAgent(false);
-    }
+    // 1. Instantly flip UI and Header status in 0ms
+    setLocalAgentStatus('offline');
+    try {
+      window.dispatchEvent(new CustomEvent('printer-status-changed', { detail: { online: false } }));
+    } catch {}
+
+    // 2. Immediately notify server to clear 30-sec cloud heartbeat cache
+    fetch('/api/print-bridge/offline', { method: 'POST' }).catch(() => {});
+
+    // 3. Trigger OS native stop protocol posbridge://stop
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = 'posbridge://stop';
+    document.body.appendChild(iframe);
+    setTimeout(() => {
+      try { document.body.removeChild(iframe); } catch {}
+    }, 1500);
+
+    // 4. Send stop command directly to local port 9123
+    try {
+      await fetch('http://127.0.0.1:9123/api/hardware/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'user_requested_ui_stop' }),
+        signal: AbortSignal.timeout(1500)
+      });
+    } catch {}
+
+    setStopAgentSuccess('Printer Agent has been stopped. You can start it again anytime by pressing "Start Agent".');
+    setIsStoppingAgent(false);
   };
 
   const handleStartAgentFromWeb = () => {
@@ -165,6 +182,10 @@ export const PrinterBridgeModal: React.FC<PrinterBridgeModalProps> = ({ isOpen, 
         if (res.ok) {
           clearInterval(interval);
           setIsStartingAgent(false);
+          setLocalAgentStatus('online');
+          try {
+            window.dispatchEvent(new CustomEvent('printer-status-changed', { detail: { online: true } }));
+          } catch {}
           checkStatus();
         }
       } catch {}

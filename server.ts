@@ -1709,6 +1709,11 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  app.post("/api/print-bridge/offline", (req, res) => {
+    lastAgentHeartbeat = 0;
+    res.json({ success: true, message: "Agent marked offline immediately" });
+  });
+
   app.get("/api/print-bridge/status", (req, res) => {
     const isOnline = (Date.now() - lastAgentHeartbeat) < 30000;
     res.json({

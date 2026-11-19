@@ -64,7 +64,18 @@ export const Header: React.FC<{ onOpenMobileSidebar?: () => void }> = ({
   useEffect(() => {
     checkPrinterHealth();
     const interval = setInterval(checkPrinterHealth, 10000);
-    return () => clearInterval(interval);
+    const onStatusChanged = (e: any) => {
+      if (typeof e.detail?.online === 'boolean') {
+        setIsPrinterOnline(e.detail.online);
+      } else {
+        checkPrinterHealth();
+      }
+    };
+    window.addEventListener('printer-status-changed', onStatusChanged);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('printer-status-changed', onStatusChanged);
+    };
   }, []);
 
   const handleMouseEnterUser = () => {

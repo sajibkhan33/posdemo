@@ -1479,13 +1479,24 @@ function startLocalHttpServer() {
       res.end(JSON.stringify({ success: true, message: 'Printer Agent stopping...' }));
       console.log('🛑 [Local Bridge] Stop request received from POS Web UI. Shutting down cleanly...');
       
+      // Notify cloud server immediately to reset heartbeat cache
+      if (CLOUD_API_URL) {
+        try {
+          const u = new URL('/api/print-bridge/offline', CLOUD_API_URL);
+          const httpLib = u.protocol === 'https:' ? require('https') : require('http');
+          const offReq = httpLib.request(u, { method: 'POST', timeout: 800 }, () => {});
+          offReq.on('error', () => {});
+          offReq.end();
+        } catch {}
+      }
+
       setTimeout(() => {
         try {
           const { execSync } = require('child_process');
-          execSync('powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process | Where-Object { ($_.Name -match \'^(wscript|cscript)\\.exe$\') -and ($_.CommandLine -match \'run-printer-silent\\.vbs\') } | Stop-Process -Force -ErrorAction SilentlyContinue"');
+          execSync('taskkill /F /FI "IMAGENAME eq wscript.exe" /FI "IMAGENAME eq cscript.exe"');
         } catch {}
         process.exit(42);
-      }, 500);
+      }, 200);
       return;
     }
 
