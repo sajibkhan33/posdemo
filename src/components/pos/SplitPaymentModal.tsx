@@ -475,34 +475,7 @@ export const SplitPaymentModal: React.FC = () => {
 
         {/* Quick Cash Tender Notes */}
         {cashMethod && (
-          <div className="p-3 bg-gradient-to-r from-emerald-50/70 via-slate-50 to-emerald-50/70 border border-emerald-200/80 rounded-xl shadow-2xs">
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <div className="flex items-center gap-1.5">
-                <Banknote className="w-4 h-4 text-emerald-700" />
-                <span className="text-xs font-extrabold text-slate-800">Quick Cash Tender</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={handleExactCash}
-                  className="px-2.5 py-1 text-[11px] font-black bg-emerald-100 hover:bg-emerald-200 text-emerald-900 rounded-lg border border-emerald-300 transition cursor-pointer shadow-2xs"
-                  title="বিল সমপরিমাণ ক্যাশ বসান"
-                >
-                  Exact (<span className="text-[9px] font-normal opacity-75">৳</span>{netTotal.toLocaleString()})
-                </button>
-                {(Number(splitAmounts[cashMethod.id]) || 0) > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleResetCash}
-                    className="px-2 py-1 text-[11px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg border border-rose-200 transition cursor-pointer"
-                    title="ক্যাশ ক্লিয়ার করুন"
-                  >
-                    Reset
-                  </button>
-                )}
-              </div>
-            </div>
-
+          <div className="p-2 sm:p-2.5 bg-gradient-to-r from-emerald-50/60 via-slate-50 to-emerald-50/60 border border-emerald-200/80 rounded-xl shadow-2xs">
             <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
               {[10, 20, 50, 100, 150, 200, 500, 1000].map(amt => {
                 const isSelected = (Number(splitAmounts[cashMethod.id]) || 0) === amt;
