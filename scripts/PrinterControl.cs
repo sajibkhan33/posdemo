@@ -18,14 +18,14 @@ namespace BDHosttPOSPrinterControl
             if (args != null && args.Length > 0)
             {
                 string arg = args[0].ToLowerInvariant();
-                if (arg == "/start" || arg.Contains("posbridge://start") || arg.Contains("posbridge://"))
-                {
-                    StartService();
-                    return;
-                }
-                if (arg == "/stop" || arg.Contains("posbridge://stop"))
+                if (arg == "/stop" || arg.Contains("stop"))
                 {
                     StopService();
+                    return;
+                }
+                if (arg == "/start" || arg.Contains("start") || arg.Contains("posbridge://"))
+                {
+                    StartService();
                     return;
                 }
             }
@@ -96,8 +96,25 @@ namespace BDHosttPOSPrinterControl
         {
             try
             {
+                // 1. Direct fast taskkill of supervisor and print agent
+                ProcessStartInfo psiKill = new ProcessStartInfo("cmd.exe", "/c taskkill /F /IM wscript.exe /IM cscript.exe & taskkill /F /FI \"IMAGENAME eq node.exe\"");
+                psiKill.CreateNoWindow = true;
+                psiKill.UseShellExecute = false;
+                using (Process p = Process.Start(psiKill))
+                {
+                    p.WaitForExit(1500);
+                }
+            }
+            catch {}
+
+            try
+            {
                 string baseDir = Path.GetDirectoryName(Application.ExecutablePath);
                 string ps1 = Path.Combine(baseDir, @"scripts\stop-agent.ps1");
+                if (!File.Exists(ps1))
+                {
+                    ps1 = Path.Combine(baseDir, "stop-agent.ps1");
+                }
                 if (File.Exists(ps1))
                 {
                     ProcessStartInfo psi = new ProcessStartInfo("powershell.exe", string.Format("-NoProfile -ExecutionPolicy Bypass -File \"{0}\"", ps1));
@@ -106,7 +123,7 @@ namespace BDHosttPOSPrinterControl
                     psi.CreateNoWindow = true;
                     using (Process p = Process.Start(psi))
                     {
-                        p.WaitForExit(4000);
+                        p.WaitForExit(3000);
                     }
                 }
             }

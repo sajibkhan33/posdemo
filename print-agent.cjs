@@ -1480,23 +1480,29 @@ function startLocalHttpServer() {
       console.log('🛑 [Local Bridge] Stop request received from POS Web UI. Shutting down cleanly...');
       
       // Notify cloud server immediately to reset heartbeat cache
-      if (CLOUD_API_URL) {
-        try {
-          const u = new URL('/api/print-bridge/offline', CLOUD_API_URL);
+      try {
+        if (typeof CLOUD_SERVER_URL === 'string' && CLOUD_SERVER_URL.startsWith('http')) {
+          const u = new URL('/api/print-bridge/offline', CLOUD_SERVER_URL);
           const httpLib = u.protocol === 'https:' ? require('https') : require('http');
           const offReq = httpLib.request(u, { method: 'POST', timeout: 800 }, () => {});
           offReq.on('error', () => {});
           offReq.end();
-        } catch {}
-      }
+        }
+      } catch {}
 
       setTimeout(() => {
         try {
           const { execSync } = require('child_process');
-          execSync('taskkill /F /FI "IMAGENAME eq wscript.exe" /FI "IMAGENAME eq cscript.exe"');
+          if (process.ppid && process.ppid > 4) {
+            execSync(`taskkill /F /PID ${process.ppid} /T`);
+          }
+        } catch {}
+        try {
+          const { execSync } = require('child_process');
+          execSync('taskkill /F /IM wscript.exe /IM cscript.exe');
         } catch {}
         process.exit(42);
-      }, 200);
+      }, 100);
       return;
     }
 
