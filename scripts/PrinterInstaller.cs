@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Threading;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 namespace BDHosttPOSPrinterInstaller
 {
@@ -238,9 +239,9 @@ namespace BDHosttPOSPrinterInstaller
                 SetFinished(true, "Installation completed successfully!\n\n" +
                     "• The Printer Bridge is running silently in the background.\n" +
                     "• It will automatically start every time Windows turns on.\n" +
-                    "• Desktop shortcuts created:\n" +
-                    "    ▶ Start Printer Agent\n" +
-                    "    ⏹ Stop Printer Agent");
+                    "• Unified Desktop Controller created:\n" +
+                    "    🖨️ BD Hostt Printer Bridge\n" +
+                    "• In-app Start & Stop controls active in your Web POS screen.");
             }
             catch (Exception ex)
             {
@@ -395,13 +396,35 @@ namespace BDHosttPOSPrinterInstaller
             string desktopDir = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
             string startupDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"Microsoft\Windows\Start Menu\Programs\Startup");
             string vbsPath = Path.Combine(installDir, "run-printer-silent.vbs");
-            string stopBatPath = Path.Combine(installDir, "stop-printer-agent.bat");
+            string ctrlExe = Path.Combine(installDir, "PrinterControl.exe");
 
-            // Clean legacy shortcuts
-            string legacy1 = Path.Combine(desktopDir, "POS DEMO Printer Agent.lnk");
-            string legacy2 = Path.Combine(startupDir, "POSPrinterAgent.lnk");
-            try { if (File.Exists(legacy1)) File.Delete(legacy1); } catch {}
-            try { if (File.Exists(legacy2)) File.Delete(legacy2); } catch {}
+            // Clean legacy or separate shortcuts
+            string[] legacyFiles = new string[] {
+                Path.Combine(desktopDir, "POS DEMO Printer Agent.lnk"),
+                Path.Combine(startupDir, "POSPrinterAgent.lnk"),
+                Path.Combine(desktopDir, "Start Printer Agent.lnk"),
+                Path.Combine(desktopDir, "Stop Printer Agent.lnk")
+            };
+            foreach (string leg in legacyFiles)
+            {
+                try { if (File.Exists(leg)) File.Delete(leg); } catch {}
+            }
+
+            // Register posbridge:// URL protocol
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\Classes\posbridge"))
+                {
+                    key.SetValue("", "URL:BD Hostt POS Printer Bridge Protocol");
+                    key.SetValue("URL Protocol", "");
+                    using (RegistryKey cmdKey = key.CreateSubKey(@"shell\open\command"))
+                    {
+                        string targetApp = File.Exists(ctrlExe) ? ctrlExe : vbsPath;
+                        cmdKey.SetValue("", "\"" + targetApp + "\" \"%1\"");
+                    }
+                }
+            }
+            catch {}
 
             // 1. Direct COM invoke via WScript.Shell
             try
@@ -411,17 +434,15 @@ namespace BDHosttPOSPrinterInstaller
                 {
                     object shell = Activator.CreateInstance(shellType);
 
-                    // 1a. Windows Startup Shortcut
+                    // 1a. Windows Startup Shortcut (Background auto-start)
                     string startupShortcutPath = Path.Combine(startupDir, "POSDEMOPrinterAgent.lnk");
                     CreateLnk(shell, startupShortcutPath, "wscript.exe", "\"" + vbsPath + "\"", installDir, "imageres.dll,46", "BD HOSTT POS Thermal Printer Background Agent");
 
-                    // 1b. Desktop Shortcut: Start Printer Agent
-                    string startShortcutPath = Path.Combine(desktopDir, "Start Printer Agent.lnk");
-                    CreateLnk(shell, startShortcutPath, "wscript.exe", "\"" + vbsPath + "\"", installDir, "imageres.dll,46", "Start BD HOSTT POS Thermal Printer Agent");
-
-                    // 1c. Desktop Shortcut: Stop Printer Agent
-                    string stopShortcutPath = Path.Combine(desktopDir, "Stop Printer Agent.lnk");
-                    CreateLnk(shell, stopShortcutPath, stopBatPath, "", installDir, "imageres.dll,98", "Stop BD HOSTT POS Thermal Printer Agent");
+                    // 1b. Single Unified Desktop Controller Shortcut
+                    string singleDesktopShortcut = Path.Combine(desktopDir, "BD Hostt Printer Bridge.lnk");
+                    string target = File.Exists(ctrlExe) ? ctrlExe : "wscript.exe";
+                    string args = File.Exists(ctrlExe) ? "" : ("\"" + vbsPath + "\"");
+                    CreateLnk(shell, singleDesktopShortcut, target, args, installDir, "imageres.dll,46", "BD HOSTT POS Thermal Printer Bridge Controller");
                 }
             }
             catch {}

@@ -41,35 +41,49 @@ $s1.Description = "BD HOSTT POS DEMO Background Thermal Printer Agent"
 $s1.Save()
 Write-Host "      [OK] Added to Windows Startup folder." -ForegroundColor Green
 
-# 2. Add Desktop Shortcuts for Start & Stop Control
-Write-Host "`n[2/3] Creating Desktop Shortcuts (Start & Stop Control)..." -ForegroundColor Yellow
+# 2. Add Single Unified Desktop Controller Shortcut
+Write-Host "`n[2/3] Creating Single Unified Desktop Controller Shortcut..." -ForegroundColor Yellow
 $desktopFolder = [Environment]::GetFolderPath('Desktop')
 
-# Clean up legacy shortcut if present
-$legacyDesktopShortcut = Join-Path $desktopFolder "POS DEMO Printer Agent.lnk"
-if (Test-Path $legacyDesktopShortcut) { Remove-Item -Force $legacyDesktopShortcut -ErrorAction SilentlyContinue }
+# Clean up any legacy or separate shortcuts
+@(
+    "POS DEMO Printer Agent.lnk",
+    "Start Printer Agent.lnk",
+    "Stop Printer Agent.lnk"
+) | ForEach-Object {
+    $old = Join-Path $desktopFolder $_
+    if (Test-Path $old) { Remove-Item -Force $old -ErrorAction SilentlyContinue }
+}
 
-# 2a. Start Printer Agent Desktop Shortcut
-$startShortcut = Join-Path $desktopFolder "Start Printer Agent.lnk"
-$s2 = $wsh.CreateShortcut($startShortcut)
-$s2.TargetPath = "wscript.exe"
-$s2.Arguments = "`"$vbsPath`""
-$s2.WorkingDirectory = $rootDir
+# 2a. Register custom URL protocol posbridge://
+try {
+    $regPath = "HKCU:\Software\Classes\posbridge"
+    New-Item -Path $regPath -Force | Out-Null
+    Set-ItemProperty -Path $regPath -Name "(Default)" -Value "URL:BD Hostt POS Printer Bridge Protocol"
+    Set-ItemProperty -Path $regPath -Name "URL Protocol" -Value ""
+    $cmdPath = "$regPath\shell\open\command"
+    New-Item -Path $cmdPath -Force | Out-Null
+    $ctrlExe = Join-Path $rootDir "PrinterControl.exe"
+    $targetApp = if (Test-Path $ctrlExe) { "`"$ctrlExe`" `"%1`"" } else { "`"wscript.exe`" `"$vbsPath`"" }
+    Set-ItemProperty -Path $cmdPath -Name "(Default)" -Value $targetApp
+} catch {}
+
+# 2b. Single Unified Controller Desktop Shortcut
+$ctrlExe = Join-Path $rootDir "PrinterControl.exe"
+$singleShortcut = Join-Path $desktopFolder "BD Hostt Printer Bridge.lnk"
+$s2 = $wsh.CreateShortcut($singleShortcut)
+if (Test-Path $ctrlExe) {
+    $s2.TargetPath = $ctrlExe
+    $s2.WorkingDirectory = $rootDir
+} else {
+    $s2.TargetPath = "wscript.exe"
+    $s2.Arguments = "`"$vbsPath`""
+    $s2.WorkingDirectory = $rootDir
+}
 $s2.IconLocation = "$env:SystemRoot\System32\imageres.dll,46"
-$s2.Description = "Start BD HOSTT POS DEMO Thermal Printer Agent"
+$s2.Description = "BD HOSTT POS Thermal Printer Bridge Controller"
 $s2.Save()
-Write-Host "      [OK] Desktop shortcut created: 'Start Printer Agent'" -ForegroundColor Green
-
-# 2b. Stop Printer Agent Desktop Shortcut
-$stopBatPath = Join-Path $rootDir "stop-printer-agent.bat"
-$stopShortcut = Join-Path $desktopFolder "Stop Printer Agent.lnk"
-$s3 = $wsh.CreateShortcut($stopShortcut)
-$s3.TargetPath = $stopBatPath
-$s3.WorkingDirectory = $rootDir
-$s3.IconLocation = "$env:SystemRoot\System32\imageres.dll,98"
-$s3.Description = "Stop BD HOSTT POS DEMO Thermal Printer Agent"
-$s3.Save()
-Write-Host "      [OK] Desktop shortcut created: 'Stop Printer Agent'" -ForegroundColor Green
+Write-Host "      [OK] Unified desktop shortcut created: 'BD Hostt Printer Bridge'" -ForegroundColor Green
 
 # 3. Launch the agent right away (detached via WMI Win32_Process so it survives shell exit)
 Write-Host "`n[3/3] Starting Printer Agent in Background now..." -ForegroundColor Yellow

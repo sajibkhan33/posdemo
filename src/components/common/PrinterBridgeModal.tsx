@@ -12,7 +12,8 @@ import {
   ExternalLink,
   ShieldCheck,
   Cpu,
-  PowerOff
+  PowerOff,
+  Play
 } from 'lucide-react';
 import { dispatchHardwarePrint } from '../../utils/hardwarePrint';
 import { useRestaurant } from '../../context/RestaurantContext';
@@ -34,6 +35,7 @@ export const PrinterBridgeModal: React.FC<PrinterBridgeModalProps> = ({ isOpen, 
   const [testPrintSuccess, setTestPrintSuccess] = useState<boolean | null>(null);
   const [isTestingPrint, setIsTestingPrint] = useState(false);
   const [isStoppingAgent, setIsStoppingAgent] = useState(false);
+  const [isStartingAgent, setIsStartingAgent] = useState(false);
   const [stopAgentSuccess, setStopAgentSuccess] = useState<string | null>(null);
 
   const checkStatus = async () => {
@@ -142,12 +144,49 @@ export const PrinterBridgeModal: React.FC<PrinterBridgeModalProps> = ({ isOpen, 
 
       await new Promise(r => setTimeout(r, 1200));
       setLocalAgentStatus('offline');
-      setStopAgentSuccess('Printer Agent has been stopped successfully. To resume, double-click "Start Printer Agent" on your Desktop.');
+      setStopAgentSuccess('Printer Agent has been stopped. You can start it again anytime by clicking "Start Printer Agent" above or from your Desktop.');
     } catch (err: any) {
       alert('Failed to stop agent: ' + (err?.message || err));
     } finally {
       setIsStoppingAgent(false);
     }
+  };
+
+  const handleStartAgentFromWeb = () => {
+    setIsStartingAgent(true);
+    setStopAgentSuccess(null);
+
+    // 1. Trigger custom URL protocol posbridge://start
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = 'posbridge://start';
+    document.body.appendChild(iframe);
+    setTimeout(() => {
+      try { document.body.removeChild(iframe); } catch {}
+    }, 2000);
+
+    // 2. Poll for up to 8 seconds to detect port 9123 activation
+    let attempts = 0;
+    const interval = setInterval(async () => {
+      attempts++;
+      try {
+        const res = await fetch('http://127.0.0.1:9123/health', {
+          method: 'GET',
+          signal: AbortSignal.timeout(1200)
+        });
+        if (res.ok) {
+          clearInterval(interval);
+          setIsStartingAgent(false);
+          checkStatus();
+        }
+      } catch {}
+
+      if (attempts >= 8) {
+        clearInterval(interval);
+        setIsStartingAgent(false);
+        checkStatus();
+      }
+    }, 1000);
   };
 
   if (!isOpen) return null;
@@ -221,18 +260,27 @@ export const PrinterBridgeModal: React.FC<PrinterBridgeModalProps> = ({ isOpen, 
               </div>
             </div>
           ) : (
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs space-y-2">
-              <div className="flex items-center gap-2 text-rose-800 font-bold">
-                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                <span>{brandName} Printer Agent is not running on this PC!</span>
+            <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-lg text-xs space-y-2.5">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2 text-rose-800 font-bold">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{brandName} Printer Agent is not running on this PC!</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleStartAgentFromWeb}
+                  disabled={isStartingAgent}
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold rounded-lg shadow-xs transition flex items-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-50"
+                  title="Click to start the local printer service directly from your browser"
+                >
+                  <Play className={`w-3.5 h-3.5 fill-current ${isStartingAgent ? 'animate-spin' : ''}`} />
+                  <span>{isStartingAgent ? 'Starting Agent...' : 'Start Printer Agent'}</span>
+                </button>
               </div>
-              <p className="text-[11px] text-rose-700 pl-6">
-                Please download and install the printer agent on this computer to send KOTs and Bills directly to floor thermal printers.
+
+              <p className="text-[11px] text-rose-700 leading-relaxed">
+                Direct thermal printing to KOT & Bill printers is currently offline. If already installed on this computer, click <strong>"Start Printer Agent"</strong> above to launch it directly from this web page, or use the single <strong>"BD Hostt Printer Bridge"</strong> icon on your Desktop.
               </p>
-              <div className="mt-1 pt-1.5 border-t border-rose-200/60 text-[10px] text-rose-600 pl-6 flex items-center gap-1">
-                <span>💡</span>
-                <span>If you previously stopped the agent, double-click the <strong>"Start Printer Agent"</strong> shortcut on your Desktop to turn it back on.</span>
-              </div>
             </div>
           )}
 
@@ -350,9 +398,9 @@ export const PrinterBridgeModal: React.FC<PrinterBridgeModalProps> = ({ isOpen, 
 
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
               <div className="w-5 h-5 rounded-full bg-emerald-600 text-white font-bold text-[10px] flex items-center justify-center mb-1.5">3</div>
-              <div className="font-bold text-xs text-slate-800">Start & Stop Control</div>
+              <div className="font-bold text-xs text-slate-800">1-Click Control</div>
               <div className="text-[11px] text-slate-500 mt-0.5">
-                Desktop shortcuts created for <strong>Start</strong> and <strong>Stop</strong>, and starts automatically with Windows!
+                Start or Stop directly from this web screen, or use the single Desktop Controller!
               </div>
             </div>
           </div>

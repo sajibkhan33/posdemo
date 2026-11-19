@@ -28,13 +28,25 @@ if (Test-Path $installerBat) {
 }
 Copy-Item (Join-Path $rootDir "scripts\README-INSTRUCTIONS.txt") $pkgDir -Force
 
+# Compile PrinterControl.exe
+$ctrlCs = Join-Path $rootDir "scripts\PrinterControl.cs"
+$ctrlExe = Join-Path $rootDir "scripts\PrinterControl.exe"
+if (Test-Path $ctrlCs) {
+    Write-Host "Compiling PrinterControl.exe..." -ForegroundColor Cyan
+    & $csc /target:winexe /optimize+ /out:"$ctrlExe" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll "$ctrlCs"
+    if (Test-Path $ctrlExe) {
+        Copy-Item $ctrlExe $pkgDir -Force
+    }
+}
+
 $printerScripts = @(
     "print-raw.ps1",
     "raw-print.exe",
     "raw-print.cs",
     "setup-autostart.ps1",
     "stop-agent.ps1",
-    "remove-autostart.ps1"
+    "remove-autostart.ps1",
+    "PrinterControl.cs"
 )
 
 foreach ($sc in $printerScripts) {
