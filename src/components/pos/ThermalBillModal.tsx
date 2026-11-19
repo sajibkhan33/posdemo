@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useRestaurant } from '../../context/RestaurantContext';
+import { useRestaurant, isDepartmentKotActive } from '../../context/RestaurantContext';
 import { 
   Printer, 
   X, 
@@ -116,9 +116,14 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
     return Array.from(set);
   }, [enrichedItems]);
 
-  // Selected Department Filter (Default: If order has multiple departments, default to SPLIT_ALL so separate slips with auto-cut are ready immediately without extra clicks!)
+  // Departments whose KOT template is active
+  const activeOrderDepartments = useMemo(() => {
+    return orderDepartments.filter(dept => isDepartmentKotActive(dept, templates));
+  }, [orderDepartments, templates]);
+
+  // Selected Department Filter (Default: If order has multiple active departments, default to SPLIT_ALL so separate slips with auto-cut are ready immediately without extra clicks!)
   const [selectedDeptFilter, setSelectedDeptFilter] = useState<string>(() => {
-    return orderDepartments.length > 1 ? 'SPLIT_ALL' : 'ALL';
+    return activeOrderDepartments.length > 1 ? 'SPLIT_ALL' : 'ALL';
   });
 
   const [dispatchSuccess, setDispatchSuccess] = useState<string | null>(null);
@@ -289,23 +294,25 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
       const showPrices = Boolean(activeTemplate?.showPricesOnKot || printableReceipt?.showPrices);
       const slipsToPrint = (selectedDeptFilter === 'ALL')
         ? [{
-            station: 'Master KOT (All Stations)',
+            station: 'Master KOT (All Active Stations)',
             targetPrinterName: activePrinter?.name || 'Kot Printer',
             showPrices,
             showWaiter: activeTemplate?.showWaiter !== false,
             paperWidth: activeTemplate?.paperWidth || '80mm',
-            items: displayedItems.map(i => ({
-              name: i.name,
-              qty: i.qty,
-              price: Number(i.price || 0),
-              variation: i.selectedVariation?.name,
-              addons: i.selectedAddons?.map(a => a.name),
-              notes: i.notes
-            }))
-          }]
+            items: displayedItems
+              .filter(i => isDepartmentKotActive(i.department || 'Main Kitchen', templates))
+              .map(i => ({
+                name: i.name,
+                qty: i.qty,
+                price: Number(i.price || 0),
+                variation: i.selectedVariation?.name,
+                addons: i.selectedAddons?.map(a => a.name),
+                notes: i.notes
+              }))
+          }].filter(s => s.items.length > 0)
         : (selectedDeptFilter === 'SPLIT_ALL')
-          ? (orderDepartments.length > 0 
-              ? orderDepartments.map(dept => {
+          ? (activeOrderDepartments.length > 0 
+              ? activeOrderDepartments.map(dept => {
                   const deptItems = enrichedItems.filter(i => i.department === dept);
                   const deptPrinter = getPrinterForDept(dept);
                   const deptTemplate = templates.find(t => t.isActive && (t.templateType === 'KOT' || t.templateType === 'BOTH') && t.departments?.includes(dept)) || activeTemplate;
@@ -325,8 +332,10 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
                     }))
                   };
                 }).filter(s => s.items.length > 0)
-              : [{
-                  station: 'Main Kitchen',
+              : [])
+          : (isDepartmentKotActive(selectedDeptFilter, templates)
+              ? [{
+                  station: selectedDeptFilter,
                   targetPrinterName: activePrinter?.name || 'Kot Printer',
                   showPrices,
                   showWaiter: activeTemplate?.showWaiter !== false,
@@ -339,22 +348,17 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
                     addons: i.selectedAddons?.map(a => a.name),
                     notes: i.notes
                   }))
-                }])
-          : [{
-              station: selectedDeptFilter,
-              targetPrinterName: activePrinter?.name || 'Kot Printer',
-              showPrices,
-              showWaiter: activeTemplate?.showWaiter !== false,
-              paperWidth: activeTemplate?.paperWidth || '80mm',
-              items: displayedItems.map(i => ({
-                name: i.name,
-                qty: i.qty,
-                price: Number(i.price || 0),
-                variation: i.selectedVariation?.name,
-                addons: i.selectedAddons?.map(a => a.name),
-                notes: i.notes
-              }))
-            }];
+                }]
+              : []);
+
+      if (slipsToPrint.length === 0) {
+        setHardwarePrintStatus('ℹ️ Physical KOT skipped: Kitchen station template is inactive');
+        setTimeout(() => {
+          closePrintReceipt();
+        }, 1200);
+        setIsPrinting(false);
+        return;
+      }
 
       const kotPayload = {
         invoiceNo: printableReceipt.invoiceNo,
@@ -1173,7 +1177,7 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
                 >
                   <span className="text-xs flex items-center gap-1">
                     <Scissors className="w-3 h-3 text-amber-300" />
-                    Separate Slips ({orderDepartments.length} Slips)
+                    Separate Slips ({activeOrderDepartments.length} Active)
                   </span>
                   <span className="text-[9px] opacity-80 font-normal">Auto-Cut per Dept</span>
                 </button>
@@ -1195,6 +1199,7 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
 
                 {/* 3. Individual Department Station Tabs */}
                 {orderDepartments.map(dept => {
+                  const isDeptActive = isDepartmentKotActive(dept, templates);
                   const count = enrichedItems.filter(i => i.department === dept).length;
                   const deptPrinter = getPrinterForDept(dept);
                   const isSelected = selectedDeptFilter === dept;
@@ -1206,13 +1211,20 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
                       className={`px-2.5 py-1.5 rounded-xl font-bold shrink-0 transition flex flex-col items-start cursor-pointer border ${
                         isSelected
                           ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                          : !isDeptActive
+                          ? 'bg-slate-100 text-slate-400 border-slate-200 opacity-60'
                           : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
                       }`}
-                      title={`Station: ${dept}`}
+                      title={isDeptActive ? `Station: ${dept}` : `Station: ${dept} (Inactive - KOT Muted)`}
                     >
-                      <span className="text-xs">{dept} ({count})</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-xs ${!isDeptActive ? 'line-through text-slate-400' : ''}`}>{dept} ({count})</span>
+                        {!isDeptActive && (
+                          <span className="text-[9px] px-1 bg-amber-100 text-amber-800 rounded font-normal">Inactive</span>
+                        )}
+                      </div>
                       <span className="text-[9px] opacity-85 font-mono truncate max-w-[130px]">
-                        ➔ {deptPrinter?.name || 'Default Printer'}
+                        {isDeptActive ? `➔ ${deptPrinter?.name || 'Default Printer'}` : '🔇 Print Muted'}
                       </span>
                     </button>
                   );
@@ -1233,25 +1245,32 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
             /* ===== KITCHEN ORDER TICKET (KOT / VOID KOT) LAYOUT ===== */
             selectedDeptFilter === 'SPLIT_ALL' ? (
               <div className="space-y-6 print:space-y-0">
-                {orderDepartments.map((dept, idx) => {
-                  const deptItems = enrichedItems.filter(i => i.department === dept);
-                  if (deptItems.length === 0) return null;
-                  const deptPrinter = getPrinterForDept(dept);
-                  return (
-                    <div 
-                      key={dept} 
-                      className="kot-slip-page bg-white p-3 rounded-xl border border-dashed border-slate-300 shadow-xs print:p-0 print:border-none print:shadow-none"
-                    >
-                      {idx > 0 && (
-                        <div className="no-print -mt-1.5 mb-3 py-1 px-2 bg-amber-50 border border-dashed border-amber-300 rounded text-center text-[10px] font-bold text-amber-900 flex items-center justify-center gap-1.5">
-                          <Scissors className="w-3.5 h-3.5 text-amber-600" />
-                          <span>✂️ Thermal Paper Auto-Cut ({dept})</span>
-                        </div>
-                      )}
-                      {renderKotTicketLayout(deptItems, dept, deptPrinter, idx + 1, orderDepartments.length)}
-                    </div>
-                  );
-                })}
+                {activeOrderDepartments.length === 0 ? (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-center text-amber-800 my-4">
+                    <p className="font-bold">⚠️ All kitchen stations in this order are inactive for KOT printing.</p>
+                    <p className="text-xs text-amber-700 mt-1">No physical KOT slips will be printed to hardware.</p>
+                  </div>
+                ) : (
+                  activeOrderDepartments.map((dept, idx) => {
+                    const deptItems = enrichedItems.filter(i => i.department === dept);
+                    if (deptItems.length === 0) return null;
+                    const deptPrinter = getPrinterForDept(dept);
+                    return (
+                      <div 
+                        key={dept} 
+                        className="kot-slip-page bg-white p-3 rounded-xl border border-dashed border-slate-300 shadow-xs print:p-0 print:border-none print:shadow-none"
+                      >
+                        {idx > 0 && (
+                          <div className="no-print -mt-1.5 mb-3 py-1 px-2 bg-amber-50 border border-dashed border-amber-300 rounded text-center text-[10px] font-bold text-amber-900 flex items-center justify-center gap-1.5">
+                            <Scissors className="w-3.5 h-3.5 text-amber-600" />
+                            <span>✂️ Thermal Paper Auto-Cut ({dept})</span>
+                          </div>
+                        )}
+                        {renderKotTicketLayout(deptItems, dept, deptPrinter, idx + 1, activeOrderDepartments.length)}
+                      </div>
+                    );
+                  })
+                )}
               </div>
             ) : (
               <div className="kot-slip-page bg-white p-1 print:p-0">
@@ -1582,7 +1601,7 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
                     ? `Print Cancel KOT (${paperWidth})` 
                     : isKot 
                       ? selectedDeptFilter === 'SPLIT_ALL'
-                        ? `Print KOT (${orderDepartments.length} slips auto-cut)`
+                        ? `Print KOT (${activeOrderDepartments.length} slips auto-cut)`
                         : selectedDeptFilter === 'ALL'
                           ? `Print Master KOT (${paperWidth})`
                           : `Print ${selectedDeptFilter} Slip (${paperWidth})`

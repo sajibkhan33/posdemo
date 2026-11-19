@@ -592,6 +592,31 @@ export const DEFAULT_PRINTERS: PrinterConfig[] = [
   }
 ];
 
+export const isDepartmentKotActive = (dept: string, templates?: PrintTemplate[] | null): boolean => {
+  const allTemplates = (templates && templates.length > 0) ? templates : DEFAULT_PRINT_TEMPLATES;
+  
+  // 1. Check templates specifically assigned to this department for KOT or BOTH
+  const boundTemplates = allTemplates.filter(t =>
+    (t.templateType === 'KOT' || t.templateType === 'BOTH') &&
+    Array.isArray(t.departments) &&
+    t.departments.includes(dept)
+  );
+
+  if (boundTemplates.length > 0) {
+    // If one or more templates are assigned to this department, at least one MUST be active
+    return boundTemplates.some(t => Boolean(t.isActive));
+  }
+
+  // 2. If no template is specifically assigned to this department, check the primary default KOT template
+  const defaultKotTpl = allTemplates.find(t => t.isDefault && (t.templateType === 'KOT' || t.templateType === 'BOTH'));
+  if (defaultKotTpl) {
+    return Boolean(defaultKotTpl.isActive);
+  }
+
+  // 3. Fallback: check if ANY KOT template is active
+  return allTemplates.some(t => t.isActive && (t.templateType === 'KOT' || t.templateType === 'BOTH'));
+};
+
 export const DEFAULT_PRINT_TEMPLATES: PrintTemplate[] = [
   {
     id: "TPL-KOT-01",
@@ -4878,24 +4903,50 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           || defaultPrimaryKotTemplate;
       };
 
-      const slipsToPrint = (orderDepartments.length > 1)
-        ? orderDepartments.map(dept => {
-            const deptItems = enriched.filter(i => i.department === dept);
-            const deptPrinter = getPrinterForDept(dept);
-            const deptTemplate = getTemplateForDept(dept);
-            const showPrices = Boolean(deptTemplate?.showPricesOnKot);
-            const showTotalPrice = Boolean(deptTemplate?.showTotalPriceOnKot);
-            const showWaiter = deptTemplate?.showWaiter !== undefined ? Boolean(deptTemplate.showWaiter) : (defaultPrimaryKotTemplate?.showWaiter !== false);
-            return {
-              station: dept,
-              targetPrinterName: deptPrinter?.name,
-              showPrices,
-              showTotalPrice,
-              showWaiter,
-              showCustomer: Boolean(deptTemplate?.showCustomer ?? defaultPrimaryKotTemplate?.showCustomer),
-              showDateTime: deptTemplate?.showDateTime !== false,
-              paperWidth: deptTemplate?.paperWidth || defaultPrimaryKotTemplate?.paperWidth || '80mm',
-              items: deptItems.map(i => ({
+      // Only include departments whose KOT template is active
+      const activeOrderDepartments = orderDepartments.filter(dept => isDepartmentKotActive(dept, allTemplates));
+
+      const slipsToPrint = activeOrderDepartments.length === 0
+        ? []
+        : (activeOrderDepartments.length > 1)
+          ? activeOrderDepartments.map(dept => {
+              const deptItems = enriched.filter(i => i.department === dept);
+              const deptPrinter = getPrinterForDept(dept);
+              const deptTemplate = getTemplateForDept(dept);
+              const showPrices = Boolean(deptTemplate?.showPricesOnKot);
+              const showTotalPrice = Boolean(deptTemplate?.showTotalPriceOnKot);
+              const showWaiter = deptTemplate?.showWaiter !== undefined ? Boolean(deptTemplate.showWaiter) : (defaultPrimaryKotTemplate?.showWaiter !== false);
+              return {
+                station: dept,
+                targetPrinterName: deptPrinter?.name,
+                showPrices,
+                showTotalPrice,
+                showWaiter,
+                showCustomer: Boolean(deptTemplate?.showCustomer ?? defaultPrimaryKotTemplate?.showCustomer),
+                showDateTime: deptTemplate?.showDateTime !== false,
+                paperWidth: deptTemplate?.paperWidth || defaultPrimaryKotTemplate?.paperWidth || '80mm',
+                items: deptItems.map(i => ({
+                  name: i.name,
+                  qty: i.qty,
+                  price: Number(i.price || 0),
+                  variation: i.selectedVariation?.name,
+                  addons: i.selectedAddons?.map(a => a.name),
+                  notes: i.notes
+                }))
+              };
+            }).filter(s => s.items.length > 0)
+          : [{
+              station: activeOrderDepartments[0],
+              targetPrinterName: getPrinterForDept(activeOrderDepartments[0])?.name,
+              showPrices: Boolean(getTemplateForDept(activeOrderDepartments[0])?.showPricesOnKot),
+              showTotalPrice: Boolean(getTemplateForDept(activeOrderDepartments[0])?.showTotalPriceOnKot),
+              showWaiter: getTemplateForDept(activeOrderDepartments[0])?.showWaiter !== undefined 
+                ? Boolean(getTemplateForDept(activeOrderDepartments[0])?.showWaiter) 
+                : (defaultPrimaryKotTemplate?.showWaiter !== false),
+              showCustomer: Boolean(getTemplateForDept(activeOrderDepartments[0])?.showCustomer ?? defaultPrimaryKotTemplate?.showCustomer),
+              showDateTime: getTemplateForDept(activeOrderDepartments[0])?.showDateTime !== false,
+              paperWidth: getTemplateForDept(activeOrderDepartments[0])?.paperWidth || defaultPrimaryKotTemplate?.paperWidth || '80mm',
+              items: enriched.filter(i => i.department === activeOrderDepartments[0]).map(i => ({
                 name: i.name,
                 qty: i.qty,
                 price: Number(i.price || 0),
@@ -4903,28 +4954,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 addons: i.selectedAddons?.map(a => a.name),
                 notes: i.notes
               }))
-            };
-          }).filter(s => s.items.length > 0)
-        : [{
-            station: orderDepartments[0] || 'Main Kitchen',
-            targetPrinterName: getPrinterForDept(orderDepartments[0] || 'Main Kitchen')?.name,
-            showPrices: Boolean(getTemplateForDept(orderDepartments[0] || 'Main Kitchen')?.showPricesOnKot),
-            showTotalPrice: Boolean(getTemplateForDept(orderDepartments[0] || 'Main Kitchen')?.showTotalPriceOnKot),
-            showWaiter: getTemplateForDept(orderDepartments[0] || 'Main Kitchen')?.showWaiter !== undefined 
-              ? Boolean(getTemplateForDept(orderDepartments[0] || 'Main Kitchen')?.showWaiter) 
-              : (defaultPrimaryKotTemplate?.showWaiter !== false),
-            showCustomer: Boolean(getTemplateForDept(orderDepartments[0] || 'Main Kitchen')?.showCustomer ?? defaultPrimaryKotTemplate?.showCustomer),
-            showDateTime: getTemplateForDept(orderDepartments[0] || 'Main Kitchen')?.showDateTime !== false,
-            paperWidth: getTemplateForDept(orderDepartments[0] || 'Main Kitchen')?.paperWidth || defaultPrimaryKotTemplate?.paperWidth || '80mm',
-            items: enriched.map(i => ({
-              name: i.name,
-              qty: i.qty,
-              price: Number(i.price || 0),
-              variation: i.selectedVariation?.name,
-              addons: i.selectedAddons?.map(a => a.name),
-              notes: i.notes
-            }))
-          }];
+            }].filter(s => s.items.length > 0);
 
       const kotHardwarePayload = {
         tableName: table.name,
@@ -4947,7 +4977,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const hasActiveKotPrinter = Boolean(
         (data.printers || []).some(p => p.isActive && (p.type === 'KOT' || p.type === 'ALL'))
       );
-      if (hasActiveKotPrinter) {
+      if (hasActiveKotPrinter && slipsToPrint.length > 0) {
         dispatchHardwarePrint('/api/hardware/print-kot', kotHardwarePayload);
       }
     }
@@ -5887,21 +5917,45 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           || defaultPrimaryKotTemplate;
       };
 
-      const slipsToPrint = (orderDepartments.length > 1)
-        ? orderDepartments.map(dept => {
-            const deptItems = enrichedUnprinted.filter(i => i.department === dept);
-            const deptPrinter = getPrinterForDept(dept);
-            const deptTemplate = getTemplateForDept(dept);
-            return {
-              station: dept,
-              targetPrinterName: deptPrinter?.name,
-              showPrices: Boolean(deptTemplate?.showPricesOnKot),
-              showTotalPrice: Boolean(deptTemplate?.showTotalPriceOnKot),
-              showWaiter: deptTemplate?.showWaiter !== false,
-              showCustomer: Boolean(deptTemplate?.showCustomer),
-              showDateTime: deptTemplate?.showDateTime !== false,
-              paperWidth: deptTemplate?.paperWidth || defaultPrimaryKotTemplate?.paperWidth || '80mm',
-              items: deptItems.map(i => ({
+      // Only include departments whose KOT template is active
+      const activeOrderDepartments = orderDepartments.filter(dept => isDepartmentKotActive(dept, allTemplates));
+
+      const slipsToPrint = activeOrderDepartments.length === 0
+        ? []
+        : (activeOrderDepartments.length > 1)
+          ? activeOrderDepartments.map(dept => {
+              const deptItems = enrichedUnprinted.filter(i => i.department === dept);
+              const deptPrinter = getPrinterForDept(dept);
+              const deptTemplate = getTemplateForDept(dept);
+              return {
+                station: dept,
+                targetPrinterName: deptPrinter?.name,
+                showPrices: Boolean(deptTemplate?.showPricesOnKot),
+                showTotalPrice: Boolean(deptTemplate?.showTotalPriceOnKot),
+                showWaiter: deptTemplate?.showWaiter !== false,
+                showCustomer: Boolean(deptTemplate?.showCustomer),
+                showDateTime: deptTemplate?.showDateTime !== false,
+                paperWidth: deptTemplate?.paperWidth || defaultPrimaryKotTemplate?.paperWidth || '80mm',
+                items: deptItems.map(i => ({
+                  name: i.name,
+                  qty: i.unsentQty > 0 ? i.unsentQty : i.qty,
+                  price: Number(i.price || 0),
+                  variation: i.selectedVariation?.name,
+                  addons: i.selectedAddons?.map(a => a.name),
+                  notes: i.notes
+                }))
+              };
+            }).filter(s => s.items.length > 0)
+          : [{
+              station: activeOrderDepartments[0],
+              targetPrinterName: getPrinterForDept(activeOrderDepartments[0])?.name,
+              showPrices: Boolean(getTemplateForDept(activeOrderDepartments[0])?.showPricesOnKot),
+              showTotalPrice: Boolean(getTemplateForDept(activeOrderDepartments[0])?.showTotalPriceOnKot),
+              showWaiter: true,
+              showCustomer: false,
+              showDateTime: true,
+              paperWidth: defaultPrimaryKotTemplate?.paperWidth || '80mm',
+              items: enrichedUnprinted.filter(i => i.department === activeOrderDepartments[0]).map(i => ({
                 name: i.name,
                 qty: i.unsentQty > 0 ? i.unsentQty : i.qty,
                 price: Number(i.price || 0),
@@ -5909,26 +5963,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 addons: i.selectedAddons?.map(a => a.name),
                 notes: i.notes
               }))
-            };
-          }).filter(s => s.items.length > 0)
-        : [{
-            station: orderDepartments[0] || 'Main Kitchen',
-            targetPrinterName: getPrinterForDept(orderDepartments[0] || 'Main Kitchen')?.name,
-            showPrices: Boolean(getTemplateForDept(orderDepartments[0] || 'Main Kitchen')?.showPricesOnKot),
-            showTotalPrice: Boolean(getTemplateForDept(orderDepartments[0] || 'Main Kitchen')?.showTotalPriceOnKot),
-            showWaiter: true,
-            showCustomer: false,
-            showDateTime: true,
-            paperWidth: defaultPrimaryKotTemplate?.paperWidth || '80mm',
-            items: enrichedUnprinted.map(i => ({
-              name: i.name,
-              qty: i.unsentQty > 0 ? i.unsentQty : i.qty,
-              price: Number(i.price || 0),
-              variation: i.selectedVariation?.name,
-              addons: i.selectedAddons?.map(a => a.name),
-              notes: i.notes
-            }))
-          }];
+            }].filter(s => s.items.length > 0);
 
       const kotHardwarePayload = {
         tableName: table.name,
