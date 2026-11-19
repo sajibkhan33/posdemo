@@ -11,7 +11,8 @@ import {
   FileText, 
   ExternalLink,
   ShieldCheck,
-  Cpu
+  Cpu,
+  PowerOff
 } from 'lucide-react';
 import { dispatchHardwarePrint } from '../../utils/hardwarePrint';
 import { useRestaurant } from '../../context/RestaurantContext';
@@ -32,10 +33,13 @@ export const PrinterBridgeModal: React.FC<PrinterBridgeModalProps> = ({ isOpen, 
   const [cloudStatus, setCloudStatus] = useState<{ isAgentOnline: boolean; pendingCount: number } | null>(null);
   const [testPrintSuccess, setTestPrintSuccess] = useState<boolean | null>(null);
   const [isTestingPrint, setIsTestingPrint] = useState(false);
+  const [isStoppingAgent, setIsStoppingAgent] = useState(false);
+  const [stopAgentSuccess, setStopAgentSuccess] = useState<string | null>(null);
 
   const checkStatus = async () => {
     setIsChecking(true);
     setTestPrintSuccess(null);
+    setStopAgentSuccess(null);
 
     let detectedLocal = false;
 
@@ -118,6 +122,34 @@ export const PrinterBridgeModal: React.FC<PrinterBridgeModalProps> = ({ isOpen, 
     }
   };
 
+  const handleStopAgent = async () => {
+    if (!window.confirm('Are you sure you want to stop the local Printer Agent on this PC?\n\nOnce stopped, background thermal printing will be paused until you start it again using the "Start Printer Agent" shortcut on your Desktop.')) {
+      return;
+    }
+    setIsStoppingAgent(true);
+    setStopAgentSuccess(null);
+    try {
+      try {
+        await fetch('http://127.0.0.1:9123/api/hardware/stop', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: 'user_requested_ui_stop' }),
+          signal: AbortSignal.timeout(3000)
+        });
+      } catch {
+        // TCP socket closes immediately upon process exit
+      }
+
+      await new Promise(r => setTimeout(r, 1200));
+      setLocalAgentStatus('offline');
+      setStopAgentSuccess('Printer Agent has been stopped successfully. To resume, double-click "Start Printer Agent" on your Desktop.');
+    } catch (err: any) {
+      alert('Failed to stop agent: ' + (err?.message || err));
+    } finally {
+      setIsStoppingAgent(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -197,22 +229,43 @@ export const PrinterBridgeModal: React.FC<PrinterBridgeModalProps> = ({ isOpen, 
               <p className="text-[11px] text-rose-700 pl-6">
                 Please download and install the printer agent on this computer to send KOTs and Bills directly to floor thermal printers.
               </p>
+              <div className="mt-1 pt-1.5 border-t border-rose-200/60 text-[10px] text-rose-600 pl-6 flex items-center gap-1">
+                <span>💡</span>
+                <span>If you previously stopped the agent, double-click the <strong>"Start Printer Agent"</strong> shortcut on your Desktop to turn it back on.</span>
+              </div>
             </div>
           )}
 
-          {/* Test Print Action */}
+          {/* Test Print & Stop Agent Actions */}
           {localAgentStatus === 'online' && (
-            <div className="flex items-center justify-between pt-2 border-t border-slate-200">
-              <span className="text-[11px] text-slate-500">Verify thermal head & cutter:</span>
+            <div className="flex items-center justify-between pt-2 border-t border-slate-200 gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={handleStopAgent}
+                disabled={isStoppingAgent}
+                className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 text-xs font-bold rounded-lg shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                title="Stop local printer background service on this PC"
+              >
+                <PowerOff className={`w-3.5 h-3.5 text-rose-600 ${isStoppingAgent ? 'animate-spin' : ''}`} />
+                <span>{isStoppingAgent ? 'Stopping Agent...' : 'Stop Printer Agent'}</span>
+              </button>
+
               <button
                 type="button"
                 onClick={handleTestPrint}
                 disabled={isTestingPrint}
-                className="px-3 py-1.5 bg-[#004b9b] hover:bg-[#005bb8] text-white text-xs font-bold rounded-lg shadow-xs transition flex items-center gap-1.5"
+                className="px-3 py-1.5 bg-[#004b9b] hover:bg-[#005bb8] text-white text-xs font-bold rounded-lg shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 <Printer className="w-3.5 h-3.5" />
                 <span>{isTestingPrint ? 'Sending Test...' : 'Send Hardware Test Print'}</span>
               </button>
+            </div>
+          )}
+
+          {stopAgentSuccess && (
+            <div className="p-2.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>{stopAgentSuccess}</span>
             </div>
           )}
 

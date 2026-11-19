@@ -1474,6 +1474,21 @@ function startLocalHttpServer() {
       return handleJsonPost('DAYEND');
     }
 
+    if ((req.url === '/api/hardware/stop' || req.url === '/stop') && (req.method === 'POST' || req.method === 'GET')) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, message: 'Printer Agent stopping...' }));
+      console.log('🛑 [Local Bridge] Stop request received from POS Web UI. Shutting down cleanly...');
+      
+      setTimeout(() => {
+        try {
+          const { execSync } = require('child_process');
+          execSync('powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process | Where-Object { ($_.Name -match \'^(wscript|cscript)\\.exe$\') -and ($_.CommandLine -match \'run-printer-silent\\.vbs\') } | Stop-Process -Force -ErrorAction SilentlyContinue"');
+        } catch {}
+        process.exit(42);
+      }, 500);
+      return;
+    }
+
     res.writeHead(404);
     res.end();
   });
