@@ -7,13 +7,9 @@ import {
   X, 
   RefreshCw, 
   Wifi, 
-  ShieldCheck, 
-  Cpu, 
   PowerOff, 
   Play,
-  Sparkles,
-  Check,
-  ChevronRight
+  Monitor
 } from 'lucide-react';
 import { dispatchHardwarePrint } from '../../utils/hardwarePrint';
 import { useRestaurant } from '../../context/RestaurantContext';
@@ -29,9 +25,8 @@ export const PrinterBridgeModal: React.FC<PrinterBridgeModalProps> = ({ isOpen, 
   const safeFileSlug = brandName.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '') || 'POS';
   const [isChecking, setIsChecking] = useState(false);
   const [localAgentStatus, setLocalAgentStatus] = useState<'checking' | 'online' | 'offline'>('checking');
-  const [activePrinter, setActivePrinter] = useState<string>('');
+  const [activePrinter, setActivePrinter] = useState<string>('80 Printer');
   const [installedPrinters, setInstalledPrinters] = useState<string[]>([]);
-  const [cloudStatus, setCloudStatus] = useState<{ isAgentOnline: boolean; pendingCount: number } | null>(null);
   const [testPrintSuccess, setTestPrintSuccess] = useState<boolean | null>(null);
   const [isTestingPrint, setIsTestingPrint] = useState(false);
   const [isStoppingAgent, setIsStoppingAgent] = useState(false);
@@ -59,29 +54,24 @@ export const PrinterBridgeModal: React.FC<PrinterBridgeModalProps> = ({ isOpen, 
         setInstalledPrinters(data.printers || []);
       }
     } catch {
-      // Fallback to cloud check below
+      // Fallback
     }
 
-    // 2. Check cloud server status
-    try {
-      const cRes = await fetch('/api/print-bridge/status', {
-        signal: AbortSignal.timeout(3000)
-      });
-      if (cRes.ok) {
-        const cData = await cRes.json();
-        const isCloudBridgeOnline = Boolean(cData.isAgentOnline);
-        setCloudStatus({
-          isAgentOnline: isCloudBridgeOnline,
-          pendingCount: cData.pendingCount || 0
+    // 2. Check cloud server status fallback
+    if (!detectedLocal) {
+      try {
+        const cRes = await fetch('/api/print-bridge/status', {
+          signal: AbortSignal.timeout(3000)
         });
-        if (!detectedLocal && isCloudBridgeOnline) {
-          detectedLocal = true;
-          setLocalAgentStatus('online');
-          setActivePrinter(prev => prev || '80 Printer (192.168.1.87 - Cloud Bridge Active)');
+        if (cRes.ok) {
+          const cData = await cRes.json();
+          if (cData.isAgentOnline) {
+            detectedLocal = true;
+            setLocalAgentStatus('online');
+            setActivePrinter('80 Printer (Cloud Bridge)');
+          }
         }
-      }
-    } catch {
-      // ignore
+      } catch {}
     }
 
     if (!detectedLocal) {
@@ -125,7 +115,7 @@ export const PrinterBridgeModal: React.FC<PrinterBridgeModalProps> = ({ isOpen, 
   };
 
   const handleStopAgent = async () => {
-    if (!window.confirm('Are you sure you want to stop the local Printer Agent on this PC?\n\nOnce stopped, background thermal printing will be paused until you start it again using the "Start Printer Agent" button or Desktop shortcut.')) {
+    if (!window.confirm('Are you sure you want to stop the local Printer Agent on this PC?\n\nOnce stopped, background thermal printing will be paused until you start it again.')) {
       return;
     }
     setIsStoppingAgent(true);
@@ -138,13 +128,11 @@ export const PrinterBridgeModal: React.FC<PrinterBridgeModalProps> = ({ isOpen, 
           body: JSON.stringify({ reason: 'user_requested_ui_stop' }),
           signal: AbortSignal.timeout(3000)
         });
-      } catch {
-        // Socket closes immediately on exit
-      }
+      } catch {}
 
-      await new Promise(r => setTimeout(r, 1200));
+      await new Promise(r => setTimeout(r, 1000));
       setLocalAgentStatus('offline');
-      setStopAgentSuccess('Printer Agent has been stopped. You can start it anytime using the green "Start Printer Agent" button above or via your Desktop shortcut.');
+      setStopAgentSuccess('Printer Agent has been stopped. You can start it again anytime by pressing "Start Agent".');
     } catch (err: any) {
       alert('Failed to stop agent: ' + (err?.message || err));
     } finally {
@@ -156,7 +144,7 @@ export const PrinterBridgeModal: React.FC<PrinterBridgeModalProps> = ({ isOpen, 
     setIsStartingAgent(true);
     setStopAgentSuccess(null);
 
-    // Trigger custom URL protocol posbridge://start
+    // Trigger custom protocol posbridge://start
     const iframe = document.createElement('iframe');
     iframe.style.display = 'none';
     iframe.src = 'posbridge://start';
@@ -165,7 +153,7 @@ export const PrinterBridgeModal: React.FC<PrinterBridgeModalProps> = ({ isOpen, 
       try { document.body.removeChild(iframe); } catch {}
     }, 2000);
 
-    // Poll for up to 8 seconds to detect port 9123 activation
+    // Poll for port 9123
     let attempts = 0;
     const interval = setInterval(async () => {
       attempts++;
@@ -191,287 +179,211 @@ export const PrinterBridgeModal: React.FC<PrinterBridgeModalProps> = ({ isOpen, 
 
   if (!isOpen) return null;
 
+  const isOnline = localAgentStatus === 'online';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-7 shadow-2xl border border-slate-200/80 flex flex-col max-h-[92vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150">
+      <div className="bg-white rounded-2xl max-w-lg w-full p-5 shadow-2xl border border-slate-200 flex flex-col">
         
         {/* Header */}
-        <div className="flex items-center justify-between pb-5 border-b border-slate-100">
+        <div className="flex items-start justify-between pb-3.5 border-b border-slate-100">
           <div className="flex items-center gap-3">
-            <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shadow-xs ${
-              localAgentStatus === 'online' 
-                ? 'bg-linear-to-br from-emerald-500 to-teal-600 text-white shadow-emerald-500/20' 
-                : 'bg-linear-to-br from-rose-500 to-red-600 text-white shadow-rose-500/20'
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-xs shrink-0 ${
+              isOnline 
+                ? 'bg-emerald-100 text-emerald-700' 
+                : 'bg-rose-100 text-rose-700'
             }`}>
-              <Printer className="w-6 h-6" />
+              <Printer className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-black text-base sm:text-lg text-slate-900 tracking-tight">
-                  {brandName} Printer Bridge
+                <h3 className="font-extrabold text-base text-slate-900 tracking-tight leading-tight">
+                  Printer Bridge {isOnline ? 'Online' : 'Offline'}
                 </h3>
-                {localAgentStatus === 'online' ? (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                {isOnline ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                     Active
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200">
                     <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                    Not Detected
+                    Offline
                   </span>
                 )}
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Hardware Thermal Printing Service • Direct USB & LAN (192.168.1.87)
+                {brandName} · KOT & bill printing
               </p>
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all cursor-pointer"
-            title="Close dialog"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Live Status Card */}
-        <div className="mt-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Cpu className="w-4 h-4 text-slate-500" />
-              <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wide">
-                This PC Agent Status:
-              </span>
-            </div>
+          <div className="flex items-center gap-1">
             <button
               onClick={checkStatus}
               disabled={isChecking}
-              className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-slate-100 transition cursor-pointer disabled:opacity-40"
+              title="Refresh status"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isChecking ? 'animate-spin' : ''}`} />
-              <span>{isChecking ? 'Checking...' : 'Re-check'}</span>
+              <RefreshCw className={`w-4 h-4 ${isChecking ? 'animate-spin text-blue-600' : ''}`} />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+              title="Close"
+            >
+              <X className="w-5 h-5" />
             </button>
           </div>
+        </div>
 
-          {localAgentStatus === 'online' ? (
-            /* ACTIVE CARD */
-            <div className="p-4 rounded-2xl bg-linear-to-br from-emerald-50/90 via-white to-emerald-50/40 border border-emerald-200 shadow-xs space-y-3">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5">
-                  <CheckCircle2 className="w-5 h-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-extrabold text-sm text-emerald-950 flex items-center gap-2">
-                    <span>Local Print Bridge is Active & Ready</span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100/80 text-emerald-800">
-                      Instant 0ms
-                    </span>
-                  </h4>
-                  <p className="text-xs text-emerald-700 mt-0.5">
-                    Orders, KOTs, and Receipts print directly to connected thermal hardware without print dialogues.
-                  </p>
-                </div>
+        {/* Target Printer Info Bar */}
+        <div className="mt-3 px-3 py-2 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center justify-between text-xs">
+          <div className="flex items-center gap-1.5 text-slate-600">
+            <span>Printing to:</span>
+            <strong className="text-slate-900 font-mono font-bold bg-white px-2 py-0.5 rounded border border-slate-200 shadow-2xs">
+              {activePrinter}
+            </strong>
+            <span className="text-slate-400">·</span>
+            <span className="text-slate-500 font-mono text-[11px]">192.168.1.87</span>
+          </div>
+
+          <span className="text-[11px] font-semibold text-slate-400 hidden sm:inline">
+            Direct USB & LAN
+          </span>
+        </div>
+
+        {/* Live Status & Action Row */}
+        <div className="mt-2.5">
+          {isOnline ? (
+            /* ONLINE ACTIONS */
+            <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-emerald-800 text-xs font-bold">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Connected & Ready (Instant 0ms print)</span>
               </div>
 
-              {/* Printer Details Chip */}
-              <div className="bg-white/80 backdrop-blur-xs border border-emerald-200/60 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-500 font-semibold text-[11px]">Primary Target:</span>
-                  <span className="px-2.5 py-1 rounded-lg bg-slate-900 text-white font-mono font-bold text-[11px] shadow-2xs">
-                    🎯 {activePrinter}
-                  </span>
-                </div>
-                {installedPrinters.length > 0 && (
-                  <span className="text-[11px] text-slate-500 truncate" title={installedPrinters.join(', ')}>
-                    {installedPrinters.length} printer(s) installed on this PC
-                  </span>
-                )}
-              </div>
-
-              {/* Action Buttons: Stop & Test Print */}
-              <div className="flex items-center justify-between pt-1 gap-2 flex-wrap">
+              <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={handleStopAgent}
                   disabled={isStoppingAgent}
-                  className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold rounded-xl shadow-2xs transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                  title="Pause background print agent on this PC"
+                  className="px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-700 border border-rose-300 text-xs font-bold rounded-lg shadow-2xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="Stop background print service"
                 >
                   <PowerOff className={`w-3.5 h-3.5 text-rose-600 ${isStoppingAgent ? 'animate-spin' : ''}`} />
-                  <span>{isStoppingAgent ? 'Stopping Agent...' : 'Stop Printer Agent'}</span>
+                  <span>{isStoppingAgent ? 'Stopping...' : 'Stop'}</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={handleTestPrint}
                   disabled={isTestingPrint}
-                  className="px-4 py-2 bg-linear-to-r from-[#004b9b] to-[#0062cc] hover:from-[#003d7e] hover:to-[#004b9b] text-white text-xs font-bold rounded-xl shadow-md shadow-blue-900/15 transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  className="px-3.5 py-1.5 bg-[#004b9b] hover:bg-[#005bb8] text-white text-xs font-bold rounded-lg shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <Printer className="w-3.5 h-3.5" />
-                  <span>{isTestingPrint ? 'Sending Test...' : 'Send Hardware Test Print'}</span>
+                  <span>{isTestingPrint ? 'Sending...' : 'Test Print'}</span>
                 </button>
               </div>
             </div>
           ) : (
-            /* OFFLINE CARD */
-            <div className="p-4 rounded-2xl bg-linear-to-br from-rose-50/90 via-white to-rose-50/30 border border-rose-200 shadow-xs space-y-3">
-              <div className="flex items-start justify-between gap-3 flex-wrap sm:flex-nowrap">
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0 mt-0.5">
-                    <AlertTriangle className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="font-extrabold text-sm text-rose-950">
-                      Printer Agent Not Running on this PC
-                    </h4>
-                    <p className="text-xs text-rose-700 mt-0.5 leading-relaxed">
-                      Instant hardware printing is paused. If already installed on this computer, click <strong>Start Agent</strong> to resume printing immediately.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Prominent One-Click Start Button */}
-                <button
-                  type="button"
-                  onClick={handleStartAgentFromWeb}
-                  disabled={isStartingAgent}
-                  className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-black rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shrink-0"
-                  title="Launch local printer bridge directly from browser"
-                >
-                  <Play className={`w-3.5 h-3.5 fill-current ${isStartingAgent ? 'animate-spin' : ''}`} />
-                  <span>{isStartingAgent ? 'Starting Agent...' : 'Start Printer Agent'}</span>
-                </button>
+            /* OFFLINE ACTIONS */
+            <div className="p-3 bg-rose-50/80 border border-rose-200 rounded-xl flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-rose-800 text-xs font-bold">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>Hardware agent offline on this PC</span>
               </div>
+
+              <button
+                type="button"
+                onClick={handleStartAgentFromWeb}
+                disabled={isStartingAgent}
+                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-black rounded-lg shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0"
+                title="Start Printer Bridge on this computer"
+              >
+                <Play className={`w-3.5 h-3.5 fill-current ${isStartingAgent ? 'animate-spin' : ''}`} />
+                <span>{isStartingAgent ? 'Starting...' : 'Start Agent'}</span>
+              </button>
             </div>
           )}
 
-          {/* Feedback alerts */}
+          {/* Feedback toasts */}
           {stopAgentSuccess && (
-            <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs font-semibold flex items-center gap-2 animate-in fade-in">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            <div className="mt-2 p-2 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg text-xs font-medium flex items-center gap-1.5 animate-in fade-in">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
               <span>{stopAgentSuccess}</span>
             </div>
           )}
 
           {testPrintSuccess === true && (
-            <div className="p-3 bg-emerald-100 text-emerald-900 rounded-xl text-xs font-bold flex items-center gap-2 animate-in fade-in">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <div className="mt-2 p-2 bg-emerald-100 text-emerald-900 rounded-lg text-xs font-bold flex items-center gap-1.5 animate-in fade-in">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               <span>Test print sent successfully to thermal printer head & cutter!</span>
             </div>
           )}
 
           {testPrintSuccess === false && (
-            <div className="p-3 bg-rose-100 text-rose-900 rounded-xl text-xs font-bold flex items-center gap-2 animate-in fade-in">
-              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+            <div className="mt-2 p-2 bg-rose-100 text-rose-900 rounded-lg text-xs font-bold flex items-center gap-1.5 animate-in fade-in">
+              <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
               <span>Failed to send test print. Make sure your thermal printer is turned on and connected.</span>
             </div>
           )}
         </div>
 
-        {/* 1-Click Device Setup (Hero Card - Standalone EXE Only) */}
-        <div className="mt-5 p-5 rounded-2xl bg-linear-to-br from-slate-900 via-slate-800 to-indigo-950 text-white shadow-xl border border-slate-800 space-y-3.5">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center">
-                <Sparkles className="w-4 h-4" />
-              </div>
-              <h4 className="font-black text-sm text-white tracking-tight">
-                1-Click Device Setup (Standalone Installer)
+        {/* Setting up a new computer? (Compact Card) */}
+        <div className="mt-3.5 p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-extrabold text-xs text-slate-800 flex items-center gap-1.5">
+                <Monitor className="w-3.5 h-3.5 text-blue-600" />
+                <span>Setting up a new computer?</span>
               </h4>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Install once on any cash counter. Works on Windows 10 / 11.
+              </p>
             </div>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-white/10 text-blue-200 border border-white/10">
-              Windows 10 / 11
-            </span>
-          </div>
 
-          <p className="text-xs text-slate-300 leading-relaxed">
-            Need to set up a new cash counter or kitchen PC? Download this standalone installer once — no zip extraction required.
-          </p>
-
-          <div>
             <a
               href="/api/download/printer-agent-exe"
               download={`${safeFileSlug}-Printer-Setup.exe`}
-              className="w-full py-3 px-5 bg-linear-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-xs sm:text-sm font-black rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-98"
-              title="Download Standalone 1-Click Windows EXE Installer"
+              className="px-3.5 py-1.5 bg-[#004b9b] hover:bg-[#005bb8] text-white text-xs font-black rounded-lg shadow-xs transition flex items-center gap-1.5 cursor-pointer shrink-0"
+              title="Download 1-Click Installer"
             >
-              <Download className="w-4 h-4" />
-              <span>Download {brandName} Printer Setup (.EXE)</span>
+              <Download className="w-3.5 h-3.5" />
+              <span>Download (.exe)</span>
             </a>
           </div>
 
-          {/* Value Badges */}
-          <div className="pt-1 flex items-center justify-between text-[11px] text-slate-400 gap-2 flex-wrap">
-            <div className="flex items-center gap-1.5">
-              <Check className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Zero Unzip Needed</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Check className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Auto Windows Boot</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Check className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Single Desktop Controller</span>
-            </div>
-          </div>
-        </div>
-
-        {/* 3 Step Visual Stepper */}
-        <div className="mt-5 space-y-2.5">
-          <div className="flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <h5 className="font-extrabold text-xs text-slate-700 uppercase tracking-wider">
-              Easy 3-Step Setup Guide:
-            </h5>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-            <div className="p-3.5 bg-slate-50 hover:bg-slate-100/70 transition border border-slate-200/80 rounded-2xl space-y-1">
-              <div className="w-6 h-6 rounded-full bg-[#004b9b] text-white font-black text-xs flex items-center justify-center mb-1">
-                1
-              </div>
-              <div className="font-extrabold text-xs text-slate-900">Download (.EXE)</div>
-              <div className="text-[11px] text-slate-500 leading-snug">
-                Click download button above. No extraction or password needed.
-              </div>
+          {/* 3 Step Micro Guide */}
+          <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-200/60 text-left">
+            <div className="p-1.5 rounded-lg bg-white border border-slate-200/60 text-[10px]">
+              <span className="font-bold text-slate-800 block text-[11px]">1. Download</span>
+              <span className="text-slate-500">Get the .exe file</span>
             </div>
 
-            <div className="p-3.5 bg-slate-50 hover:bg-slate-100/70 transition border border-slate-200/80 rounded-2xl space-y-1">
-              <div className="w-6 h-6 rounded-full bg-[#004b9b] text-white font-black text-xs flex items-center justify-center mb-1">
-                2
-              </div>
-              <div className="font-extrabold text-xs text-slate-900">1-Click Install</div>
-              <div className="text-[11px] text-slate-500 leading-snug">
-                Double-click the .exe file and click "Install Now" in the window.
-              </div>
+            <div className="p-1.5 rounded-lg bg-white border border-slate-200/60 text-[10px]">
+              <span className="font-bold text-slate-800 block text-[11px]">2. Install</span>
+              <span className="text-slate-500">Open it, click Install Now</span>
             </div>
 
-            <div className="p-3.5 bg-slate-50 hover:bg-slate-100/70 transition border border-slate-200/80 rounded-2xl space-y-1">
-              <div className="w-6 h-6 rounded-full bg-emerald-600 text-white font-black text-xs flex items-center justify-center mb-1">
-                3
-              </div>
-              <div className="font-extrabold text-xs text-slate-900">1-Click Control</div>
-              <div className="text-[11px] text-slate-500 leading-snug">
-                Start/Stop anytime from this web screen or single Desktop icon.
-              </div>
+            <div className="p-1.5 rounded-lg bg-white border border-slate-200/60 text-[10px]">
+              <span className="font-bold text-emerald-700 block text-[11px]">3. Start</span>
+              <span className="text-slate-500">Press Start above</span>
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <Wifi className="w-3.5 h-3.5 text-blue-600" />
-            <span className="font-medium text-slate-600">Default LAN: 192.168.1.87 (80 Printer)</span>
+        <div className="mt-3.5 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+          <div className="flex items-center gap-1.5 text-[11px]">
+            <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+            <Wifi className="w-3 h-3 text-blue-600" />
+            <span className="font-mono text-slate-600">Default LAN: 192.168.1.87</span>
           </div>
+
           <button
             onClick={onClose}
-            className="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl transition cursor-pointer"
+            className="px-3.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-xs transition cursor-pointer"
           >
             Close
           </button>
