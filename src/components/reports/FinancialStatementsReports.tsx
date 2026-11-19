@@ -710,8 +710,23 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
     const operatingProfitEbitda = grossProfit - totalOpEx;
     const operatingMargin = netRevenue > 0 ? ((operatingProfitEbitda / netRevenue) * 100).toFixed(1) : '0';
 
-    // Depreciation
-    const depreciation = 1200; // Estimated monthly kitchen equipment wear & tear
+    // Depreciation: dynamically pulled from recorded expenses or journal entries
+    let depreciation = 0;
+    data.expenses.forEach(e => {
+      if (!matchesDate(e.date)) return;
+      if (e.head?.toLowerCase().includes('depreciation')) {
+        depreciation += Number(e.amount) || 0;
+      }
+    });
+    (data.journalEntries || []).forEach(j => {
+      if (!matchesDate(j.date)) return;
+      const coa = data.chartOfAccounts || DEFAULT_CHART_OF_ACCOUNTS;
+      const debitAcc = coa.find(a => a.id === j.debitAccountId || a.code === j.debitAccountId);
+      if (debitAcc?.name?.toLowerCase().includes('depreciation') || j.debitAccountName?.toLowerCase().includes('depreciation')) {
+        depreciation += Number(j.amount) || 0;
+      }
+    });
+
     const profitBeforeTax = operatingProfitEbitda - depreciation;
     const incomeTaxProvision = profitBeforeTax > 0 ? Math.round(profitBeforeTax * 0.15) : 0;
     const netProfit = profitBeforeTax - incomeTaxProvision;
@@ -834,7 +849,41 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
     });
 
     const totalCurrentAssets = Math.max(0, cashBalance) + Math.max(0, bankBalance) + Math.max(0, arBalance) + Math.round(closingInventoryVal);
-    const nonCurrentAssets = 250000; // Kitchen plant, cold rooms, POS hardware
+
+    // Non-Current Assets (Dynamic from Chart of Accounts)
+    const nonCurrentAssetHeads = coaListReport.filter(a =>
+      a.type === 'ASSET' && (
+        a.category?.toLowerCase().includes('non') ||
+        a.category?.toLowerCase().includes('fixed') ||
+        a.code === '1070' ||
+        a.systemRole === 'NON_CURRENT_ASSET' ||
+        a.name?.toLowerCase().includes('equipment') ||
+        a.name?.toLowerCase().includes('furniture') ||
+        a.name?.toLowerCase().includes('fixture') ||
+        a.name?.toLowerCase().includes('plant') ||
+        a.name?.toLowerCase().includes('vehicle')
+      )
+    );
+
+    const nonCurrentAssetBreakdown = nonCurrentAssetHeads.map(head => {
+      let bal = Number(head.balance) || 0;
+      (data.journalEntries || []).forEach(j => {
+        if (j.debitAccountId === head.code || j.debitAccountId === head.id || j.debitAccountName === head.name) {
+          bal += Number(j.amount) || 0;
+        }
+        if (j.creditAccountId === head.code || j.creditAccountId === head.id || j.creditAccountName === head.name) {
+          bal -= Number(j.amount) || 0;
+        }
+      });
+      return {
+        id: head.id || head.code,
+        name: head.name,
+        code: head.code,
+        balance: Math.max(0, bal)
+      };
+    });
+
+    const nonCurrentAssets = nonCurrentAssetBreakdown.reduce((sum, item) => sum + item.balance, 0);
     const totalAssets = totalCurrentAssets + nonCurrentAssets;
 
     // Liabilities
@@ -856,13 +905,28 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
     const totalCurrentLiabilities = apBalance + advanceLiabilities;
 
     // Equity
+    let ownerCapitalCoa = getReportCoaBalance('3010') + getReportCoaBalance('3020') - getReportCoaBalance('3030');
+    (data.journalEntries || []).forEach(j => {
+      const isCrEquity = j.creditAccountId === '3010' || j.creditAccountId === '3020' || j.creditAccountName?.includes('3010') || j.creditAccountName?.includes('3020') || (j.creditAccountName && (j.creditAccountName.toLowerCase().includes('equity') || j.creditAccountName.toLowerCase().includes('capital')));
+      const isDrEquity = j.debitAccountId === '3010' || j.debitAccountId === '3020' || j.debitAccountName?.includes('3010') || j.debitAccountName?.includes('3020') || (j.debitAccountName && (j.debitAccountName.toLowerCase().includes('equity') || j.debitAccountName.toLowerCase().includes('capital')));
+      if (isCrEquity) ownerCapitalCoa += Number(j.amount) || 0;
+      if (isDrEquity) ownerCapitalCoa -= Number(j.amount) || 0;
+
+      const isDrDrawing = j.debitAccountId === '3030' || j.debitAccountName?.includes('3030') || (j.debitAccountName && j.debitAccountName.toLowerCase().includes('drawing'));
+      const isCrDrawing = j.creditAccountId === '3030' || j.creditAccountName?.includes('3030') || (j.creditAccountName && j.creditAccountName.toLowerCase().includes('drawing'));
+      if (isDrDrawing) ownerCapitalCoa -= Number(j.amount) || 0;
+      if (isCrDrawing) ownerCapitalCoa += Number(j.amount) || 0;
+    });
+
     const netCurrentProfit = ifrsPnlData.netProfit;
-    const capitalAndRetained = totalAssets - totalCurrentLiabilities - netCurrentProfit;
+    const balancingCapital = totalAssets - totalCurrentLiabilities - netCurrentProfit;
+    const capitalAndRetained = ownerCapitalCoa !== 0 ? ownerCapitalCoa : Math.max(0, balancingCapital);
     const totalEquity = capitalAndRetained + netCurrentProfit;
     const totalEquityAndLiabilities = totalEquity + totalCurrentLiabilities;
 
     return {
       nonCurrentAssets,
+      nonCurrentAssetBreakdown,
       closingInventoryVal: Math.round(closingInventoryVal),
       arBalance: Math.max(0, arBalance),
       cashBalance: Math.max(0, cashBalance),
@@ -877,7 +941,7 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
       totalEquity,
       totalEquityAndLiabilities
     };
-  }, [data.masterItems, data.inventory, data.purchases, data.sales, data.payments, data.expenses, data.customerAdvances, data.journalEntries, ifrsPnlData.netProfit]);
+  }, [data.masterItems, data.inventory, data.purchases, data.sales, data.payments, data.expenses, data.customerAdvances, data.journalEntries, data.chartOfAccounts, data.session, ifrsPnlData.netProfit]);
 
   // --- 17. CASH FLOW STATEMENT (AS PER IFRS - IAS 7) ---
   const ifrsCashFlowData = useMemo(() => {
@@ -913,7 +977,15 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
     const netCashFromOperating = customerReceipts - supplierPayments - opExPayments;
 
     // 2. Investing Activities
-    const equipmentAdditions = 0; // No new capex during period
+    let equipmentAdditions = 0;
+    (data.journalEntries || []).forEach(j => {
+      if (!matchesDate(j.date)) return;
+      const coa = data.chartOfAccounts || DEFAULT_CHART_OF_ACCOUNTS;
+      const debitAcc = coa.find(a => a.id === j.debitAccountId || a.code === j.debitAccountId);
+      if (debitAcc?.code === '1070' || debitAcc?.category?.toLowerCase().includes('non') || debitAcc?.name?.toLowerCase().includes('equipment')) {
+        equipmentAdditions += Number(j.amount) || 0;
+      }
+    });
     const netCashFromInvesting = -equipmentAdditions;
 
     // 3. Financing Activities
@@ -1500,14 +1572,19 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
                     <div>
                       <h4 className="font-black text-slate-900 uppercase text-[11px] mb-2 text-teal-800">Non-Current Assets</h4>
                       <div className="space-y-1.5 text-slate-700 pl-2">
-                        <div className="flex items-center justify-between">
-                          <span>Kitchen Equipment & Commercial Freezers</span>
-                          <span className="font-mono font-bold">৳180,000</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span>Restaurant Furniture & Interior Fixtures</span>
-                          <span className="font-mono font-bold">৳70,000</span>
-                        </div>
+                        {ifrsBalanceSheetData.nonCurrentAssetBreakdown.length > 0 ? (
+                          ifrsBalanceSheetData.nonCurrentAssetBreakdown.map(item => (
+                            <div key={item.id} className="flex items-center justify-between">
+                              <span>{item.name}</span>
+                              <span className="font-mono font-bold">৳{item.balance.toLocaleString()}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="flex items-center justify-between text-slate-400 italic text-xs">
+                            <span>No non-current assets recorded</span>
+                            <span className="font-mono font-bold">৳0</span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -1559,9 +1636,13 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
                           <span>Owner Initial Capital & Retained Earnings</span>
                           <span className="font-mono font-bold">৳{ifrsBalanceSheetData.capitalAndRetained.toLocaleString()}</span>
                         </div>
-                        <div className="flex items-center justify-between text-emerald-700 font-bold">
+                        <div className={`flex items-center justify-between font-bold ${ifrsBalanceSheetData.netCurrentProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                           <span>Net Profit for Current Period</span>
-                          <span className="font-mono">+৳{ifrsBalanceSheetData.netCurrentProfit.toLocaleString()}</span>
+                          <span className="font-mono">
+                            {ifrsBalanceSheetData.netCurrentProfit >= 0 
+                              ? `+৳${ifrsBalanceSheetData.netCurrentProfit.toLocaleString()}` 
+                              : `-৳${Math.abs(ifrsBalanceSheetData.netCurrentProfit).toLocaleString()}`}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -1646,7 +1727,11 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
                 <div className="p-4 space-y-2.5 text-slate-700">
                   <div className="flex items-center justify-between">
                     <span>Acquisition of Kitchen Equipment & Capex Fixtures</span>
-                    <span className="font-mono font-bold">৳0</span>
+                    <span className="font-mono font-bold">
+                      {ifrsCashFlowData.equipmentAdditions > 0 
+                        ? `-৳${ifrsCashFlowData.equipmentAdditions.toLocaleString()}` 
+                        : '৳0'}
+                    </span>
                   </div>
                 </div>
               </div>
