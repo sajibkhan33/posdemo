@@ -2234,16 +2234,17 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
               );
             }
 
-            // State: Order is active and NOT yet billed
+            // State: Order is active and NOT yet billed (Workflow: 1. Submit KOT -> 2. Print Bill -> 3. Settle & Pay)
             const actionButtons: React.ReactNode[] = [];
             actionButtons.push(cancelBtn(false));
 
-            if ((hasUnprintedKotItems || isSubmittingKot) && activeTableHasActiveKotPrinter) {
-              actionButtons.push(submitKotBtn);
-            } else {
-              actionButtons.push(printBillBtn(false));
-            }
+            // Button 1: Submit (KOT)
+            actionButtons.push(submitKotBtn);
 
+            // Button 2: Print Bill (Guest Bill)
+            actionButtons.push(printBillBtn(false));
+
+            // Button 3: Settle & Pay
             if (!isWaiter) {
               actionButtons.push(settlePayBtn(false));
             }

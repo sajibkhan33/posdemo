@@ -5827,6 +5827,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     let effectiveKotBase = table.kotBaseSerial;
     let effectiveKotCount = table.kotCount || 0;
+    let pendingKotHardwarePayload: any = null;
 
     // AUTO-DISPATCH KOT TO KITCHEN: If cashier clicked Settle & Pay directly without sending KOT,
     // fire KOT to the kitchen immediately upon payment settlement and advance kotNextNumber in lockstep!
@@ -5945,7 +5946,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       const hasActiveKotPrinter = Boolean((data.printers || []).some(p => p.isActive && (p.type === 'KOT' || p.type === 'ALL')));
       if (hasActiveKotPrinter && slipsToPrint.some(s => s.items.length > 0)) {
-        dispatchHardwarePrint('/api/hardware/print-kot', kotHardwarePayload);
+        pendingKotHardwarePayload = kotHardwarePayload;
       }
     } else {
       effectiveKotCount = effectiveKotCount || 1;
@@ -6172,25 +6173,36 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       (data.printers || []).some(p => p.isActive && (p.type === 'BILL' || p.type === 'ALL') && p.printOnSettle !== false)
     );
 
-    // If Bill printer is ACTIVE for Guest Bill (বাটন ৩ ও ১) and table was never billed, print Guest Bill first
-    if (hasActiveGuestBillPrinter && (table.billCount || 0) === 0 && table.status !== 'billed') {
-      const guestBillInvoiceNo = 'BILL-' + effectiveOrderRef;
-      const guestBillPayload = {
-        ...memoReceipt,
-        invoiceNo: guestBillInvoiceNo,
-        receiptType: 'BILL' as const,
-        isSettled: false,
-        paymentBreakdown: undefined,
-        changeReturn: undefined,
-        items: memoPayload.items
-      };
-      dispatchHardwarePrint('/api/hardware/print-bill', guestBillPayload);
-    }
+    // Sequential hardware print queue to maintain strict physical printing order:
+    // Order: 1. KOT -> 2. Guest Bill (if table was never billed) -> 3. Paid Cash Memo
+    (async () => {
+      // 1. KOT Print
+      if (pendingKotHardwarePayload) {
+        await dispatchHardwarePrint('/api/hardware/print-kot', pendingKotHardwarePayload);
+        await new Promise(r => setTimeout(r, 700));
+      }
 
-    // Unified hardware print dispatch for Paid Cash Memo if Settle Print is active (বাটন ২)
-    if (hasActiveSettlePrinter) {
-      dispatchHardwarePrint('/api/hardware/print-bill', memoPayload);
-    }
+      // 2. Guest Bill (Invoice) - only if table was never billed before settlement
+      if (hasActiveGuestBillPrinter && (table.billCount || 0) === 0 && table.status !== 'billed') {
+        const guestBillInvoiceNo = 'BILL-' + effectiveOrderRef;
+        const guestBillPayload = {
+          ...memoReceipt,
+          invoiceNo: guestBillInvoiceNo,
+          receiptType: 'BILL' as const,
+          isSettled: false,
+          paymentBreakdown: undefined,
+          changeReturn: undefined,
+          items: memoPayload.items
+        };
+        await dispatchHardwarePrint('/api/hardware/print-bill', guestBillPayload);
+        await new Promise(r => setTimeout(r, 700));
+      }
+
+      // 3. Paid Cash Memo (Settled Receipt)
+      if (hasActiveSettlePrinter) {
+        await dispatchHardwarePrint('/api/hardware/print-bill', memoPayload);
+      }
+    })().catch(err => console.error('Error in sequential settlement printing:', err));
 
     // Close settle modal without on-screen preview popup
     closeSettleModal();
