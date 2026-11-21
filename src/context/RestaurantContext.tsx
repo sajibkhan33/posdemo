@@ -4779,7 +4779,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     const nextKotCount = (table.kotCount || 0) + 1;
     const isAddonKot = nextKotCount > 1;
-    const linkedInvoiceNo = table.linkedInvoiceNo || ('POS-' + Date.now().toString().slice(-6));
+    const linkedInvoiceNo = table.linkedInvoiceNo;
     const orderRef = baseKotNo;
 
     const invoiceNo = isAddonKot 
@@ -5484,9 +5484,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     let activeSerialConfig = { ...(data.serialConfig || DEFAULT_SERIAL_CONFIG) };
     let serialConfigChanged = false;
-    let posInvoiceNo = table.linkedInvoiceNo;
+    let posInvoiceNo = (table.billCount && table.billCount > 0) ? table.linkedInvoiceNo : undefined;
     const isAlreadyInSales = posInvoiceNo && (dataRef.current?.sales || data.sales || []).some((s: any) => s.invoiceNo === posInvoiceNo);
-    const isLegacyRandomInvoice = posInvoiceNo && /POS-\d{5,6}$/.test(posInvoiceNo) && !posInvoiceNo.includes('POS-00');
+    const isLegacyRandomInvoice = posInvoiceNo && (/POS-\d{5,6}$/.test(posInvoiceNo) || posInvoiceNo.length > 8);
 
     if (!posInvoiceNo || isLegacyRandomInvoice || isAlreadyInSales) {
       const todayDateStr = data.businessDay?.date || new Date().toISOString().split('T')[0];
@@ -5829,9 +5829,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const cashRetained = Math.max(0, computedCash - changeReturn);
     let activeSerialConfig = { ...(dataRef.current?.serialConfig || data.serialConfig || DEFAULT_SERIAL_CONFIG) };
     let serialConfigChanged = false;
-    let invoiceNo = table.linkedInvoiceNo;
+    let invoiceNo = (table.billCount && table.billCount > 0) ? table.linkedInvoiceNo : undefined;
     const isAlreadyInSales = invoiceNo && (dataRef.current?.sales || data.sales || []).some((s: any) => s.invoiceNo === invoiceNo);
-    const isLegacyRandomInvoice = invoiceNo && /POS-\d{5,6}$/.test(invoiceNo) && !invoiceNo.includes('POS-00');
+    const isLegacyRandomInvoice = invoiceNo && (/POS-\d{5,6}$/.test(invoiceNo) || invoiceNo.length > 8);
 
     if (!invoiceNo || isLegacyRandomInvoice || isAlreadyInSales) {
       const todayDateStr = data.businessDay?.date || new Date().toISOString().split('T')[0];
