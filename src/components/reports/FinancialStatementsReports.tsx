@@ -19,6 +19,16 @@ interface SubReportProps {
   reportType: 'trial-balance' | 'pnl-ifrs' | 'balance-sheet' | 'cash-flow';
 }
 
+const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+const formatTbNum = (val: number | undefined | null) => {
+  if (val === undefined || val === null || val === 0) return '0';
+  const rounded = round2(val);
+  return rounded % 1 !== 0 
+    ? rounded.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })
+    : rounded.toLocaleString();
+};
+
 export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportType }) => {
   const { data, metrics } = useRestaurant();
 
@@ -346,9 +356,12 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
           recVal = Math.max(0, recVal - (q * r));
         }
       });
-      const avgRate = recQty > 0 ? (recVal / recQty) : (Number(item.defaultRate) || 0);
       const invRecord = data.inventory.find(x => x.id === item.id);
-      rawRatesMap[item.id] = (invRecord && invRecord.rate) ? Number(invRecord.rate) : avgRate;
+      const totalAvailableQty = recQty;
+      const weightedAvgRate = totalAvailableQty > 0 
+        ? (recVal / totalAvailableQty) 
+        : ((invRecord && invRecord.rate) ? Number(invRecord.rate) : (Number(item.defaultRate) || 0));
+      rawRatesMap[item.id] = weightedAvgRate;
     });
 
     const priorBomUsageMap: Record<number, number> = {};
@@ -491,16 +504,16 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
 
       if (isDebitNormal) {
         const netOpening = (initialDr - initialCr) + (mv.priorDr - mv.priorCr);
-        if (netOpening >= 0) openingDr = Math.round(netOpening);
-        else openingCr = Math.round(Math.abs(netOpening));
+        if (netOpening >= 0) openingDr = round2(netOpening);
+        else openingCr = round2(Math.abs(netOpening));
       } else {
         const netOpening = (initialCr - initialDr) + (mv.priorCr - mv.priorDr);
-        if (netOpening >= 0) openingCr = Math.round(netOpening);
-        else openingDr = Math.round(Math.abs(netOpening));
+        if (netOpening >= 0) openingCr = round2(netOpening);
+        else openingDr = round2(Math.abs(netOpening));
       }
 
-      const periodDr = Math.round(mv.periodDr);
-      const periodCr = Math.round(mv.periodCr);
+      const periodDr = round2(mv.periodDr);
+      const periodCr = round2(mv.periodCr);
 
       // Net Closing Balance
       let closingDr = 0;
@@ -508,12 +521,12 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
 
       if (isDebitNormal) {
         const netClosing = (openingDr - openingCr) + (periodDr - periodCr);
-        if (netClosing >= 0) closingDr = Math.round(netClosing);
-        else closingCr = Math.round(Math.abs(netClosing));
+        if (netClosing >= 0) closingDr = round2(netClosing);
+        else closingCr = round2(Math.abs(netClosing));
       } else {
         const netClosing = (openingCr - openingDr) + (periodCr - periodDr);
-        if (netClosing >= 0) closingCr = Math.round(netClosing);
-        else closingDr = Math.round(Math.abs(netClosing));
+        if (netClosing >= 0) closingCr = round2(netClosing);
+        else closingDr = round2(Math.abs(netClosing));
       }
 
       return {
@@ -544,24 +557,24 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
       return true;
     });
 
-    const totalOpeningDebit = allRows.reduce((s, r) => s + r.openingDebit, 0);
-    const totalOpeningCredit = allRows.reduce((s, r) => s + r.openingCredit, 0);
-    const totalPeriodDebit = allRows.reduce((s, r) => s + r.periodDebit, 0);
-    const totalPeriodCredit = allRows.reduce((s, r) => s + r.periodCredit, 0);
-    const totalClosingDebit = allRows.reduce((s, r) => s + r.closingDebit, 0);
-    const totalClosingCredit = allRows.reduce((s, r) => s + r.closingCredit, 0);
+    const totalOpeningDebit = round2(allRows.reduce((s, r) => s + r.openingDebit, 0));
+    const totalOpeningCredit = round2(allRows.reduce((s, r) => s + r.openingCredit, 0));
+    const totalPeriodDebit = round2(allRows.reduce((s, r) => s + r.periodDebit, 0));
+    const totalPeriodCredit = round2(allRows.reduce((s, r) => s + r.periodCredit, 0));
+    const totalClosingDebit = round2(allRows.reduce((s, r) => s + r.closingDebit, 0));
+    const totalClosingCredit = round2(allRows.reduce((s, r) => s + r.closingCredit, 0));
 
-    const displayedOpeningDebit = filteredRows.reduce((s, r) => s + r.openingDebit, 0);
-    const displayedOpeningCredit = filteredRows.reduce((s, r) => s + r.openingCredit, 0);
-    const displayedPeriodDebit = filteredRows.reduce((s, r) => s + r.periodDebit, 0);
-    const displayedPeriodCredit = filteredRows.reduce((s, r) => s + r.periodCredit, 0);
-    const displayedClosingDebit = filteredRows.reduce((s, r) => s + r.closingDebit, 0);
-    const displayedClosingCredit = filteredRows.reduce((s, r) => s + r.closingCredit, 0);
+    const displayedOpeningDebit = round2(filteredRows.reduce((s, r) => s + r.openingDebit, 0));
+    const displayedOpeningCredit = round2(filteredRows.reduce((s, r) => s + r.openingCredit, 0));
+    const displayedPeriodDebit = round2(filteredRows.reduce((s, r) => s + r.periodDebit, 0));
+    const displayedPeriodCredit = round2(filteredRows.reduce((s, r) => s + r.periodCredit, 0));
+    const displayedClosingDebit = round2(filteredRows.reduce((s, r) => s + r.closingDebit, 0));
+    const displayedClosingCredit = round2(filteredRows.reduce((s, r) => s + r.closingCredit, 0));
 
     const isBalanced = 
-      Math.abs(totalOpeningDebit - totalOpeningCredit) < 100 &&
-      Math.abs(totalPeriodDebit - totalPeriodCredit) < 100 &&
-      Math.abs(totalClosingDebit - totalClosingCredit) < 100;
+      Math.abs(totalOpeningDebit - totalOpeningCredit) < 0.05 &&
+      Math.abs(totalPeriodDebit - totalPeriodCredit) < 0.05 &&
+      Math.abs(totalClosingDebit - totalClosingCredit) < 0.05;
 
     return {
       rows: filteredRows,
@@ -640,9 +653,12 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
           recVal = Math.max(0, recVal - (q * r));
         }
       });
-      const avgRate = recQty > 0 ? (recVal / recQty) : (Number(item.defaultRate) || 0);
       const invRecord = data.inventory.find(x => x.id === item.id);
-      rawRateLookup[item.id] = (invRecord && invRecord.rate) ? Number(invRecord.rate) : avgRate;
+      const totalAvailableQty = recQty;
+      const weightedAvgRate = totalAvailableQty > 0 
+        ? (recVal / totalAvailableQty) 
+        : ((invRecord && invRecord.rate) ? Number(invRecord.rate) : (Number(item.defaultRate) || 0));
+      rawRateLookup[item.id] = weightedAvgRate;
     });
 
     let cogsRawCost = 0;
@@ -848,7 +864,7 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
       if (isCrAp) apBalance += j.amount;
     });
 
-    const totalCurrentAssets = Math.max(0, cashBalance) + Math.max(0, bankBalance) + Math.max(0, arBalance) + Math.round(closingInventoryVal);
+    const totalCurrentAssets = round2(Math.max(0, cashBalance) + Math.max(0, bankBalance) + Math.max(0, arBalance) + closingInventoryVal);
 
     // Non-Current Assets (Dynamic from Chart of Accounts)
     const nonCurrentAssetHeads = coaListReport.filter(a =>
@@ -883,8 +899,8 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
       };
     });
 
-    const nonCurrentAssets = nonCurrentAssetBreakdown.reduce((sum, item) => sum + item.balance, 0);
-    const totalAssets = totalCurrentAssets + nonCurrentAssets;
+    const nonCurrentAssets = round2(nonCurrentAssetBreakdown.reduce((sum, item) => sum + item.balance, 0));
+    const totalAssets = round2(totalCurrentAssets + nonCurrentAssets);
 
     // Liabilities
     let apBalance = 0;
@@ -902,7 +918,7 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
       }
     });
 
-    const totalCurrentLiabilities = apBalance + advanceLiabilities;
+    const totalCurrentLiabilities = round2(apBalance + advanceLiabilities);
 
     // Equity
     let ownerCapitalCoa = getReportCoaBalance('3010') + getReportCoaBalance('3020') - getReportCoaBalance('3030');
@@ -921,13 +937,13 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
     const netCurrentProfit = ifrsPnlData.netProfit;
     const balancingCapital = totalAssets - totalCurrentLiabilities - netCurrentProfit;
     const capitalAndRetained = ownerCapitalCoa !== 0 ? ownerCapitalCoa : Math.max(0, balancingCapital);
-    const totalEquity = capitalAndRetained + netCurrentProfit;
-    const totalEquityAndLiabilities = totalEquity + totalCurrentLiabilities;
+    const totalEquity = round2(capitalAndRetained + netCurrentProfit);
+    const totalEquityAndLiabilities = round2(totalEquity + totalCurrentLiabilities);
 
     return {
       nonCurrentAssets,
       nonCurrentAssetBreakdown,
-      closingInventoryVal: Math.round(closingInventoryVal),
+      closingInventoryVal: round2(closingInventoryVal),
       arBalance: Math.max(0, arBalance),
       cashBalance: Math.max(0, cashBalance),
       bankBalance: Math.max(0, bankBalance),
@@ -1147,11 +1163,11 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
               <div className="space-y-1">
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-slate-500">Total Debit (Dr):</span>
-                  <span className="font-mono font-extrabold text-slate-900">৳{trialBalanceData.totalOpeningDebit.toLocaleString()}</span>
+                  <span className="font-mono font-extrabold text-slate-900">৳{formatTbNum(trialBalanceData.totalOpeningDebit)}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-slate-500">Total Credit (Cr):</span>
-                  <span className="font-mono font-extrabold text-slate-900">৳{trialBalanceData.totalOpeningCredit.toLocaleString()}</span>
+                  <span className="font-mono font-extrabold text-slate-900">৳{formatTbNum(trialBalanceData.totalOpeningCredit)}</span>
                 </div>
               </div>
             </div>
@@ -1167,11 +1183,11 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
               <div className="space-y-1">
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-amber-800/80">Period Debits (Dr):</span>
-                  <span className="font-mono font-extrabold text-amber-950">৳{trialBalanceData.totalPeriodDebit.toLocaleString()}</span>
+                  <span className="font-mono font-extrabold text-amber-950">৳{formatTbNum(trialBalanceData.totalPeriodDebit)}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-amber-800/80">Period Credits (Cr):</span>
-                  <span className="font-mono font-extrabold text-amber-950">৳{trialBalanceData.totalPeriodCredit.toLocaleString()}</span>
+                  <span className="font-mono font-extrabold text-amber-950">৳{formatTbNum(trialBalanceData.totalPeriodCredit)}</span>
                 </div>
               </div>
             </div>
@@ -1187,11 +1203,11 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
               <div className="space-y-1">
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-teal-800/80">Closing Debits (Dr):</span>
-                  <span className="font-mono font-extrabold text-teal-950">৳{trialBalanceData.totalClosingDebit.toLocaleString()}</span>
+                  <span className="font-mono font-extrabold text-teal-950">৳{formatTbNum(trialBalanceData.totalClosingDebit)}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-teal-800/80">Closing Credits (Cr):</span>
-                  <span className="font-mono font-extrabold text-teal-950">৳{trialBalanceData.totalClosingCredit.toLocaleString()}</span>
+                  <span className="font-mono font-extrabold text-teal-950">৳{formatTbNum(trialBalanceData.totalClosingCredit)}</span>
                 </div>
               </div>
             </div>
@@ -1317,26 +1333,26 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
 
                         {/* Opening Dr & Cr */}
                         <td className="py-2.5 px-3 text-right font-mono font-semibold text-slate-700 bg-slate-50/30 border-r border-slate-100">
-                          {row.openingDebit > 0 ? `৳${row.openingDebit.toLocaleString()}` : <span className="text-slate-300 font-normal">—</span>}
+                          {row.openingDebit > 0 ? `৳${formatTbNum(row.openingDebit)}` : <span className="text-slate-300 font-normal">—</span>}
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono font-semibold text-slate-700 bg-slate-50/30 border-r border-slate-200">
-                          {row.openingCredit > 0 ? `৳${row.openingCredit.toLocaleString()}` : <span className="text-slate-300 font-normal">—</span>}
+                          {row.openingCredit > 0 ? `৳${formatTbNum(row.openingCredit)}` : <span className="text-slate-300 font-normal">—</span>}
                         </td>
 
                         {/* Period Dr & Cr */}
                         <td className="py-2.5 px-3 text-right font-mono font-bold text-amber-950 bg-amber-50/20 border-r border-amber-100">
-                          {row.periodDebit > 0 ? `৳${row.periodDebit.toLocaleString()}` : <span className="text-slate-300 font-normal">—</span>}
+                          {row.periodDebit > 0 ? `৳${formatTbNum(row.periodDebit)}` : <span className="text-slate-300 font-normal">—</span>}
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono font-bold text-amber-950 bg-amber-50/20 border-r border-slate-200">
-                          {row.periodCredit > 0 ? `৳${row.periodCredit.toLocaleString()}` : <span className="text-slate-300 font-normal">—</span>}
+                          {row.periodCredit > 0 ? `৳${formatTbNum(row.periodCredit)}` : <span className="text-slate-300 font-normal">—</span>}
                         </td>
 
                         {/* Closing Dr & Cr */}
                         <td className="py-2.5 px-3 text-right font-mono font-black text-teal-950 bg-teal-50/20 border-r border-teal-100">
-                          {row.closingDebit > 0 ? `৳${row.closingDebit.toLocaleString()}` : <span className="text-slate-300 font-normal">—</span>}
+                          {row.closingDebit > 0 ? `৳${formatTbNum(row.closingDebit)}` : <span className="text-slate-300 font-normal">—</span>}
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono font-black text-teal-950 bg-teal-50/20">
-                          {row.closingCredit > 0 ? `৳${row.closingCredit.toLocaleString()}` : <span className="text-slate-300 font-normal">—</span>}
+                          {row.closingCredit > 0 ? `৳${formatTbNum(row.closingCredit)}` : <span className="text-slate-300 font-normal">—</span>}
                         </td>
                       </tr>
                     ))
@@ -1350,26 +1366,26 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
                     
                     {/* Opening Totals */}
                     <td className="py-3 px-3 text-right font-mono text-slate-200 border-r border-slate-800">
-                      ৳{trialBalanceData.displayedOpeningDebit.toLocaleString()}
+                      ৳{formatTbNum(trialBalanceData.displayedOpeningDebit)}
                     </td>
                     <td className="py-3 px-3 text-right font-mono text-slate-200 border-r border-slate-700">
-                      ৳{trialBalanceData.displayedOpeningCredit.toLocaleString()}
+                      ৳{formatTbNum(trialBalanceData.displayedOpeningCredit)}
                     </td>
 
                     {/* Period Totals */}
                     <td className="py-3 px-3 text-right font-mono text-amber-300 border-r border-slate-800 bg-amber-950/30">
-                      ৳{trialBalanceData.displayedPeriodDebit.toLocaleString()}
+                      ৳{formatTbNum(trialBalanceData.displayedPeriodDebit)}
                     </td>
                     <td className="py-3 px-3 text-right font-mono text-amber-300 border-r border-slate-700 bg-amber-950/30">
-                      ৳{trialBalanceData.displayedPeriodCredit.toLocaleString()}
+                      ৳{formatTbNum(trialBalanceData.displayedPeriodCredit)}
                     </td>
 
                     {/* Closing Totals */}
                     <td className="py-3 px-3 text-right font-mono text-emerald-400 border-r border-slate-800 bg-emerald-950/30">
-                      ৳{trialBalanceData.displayedClosingDebit.toLocaleString()}
+                      ৳{formatTbNum(trialBalanceData.displayedClosingDebit)}
                     </td>
                     <td className="py-3 px-3 text-right font-mono text-emerald-400 bg-emerald-950/30">
-                      ৳{trialBalanceData.displayedClosingCredit.toLocaleString()}
+                      ৳{formatTbNum(trialBalanceData.displayedClosingCredit)}
                     </td>
                   </tr>
                 </tfoot>
@@ -1400,7 +1416,7 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
               <div className="text-xs font-bold text-slate-500">Net Sales Revenue</div>
               <div className="text-xl sm:text-2xl font-black text-slate-900 mt-1">
-                ৳{ifrsPnlData.netRevenue.toLocaleString()}
+                ৳{formatTbNum(ifrsPnlData.netRevenue)}
               </div>
               <div className="text-[11px] text-slate-400 mt-0.5">Gross sales less discounts</div>
             </div>
@@ -1408,7 +1424,7 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
               <div className="text-xs font-bold text-slate-500">Gross Profit (GP)</div>
               <div className="text-xl sm:text-2xl font-black text-emerald-600 mt-1">
-                ৳{ifrsPnlData.grossProfit.toLocaleString()}
+                ৳{formatTbNum(ifrsPnlData.grossProfit)}
               </div>
               <div className="text-[11px] font-bold text-emerald-600 mt-0.5">{ifrsPnlData.grossProfitMargin}% Margin</div>
             </div>
@@ -1416,7 +1432,7 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
               <div className="text-xs font-bold text-slate-500">Operating Expenses</div>
               <div className="text-xl sm:text-2xl font-black text-rose-600 mt-1">
-                ৳{ifrsPnlData.totalOpEx.toLocaleString()}
+                ৳{formatTbNum(ifrsPnlData.totalOpEx)}
               </div>
               <div className="text-[11px] text-slate-400 mt-0.5">Utilities, cleaning, labor</div>
             </div>
@@ -1424,7 +1440,7 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
               <div className="text-xs font-bold text-slate-500">Net Profit for Period</div>
               <div className="text-xl sm:text-2xl font-black text-teal-800 mt-1">
-                ৳{ifrsPnlData.netProfit.toLocaleString()}
+                ৳{formatTbNum(ifrsPnlData.netProfit)}
               </div>
               <div className="text-[11px] font-bold text-teal-700 mt-0.5">{ifrsPnlData.netProfitMargin}% Net Margin</div>
             </div>
@@ -1442,16 +1458,16 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
               <div>
                 <div className="flex items-center justify-between font-black text-slate-900 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                   <span className="text-sm">1. REVENUE FROM OPERATIONS</span>
-                  <span className="font-mono text-sm">৳{ifrsPnlData.netRevenue.toLocaleString()}</span>
+                  <span className="font-mono text-sm">৳{formatTbNum(ifrsPnlData.netRevenue)}</span>
                 </div>
                 <div className="p-3 space-y-2 text-slate-700">
                   <div className="flex items-center justify-between">
                     <span>Gross Food & Beverage Sales</span>
-                    <span className="font-mono">৳{ifrsPnlData.grossSales.toLocaleString()}</span>
+                    <span className="font-mono">৳{formatTbNum(ifrsPnlData.grossSales)}</span>
                   </div>
                   <div className="flex items-center justify-between text-rose-600">
                     <span>Less: Promotional & VIP Discounts</span>
-                    <span className="font-mono">-৳{ifrsPnlData.totalDiscounts.toLocaleString()}</span>
+                    <span className="font-mono">-৳{formatTbNum(ifrsPnlData.totalDiscounts)}</span>
                   </div>
                 </div>
               </div>
@@ -1460,16 +1476,16 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
               <div>
                 <div className="flex items-center justify-between font-black text-slate-900 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                   <span className="text-sm">2. COST OF GOODS SOLD (COGS)</span>
-                  <span className="font-mono text-sm text-rose-700">-৳{ifrsPnlData.totalCostOfSales.toLocaleString()}</span>
+                  <span className="font-mono text-sm text-rose-700">-৳{formatTbNum(ifrsPnlData.totalCostOfSales)}</span>
                 </div>
                 <div className="p-3 space-y-2 text-slate-700">
                   <div className="flex items-center justify-between">
                     <span>Raw Material Consumption (Dish Recipe BOM Cost)</span>
-                    <span className="font-mono">-৳{Math.round(ifrsPnlData.cogsRawCost).toLocaleString()}</span>
+                    <span className="font-mono">-৳{formatTbNum(ifrsPnlData.cogsRawCost)}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span>Direct Kitchen Spoilage & Trimming Loss</span>
-                    <span className="font-mono">-৳{Math.round(ifrsPnlData.wastageCost).toLocaleString()}</span>
+                    <span className="font-mono">-৳{formatTbNum(ifrsPnlData.wastageCost)}</span>
                   </div>
                 </div>
               </div>
@@ -1478,7 +1494,7 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
               <div className="flex items-center justify-between p-3.5 bg-emerald-50 rounded-xl border border-emerald-200 font-black text-emerald-950 text-sm">
                 <span>GROSS PROFIT (GP)</span>
                 <div className="text-right">
-                  <span className="font-mono">৳{ifrsPnlData.grossProfit.toLocaleString()}</span>
+                  <span className="font-mono">৳{formatTbNum(ifrsPnlData.grossProfit)}</span>
                   <span className="block text-[11px] font-bold text-emerald-700">Margin: {ifrsPnlData.grossProfitMargin}%</span>
                 </div>
               </div>
@@ -1564,7 +1580,7 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
                 <div>
                   <div className="bg-slate-900 text-white p-3 font-black text-sm flex items-center justify-between">
                     <span>ASSETS</span>
-                    <span className="text-amber-400 font-mono">৳{ifrsBalanceSheetData.totalAssets.toLocaleString()}</span>
+                    <span className="text-amber-400 font-mono">৳{formatTbNum(ifrsBalanceSheetData.totalAssets)}</span>
                   </div>
 
                   <div className="p-4 space-y-4">
@@ -1576,7 +1592,7 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
                           ifrsBalanceSheetData.nonCurrentAssetBreakdown.map(item => (
                             <div key={item.id} className="flex items-center justify-between">
                               <span>{item.name}</span>
-                              <span className="font-mono font-bold">৳{item.balance.toLocaleString()}</span>
+                              <span className="font-mono font-bold">৳{formatTbNum(item.balance)}</span>
                             </div>
                           ))
                         ) : (
@@ -1594,19 +1610,19 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
                       <div className="space-y-1.5 text-slate-700 pl-2">
                         <div className="flex items-center justify-between">
                           <span>Closing Raw Materials Inventory Asset</span>
-                          <span className="font-mono font-bold">৳{ifrsBalanceSheetData.closingInventoryVal.toLocaleString()}</span>
+                          <span className="font-mono font-bold">৳{formatTbNum(ifrsBalanceSheetData.closingInventoryVal)}</span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span>Accounts Receivable (Customer Dues)</span>
-                          <span className="font-mono font-bold">৳{ifrsBalanceSheetData.arBalance.toLocaleString()}</span>
+                          <span className="font-mono font-bold">৳{formatTbNum(ifrsBalanceSheetData.arBalance)}</span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span>Cash in Hand & Petty Cash</span>
-                          <span className="font-mono font-bold">৳{ifrsBalanceSheetData.cashBalance.toLocaleString()}</span>
+                          <span className="font-mono font-bold">৳{formatTbNum(ifrsBalanceSheetData.cashBalance)}</span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span>Bank Accounts & Digital Wallets</span>
-                          <span className="font-mono font-bold">৳{ifrsBalanceSheetData.bankBalance.toLocaleString()}</span>
+                          <span className="font-mono font-bold">৳{formatTbNum(ifrsBalanceSheetData.bankBalance)}</span>
                         </div>
                       </div>
                     </div>
@@ -1615,7 +1631,7 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
 
                 <div className="bg-teal-50 p-3.5 border-t border-teal-200 flex items-center justify-between font-black text-teal-950 text-sm">
                   <span>TOTAL ASSETS</span>
-                  <span className="font-mono">৳{ifrsBalanceSheetData.totalAssets.toLocaleString()}</span>
+                  <span className="font-mono">৳{formatTbNum(ifrsBalanceSheetData.totalAssets)}</span>
                 </div>
               </div>
 
@@ -1624,7 +1640,7 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
                 <div>
                   <div className="bg-slate-900 text-white p-3 font-black text-sm flex items-center justify-between">
                     <span>EQUITY & LIABILITIES</span>
-                    <span className="text-amber-400 font-mono">৳{ifrsBalanceSheetData.totalEquityAndLiabilities.toLocaleString()}</span>
+                    <span className="text-amber-400 font-mono">৳{formatTbNum(ifrsBalanceSheetData.totalEquityAndLiabilities)}</span>
                   </div>
 
                   <div className="p-4 space-y-4">
@@ -1634,14 +1650,14 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
                       <div className="space-y-1.5 text-slate-700 pl-2">
                         <div className="flex items-center justify-between">
                           <span>Owner Initial Capital & Retained Earnings</span>
-                          <span className="font-mono font-bold">৳{ifrsBalanceSheetData.capitalAndRetained.toLocaleString()}</span>
+                          <span className="font-mono font-bold">৳{formatTbNum(ifrsBalanceSheetData.capitalAndRetained)}</span>
                         </div>
                         <div className={`flex items-center justify-between font-bold ${ifrsBalanceSheetData.netCurrentProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                           <span>Net Profit for Current Period</span>
                           <span className="font-mono">
                             {ifrsBalanceSheetData.netCurrentProfit >= 0 
-                              ? `+৳${ifrsBalanceSheetData.netCurrentProfit.toLocaleString()}` 
-                              : `-৳${Math.abs(ifrsBalanceSheetData.netCurrentProfit).toLocaleString()}`}
+                              ? `+৳${formatTbNum(ifrsBalanceSheetData.netCurrentProfit)}` 
+                              : `-৳${formatTbNum(Math.abs(ifrsBalanceSheetData.netCurrentProfit))}`}
                           </span>
                         </div>
                       </div>
@@ -1653,11 +1669,11 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
                       <div className="space-y-1.5 text-slate-700 pl-2">
                         <div className="flex items-center justify-between">
                           <span>Accounts Payable (Supplier Dues)</span>
-                          <span className="font-mono font-bold">৳{ifrsBalanceSheetData.apBalance.toLocaleString()}</span>
+                          <span className="font-mono font-bold">৳{formatTbNum(ifrsBalanceSheetData.apBalance)}</span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span>Customer Advance Deposits Received</span>
-                          <span className="font-mono font-bold">৳{ifrsBalanceSheetData.advanceLiabilities.toLocaleString()}</span>
+                          <span className="font-mono font-bold">৳{formatTbNum(ifrsBalanceSheetData.advanceLiabilities)}</span>
                         </div>
                       </div>
                     </div>
@@ -1666,7 +1682,7 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
 
                 <div className="bg-purple-50 p-3.5 border-t border-purple-200 flex items-center justify-between font-black text-purple-950 text-sm">
                   <span>TOTAL EQUITY & LIABILITIES</span>
-                  <span className="font-mono">৳{ifrsBalanceSheetData.totalEquityAndLiabilities.toLocaleString()}</span>
+                  <span className="font-mono">৳{formatTbNum(ifrsBalanceSheetData.totalEquityAndLiabilities)}</span>
                 </div>
               </div>
             </div>
