@@ -610,15 +610,14 @@ export const isDepartmentKotActive = (dept: string, templates?: PrintTemplate[] 
     t.departments.includes(dept)
   );
 
-  if (boundTemplates.length > 0) {
-    // If one or more templates are assigned to this department, at least one MUST be active
-    return boundTemplates.some(t => Boolean(t.isActive));
+  if (boundTemplates.length > 0 && boundTemplates.some(t => Boolean(t.isActive))) {
+    return true;
   }
 
-  // 2. If no template is specifically assigned to this department, check the primary default KOT template
-  const defaultKotTpl = allTemplates.find(t => t.isDefault && (t.templateType === 'KOT' || t.templateType === 'BOTH'));
+  // 2. If no dedicated active template, it falls back to the primary default KOT template
+  const defaultKotTpl = allTemplates.find(t => t.isActive && t.isDefault && (t.templateType === 'KOT' || t.templateType === 'BOTH'));
   if (defaultKotTpl) {
-    return Boolean(defaultKotTpl.isActive);
+    return true;
   }
 
   // 3. Fallback: check if ANY KOT template is active
@@ -4948,70 +4947,104 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         };
       });
 
-      const orderDepartments = Array.from(new Set(enriched.map(i => i.department).filter(Boolean)));
+      const defaultKotStation = (defaultPrimaryKotTemplate?.departments && defaultPrimaryKotTemplate.departments[0])
+        || defaultPrimaryKotTemplate?.name
+        || 'Main Kitchen';
+
       const printers = data?.printers || [];
+      const defaultKotPrinter = printers.find(pr => pr.isDefault && pr.isActive)
+        || printers.find(pr => defaultPrimaryKotTemplate?.departments?.some(d => pr.departments?.includes(d)) && pr.isActive)
+        || printers.find(pr => pr.isActive && (pr.type === 'KOT' || pr.type === 'ALL'))
+        || printers[0] || null;
+
       const getPrinterForDept = (dept: string) => {
         const p = printers.find(pr => pr.departments?.includes(dept) && pr.isActive);
-        return p || printers.find(pr => pr.isDefault && pr.isActive) || printers[0] || null;
+        return p || defaultKotPrinter;
       };
 
-      const getTemplateForDept = (dept: string) => {
-        return allTemplates.find(t => t.isActive && (t.templateType === 'KOT' || t.templateType === 'BOTH') && t.departments?.includes(dept))
-          || defaultPrimaryKotTemplate;
-      };
+      // Smart Item Routing: Each item routes to its dedicated active template/station.
+      // If the department template is inactive (OFF) or not configured, it safely falls back to defaultPrimaryKotTemplate & defaultKotPrinter!
+      interface ItemRouting {
+        item: typeof enriched[0];
+        station: string;
+        template: PrintTemplate;
+        printerName?: string;
+      }
 
-      // Only include departments whose KOT template is active
-      const activeOrderDepartments = orderDepartments.filter(dept => isDepartmentKotActive(dept, allTemplates));
+      const routedItems: ItemRouting[] = enriched.map(item => {
+        const dept = item.department || defaultKotStation;
+        const activeDedicatedTpl = allTemplates.find(t =>
+          t.isActive &&
+          (t.templateType === 'KOT' || t.templateType === 'BOTH') &&
+          Array.isArray(t.departments) &&
+          t.departments.includes(dept)
+        );
 
-      const slipsToPrint = activeOrderDepartments.length === 0
-        ? []
-        : (activeOrderDepartments.length > 1)
-          ? activeOrderDepartments.map(dept => {
-              const deptItems = enriched.filter(i => i.department === dept);
-              const deptPrinter = getPrinterForDept(dept);
-              const deptTemplate = getTemplateForDept(dept);
-              const showPrices = Boolean(deptTemplate?.showPricesOnKot);
-              const showTotalPrice = Boolean(deptTemplate?.showTotalPriceOnKot);
-              const showWaiter = deptTemplate?.showWaiter !== undefined ? Boolean(deptTemplate.showWaiter) : (defaultPrimaryKotTemplate?.showWaiter !== false);
-              return {
-                station: dept,
-                targetPrinterName: deptPrinter?.name,
-                showPrices,
-                showTotalPrice,
-                showWaiter,
-                showCustomer: Boolean(deptTemplate?.showCustomer ?? defaultPrimaryKotTemplate?.showCustomer),
-                showDateTime: deptTemplate?.showDateTime !== false,
-                paperWidth: deptTemplate?.paperWidth || defaultPrimaryKotTemplate?.paperWidth || '80mm',
-                items: deptItems.map(i => ({
-                  name: i.name,
-                  qty: i.qty,
-                  price: Number(i.price || 0),
-                  variation: i.selectedVariation?.name,
-                  addons: i.selectedAddons?.map(a => a.name),
-                  notes: i.notes
-                }))
-              };
-            }).filter(s => s.items.length > 0)
-          : [{
-              station: activeOrderDepartments[0],
-              targetPrinterName: getPrinterForDept(activeOrderDepartments[0])?.name,
-              showPrices: Boolean(getTemplateForDept(activeOrderDepartments[0])?.showPricesOnKot),
-              showTotalPrice: Boolean(getTemplateForDept(activeOrderDepartments[0])?.showTotalPriceOnKot),
-              showWaiter: getTemplateForDept(activeOrderDepartments[0])?.showWaiter !== undefined 
-                ? Boolean(getTemplateForDept(activeOrderDepartments[0])?.showWaiter) 
-                : (defaultPrimaryKotTemplate?.showWaiter !== false),
-              showCustomer: Boolean(getTemplateForDept(activeOrderDepartments[0])?.showCustomer ?? defaultPrimaryKotTemplate?.showCustomer),
-              showDateTime: getTemplateForDept(activeOrderDepartments[0])?.showDateTime !== false,
-              paperWidth: getTemplateForDept(activeOrderDepartments[0])?.paperWidth || defaultPrimaryKotTemplate?.paperWidth || '80mm',
-              items: enriched.filter(i => i.department === activeOrderDepartments[0]).map(i => ({
-                name: i.name,
-                qty: i.qty,
-                price: Number(i.price || 0),
-                variation: i.selectedVariation?.name,
-                addons: i.selectedAddons?.map(a => a.name),
-                notes: i.notes
-              }))
-            }].filter(s => s.items.length > 0);
+        if (activeDedicatedTpl) {
+          return {
+            item,
+            station: dept,
+            template: activeDedicatedTpl,
+            printerName: getPrinterForDept(dept)?.name
+          };
+        } else {
+          return {
+            item,
+            station: defaultKotStation,
+            template: defaultPrimaryKotTemplate,
+            printerName: defaultKotPrinter?.name
+          };
+        }
+      });
+
+      const stationMap = new Map<string, {
+        station: string;
+        template: PrintTemplate;
+        printerName?: string;
+        items: typeof enriched;
+      }>();
+
+      for (const r of routedItems) {
+        const key = `${r.station}_${r.template.id}`;
+        if (!stationMap.has(key)) {
+          stationMap.set(key, {
+            station: r.station,
+            template: r.template,
+            printerName: r.printerName,
+            items: []
+          });
+        }
+        stationMap.get(key)!.items.push(r.item);
+      }
+
+      const slipsToPrint = Array.from(stationMap.values()).map(group => {
+        const tpl = group.template;
+        const showPrices = Boolean(tpl?.showPricesOnKot);
+        const showTotalPrice = Boolean(tpl?.showTotalPriceOnKot);
+        const showWaiter = tpl?.showWaiter !== undefined ? Boolean(tpl.showWaiter) : (defaultPrimaryKotTemplate?.showWaiter !== false);
+        const showCustomer = Boolean(tpl?.showCustomer ?? defaultPrimaryKotTemplate?.showCustomer);
+        const showDateTime = tpl?.showDateTime !== false;
+        const paperWidth = tpl?.paperWidth || defaultPrimaryKotTemplate?.paperWidth || '80mm';
+
+        return {
+          station: group.station,
+          targetPrinterName: group.printerName,
+          showPrices,
+          showTotalPrice,
+          showWaiter,
+          showCustomer,
+          showDateTime,
+          paperWidth,
+          items: group.items.map(i => ({
+            name: i.name,
+            qty: i.qty,
+            price: Number(i.price || 0),
+            variation: i.selectedVariation?.name,
+            addons: i.selectedAddons?.map(a => a.name),
+            notes: i.notes
+          }))
+        };
+      }).filter(s => s.items.length > 0);
 
       const kotHardwarePayload = {
         tableName: table.name,
@@ -5980,64 +6013,97 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         };
       });
 
-      const orderDepartments = Array.from(new Set(enrichedUnprinted.map(i => i.department).filter(Boolean)));
+      const defaultKotStation = (defaultPrimaryKotTemplate?.departments && defaultPrimaryKotTemplate.departments[0])
+        || defaultPrimaryKotTemplate?.name
+        || 'Main Kitchen';
+
       const printers = data?.printers || [];
+      const defaultKotPrinter = printers.find(pr => pr.isDefault && pr.isActive)
+        || printers.find(pr => defaultPrimaryKotTemplate?.departments?.some(d => pr.departments?.includes(d)) && pr.isActive)
+        || printers.find(pr => pr.isActive && (pr.type === 'KOT' || pr.type === 'ALL'))
+        || printers[0] || null;
+
       const getPrinterForDept = (dept: string) => {
         const p = printers.find(pr => pr.departments?.includes(dept) && pr.isActive);
-        return p || printers.find(pr => pr.isDefault && pr.isActive) || printers[0] || null;
-      };
-      const getTemplateForDept = (dept: string) => {
-        return allTemplates.find(t => t.isActive && (t.templateType === 'KOT' || t.templateType === 'BOTH') && t.departments?.includes(dept))
-          || defaultPrimaryKotTemplate;
+        return p || defaultKotPrinter;
       };
 
-      // Only include departments whose KOT template is active
-      const activeOrderDepartments = orderDepartments.filter(dept => isDepartmentKotActive(dept, allTemplates));
+      // Smart Item Routing for Auto-KOT: Each unsent item routes to its dedicated active template/station.
+      // If the department template is inactive (OFF) or not configured, it safely falls back to defaultPrimaryKotTemplate & defaultKotPrinter!
+      interface UnprintedRouting {
+        item: typeof enrichedUnprinted[0];
+        station: string;
+        template: PrintTemplate;
+        printerName?: string;
+      }
 
-      const slipsToPrint = activeOrderDepartments.length === 0
-        ? []
-        : (activeOrderDepartments.length > 1)
-          ? activeOrderDepartments.map(dept => {
-              const deptItems = enrichedUnprinted.filter(i => i.department === dept);
-              const deptPrinter = getPrinterForDept(dept);
-              const deptTemplate = getTemplateForDept(dept);
-              return {
-                station: dept,
-                targetPrinterName: deptPrinter?.name,
-                showPrices: Boolean(deptTemplate?.showPricesOnKot),
-                showTotalPrice: Boolean(deptTemplate?.showTotalPriceOnKot),
-                showWaiter: deptTemplate?.showWaiter !== false,
-                showCustomer: Boolean(deptTemplate?.showCustomer),
-                showDateTime: deptTemplate?.showDateTime !== false,
-                paperWidth: deptTemplate?.paperWidth || defaultPrimaryKotTemplate?.paperWidth || '80mm',
-                items: deptItems.map(i => ({
-                  name: i.name,
-                  qty: i.unsentQty > 0 ? i.unsentQty : i.qty,
-                  price: Number(i.price || 0),
-                  variation: i.selectedVariation?.name,
-                  addons: i.selectedAddons?.map(a => a.name),
-                  notes: i.notes
-                }))
-              };
-            }).filter(s => s.items.length > 0)
-          : [{
-              station: activeOrderDepartments[0],
-              targetPrinterName: getPrinterForDept(activeOrderDepartments[0])?.name,
-              showPrices: Boolean(getTemplateForDept(activeOrderDepartments[0])?.showPricesOnKot),
-              showTotalPrice: Boolean(getTemplateForDept(activeOrderDepartments[0])?.showTotalPriceOnKot),
-              showWaiter: true,
-              showCustomer: false,
-              showDateTime: true,
-              paperWidth: defaultPrimaryKotTemplate?.paperWidth || '80mm',
-              items: enrichedUnprinted.filter(i => i.department === activeOrderDepartments[0]).map(i => ({
-                name: i.name,
-                qty: i.unsentQty > 0 ? i.unsentQty : i.qty,
-                price: Number(i.price || 0),
-                variation: i.selectedVariation?.name,
-                addons: i.selectedAddons?.map(a => a.name),
-                notes: i.notes
-              }))
-            }].filter(s => s.items.length > 0);
+      const routedUnprinted: UnprintedRouting[] = enrichedUnprinted.map(item => {
+        const dept = item.department || defaultKotStation;
+        const activeDedicatedTpl = allTemplates.find(t =>
+          t.isActive &&
+          (t.templateType === 'KOT' || t.templateType === 'BOTH') &&
+          Array.isArray(t.departments) &&
+          t.departments.includes(dept)
+        );
+
+        if (activeDedicatedTpl) {
+          return {
+            item,
+            station: dept,
+            template: activeDedicatedTpl,
+            printerName: getPrinterForDept(dept)?.name
+          };
+        } else {
+          return {
+            item,
+            station: defaultKotStation,
+            template: defaultPrimaryKotTemplate,
+            printerName: defaultKotPrinter?.name
+          };
+        }
+      });
+
+      const unprintedStationMap = new Map<string, {
+        station: string;
+        template: PrintTemplate;
+        printerName?: string;
+        items: typeof enrichedUnprinted;
+      }>();
+
+      for (const r of routedUnprinted) {
+        const key = `${r.station}_${r.template.id}`;
+        if (!unprintedStationMap.has(key)) {
+          unprintedStationMap.set(key, {
+            station: r.station,
+            template: r.template,
+            printerName: r.printerName,
+            items: []
+          });
+        }
+        unprintedStationMap.get(key)!.items.push(r.item);
+      }
+
+      const slipsToPrint = Array.from(unprintedStationMap.values()).map(group => {
+        const tpl = group.template;
+        return {
+          station: group.station,
+          targetPrinterName: group.printerName,
+          showPrices: Boolean(tpl?.showPricesOnKot),
+          showTotalPrice: Boolean(tpl?.showTotalPriceOnKot),
+          showWaiter: tpl?.showWaiter !== false,
+          showCustomer: Boolean(tpl?.showCustomer),
+          showDateTime: tpl?.showDateTime !== false,
+          paperWidth: tpl?.paperWidth || defaultPrimaryKotTemplate?.paperWidth || '80mm',
+          items: group.items.map(i => ({
+            name: i.name,
+            qty: i.unsentQty > 0 ? i.unsentQty : i.qty,
+            price: Number(i.price || 0),
+            variation: i.selectedVariation?.name,
+            addons: i.selectedAddons?.map(a => a.name),
+            notes: i.notes
+          }))
+        };
+      }).filter(s => s.items.length > 0);
 
       const kotHardwarePayload = {
         tableName: table.name,
