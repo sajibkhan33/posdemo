@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useRestaurant, formatRoleTitle, getOrderTakerDisplay, isSaleActive, DEFAULT_PAYMENT_METHODS } from '../../context/RestaurantContext';
+import { useRestaurant, formatRoleTitle, getOrderTakerDisplay, isSaleActive, DEFAULT_PAYMENT_METHODS, DEFAULT_REOPEN_BILL_PERMISSIONS } from '../../context/RestaurantContext';
 import { 
   Receipt, 
   Search, 
@@ -45,6 +45,8 @@ export const SalesLedgerView: React.FC = () => {
   const hasActiveBillPrinter = Boolean(
     (data.printers || []).some(p => p.isActive && (p.type === 'BILL' || p.type === 'ALL'))
   );
+  const reopenPerms = data.reopenBillPermissions || DEFAULT_REOPEN_BILL_PERMISSIONS;
+  const canReopenBill = currentUser?.role === 'ADMIN' || Boolean(currentUser?.role && reopenPerms[currentUser.role]);
   const [search, setSearch] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -954,23 +956,32 @@ export const SalesLedgerView: React.FC = () => {
                       <td className="py-2.5 px-3 text-center whitespace-nowrap" onClick={e => e.stopPropagation()}>
                         {active ? (
                           <div className="inline-flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => reopenSettledSaleInPos(sale.id)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 active:scale-95 text-amber-800 hover:text-amber-950 border border-amber-300 text-[11px] font-bold shadow-2xs transition cursor-pointer"
-                              title="Open this order in POS Cart (Picture 2) to cancel specific items with partial refund, or cancel entire order"
-                            >
-                              <RotateCcw className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                              <span>Void / Edit in POS</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenVoidModal(sale)}
-                              className="p-1 rounded-lg bg-rose-50 hover:bg-rose-100 active:scale-95 text-rose-600 hover:text-rose-800 border border-rose-200 transition cursor-pointer"
-                              title="Full Order Cancel / Void Modal (1-Click)"
-                            >
-                              <Ban className="w-3.5 h-3.5 shrink-0" />
-                            </button>
+                            {canReopenBill ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => reopenSettledSaleInPos(sale.id)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 active:scale-95 text-amber-800 hover:text-amber-950 border border-amber-300 text-[11px] font-bold shadow-2xs transition cursor-pointer"
+                                  title="Open this order in POS Cart to cancel specific items with partial refund, or modify order"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                  <span>Void / Edit in POS</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenVoidModal(sale)}
+                                  className="p-1 rounded-lg bg-rose-50 hover:bg-rose-100 active:scale-95 text-rose-600 hover:text-rose-800 border border-rose-200 transition cursor-pointer"
+                                  title="Full Order Cancel / Void Modal (1-Click)"
+                                >
+                                  <Ban className="w-3.5 h-3.5 shrink-0" />
+                                </button>
+                              </>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-extrabold uppercase">
+                                <Check className="w-3 h-3 text-emerald-600" />
+                                <span>Settled</span>
+                              </span>
+                            )}
                           </div>
                         ) : (
                           <div className="inline-flex flex-col items-center">

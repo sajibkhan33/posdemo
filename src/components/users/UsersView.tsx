@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useRestaurant, DEFAULT_ROLE_PERMISSIONS, DEFAULT_USERS, DEFAULT_ORDER_EDIT_PERMISSIONS } from '../../context/RestaurantContext';
+import { useRestaurant, DEFAULT_ROLE_PERMISSIONS, DEFAULT_USERS, DEFAULT_ORDER_EDIT_PERMISSIONS, DEFAULT_REOPEN_BILL_PERMISSIONS } from '../../context/RestaurantContext';
 import { AppUser, UserRole, ActiveTab } from '../../types';
 import { 
   Users, 
@@ -52,7 +52,8 @@ export const UsersView: React.FC = () => {
     editUser, 
     deleteUser, 
     updateRolePermissions,
-    updateOrderEditPermission
+    updateOrderEditPermission,
+    updateReopenBillPermission
   } = useRestaurant();
 
   const usersList: AppUser[] = data.users && data.users.length > 0 ? data.users : DEFAULT_USERS;
@@ -675,6 +676,89 @@ export const UsersView: React.FC = () => {
                       title="Toggle Chef permission"
                     >
                       {(data.orderEditPermissions?.CHEF ?? false) ? (
+                        <CheckCircle2 className="w-4 h-4 text-orange-600" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-slate-300" />
+                      )}
+                    </button>
+                  </td>
+                </tr>
+
+                {/* REOPEN / VOID SETTLED BILLS IN POS ROW */}
+                <tr className="hover:bg-slate-50 transition border-b border-slate-100">
+                  <td className="p-3 font-bold text-slate-900">
+                    Reopen / Void Settled Bills in POS
+                  </td>
+                  <td className="p-3">
+                    <span className="text-[10px] font-semibold uppercase bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
+                      Finance
+                    </span>
+                  </td>
+
+                  {/* ADMIN */}
+                  <td className="p-3 text-center bg-purple-50/30">
+                    <div className="flex items-center justify-center" title="Admin always has full unrestricted access">
+                      <CheckCircle2 className="w-4 h-4 text-purple-600" />
+                    </div>
+                  </td>
+
+                  {/* MANAGER */}
+                  <td className="p-3 text-center bg-blue-50/30">
+                    <button
+                      type="button"
+                      onClick={() => updateReopenBillPermission('MANAGER', !(data.reopenBillPermissions?.MANAGER ?? DEFAULT_REOPEN_BILL_PERMISSIONS.MANAGER))}
+                      className="p-1 rounded hover:bg-blue-100 transition inline-flex items-center justify-center cursor-pointer"
+                      title="Toggle Manager permission to reopen settled bills"
+                    >
+                      {(data.reopenBillPermissions?.MANAGER ?? DEFAULT_REOPEN_BILL_PERMISSIONS.MANAGER) ? (
+                        <CheckCircle2 className="w-4 h-4 text-blue-600" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-slate-300" />
+                      )}
+                    </button>
+                  </td>
+
+                  {/* CASHIER */}
+                  <td className="p-3 text-center bg-emerald-50/30">
+                    <button
+                      type="button"
+                      onClick={() => updateReopenBillPermission('CASHIER', !(data.reopenBillPermissions?.CASHIER ?? DEFAULT_REOPEN_BILL_PERMISSIONS.CASHIER))}
+                      className="p-1 rounded hover:bg-emerald-100 transition inline-flex items-center justify-center cursor-pointer"
+                      title="Toggle Cashier permission to reopen settled bills"
+                    >
+                      {(data.reopenBillPermissions?.CASHIER ?? DEFAULT_REOPEN_BILL_PERMISSIONS.CASHIER) ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-slate-300" />
+                      )}
+                    </button>
+                  </td>
+
+                  {/* WAITER */}
+                  <td className="p-3 text-center bg-amber-50/30">
+                    <button
+                      type="button"
+                      onClick={() => updateReopenBillPermission('WAITER', !(data.reopenBillPermissions?.WAITER ?? DEFAULT_REOPEN_BILL_PERMISSIONS.WAITER))}
+                      className="p-1 rounded hover:bg-amber-100 transition inline-flex items-center justify-center cursor-pointer"
+                      title="Toggle Waiter permission to reopen settled bills"
+                    >
+                      {(data.reopenBillPermissions?.WAITER ?? DEFAULT_REOPEN_BILL_PERMISSIONS.WAITER) ? (
+                        <CheckCircle2 className="w-4 h-4 text-amber-600 font-bold" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-slate-300 hover:text-rose-600" />
+                      )}
+                    </button>
+                  </td>
+
+                  {/* CHEF */}
+                  <td className="p-3 text-center bg-orange-50/30">
+                    <button
+                      type="button"
+                      onClick={() => updateReopenBillPermission('CHEF', !(data.reopenBillPermissions?.CHEF ?? DEFAULT_REOPEN_BILL_PERMISSIONS.CHEF))}
+                      className="p-1 rounded hover:bg-orange-100 transition inline-flex items-center justify-center cursor-pointer"
+                      title="Toggle Chef permission"
+                    >
+                      {(data.reopenBillPermissions?.CHEF ?? DEFAULT_REOPEN_BILL_PERMISSIONS.CHEF) ? (
                         <CheckCircle2 className="w-4 h-4 text-orange-600" />
                       ) : (
                         <XCircle className="w-4 h-4 text-slate-300" />

@@ -636,8 +636,12 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
     if (selectedFloorZone !== 'ALL' && tableZone !== selectedFloorZone) {
       return false;
     }
-    const isTableReopenedByAdmin = Boolean(table.linkedSaleId || table.isPaidOrder);
-    const effectiveStatus = (isWaiter && isTableReopenedByAdmin) ? 'free' : table.status;
+    const isTableReopened = Boolean(table.linkedSaleId || table.isPaidOrder);
+    const isReopenOwner = Boolean(
+      isTableReopened &&
+      (table.reopenedByUserId ? table.reopenedByUserId === currentUser?.id : (!isWaiter && currentUser?.role === 'ADMIN'))
+    );
+    const effectiveStatus = (isTableReopened && !isReopenOwner) ? 'free' : table.status;
     if (tableStatusFilter !== 'ALL' && effectiveStatus !== tableStatusFilter) {
       return false;
     }
@@ -854,9 +858,13 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
             }}
           >
             {filteredTables.map(table => {
-              const isTableReopenedByAdmin = Boolean(table.linkedSaleId || table.isPaidOrder);
-              const isReopenedPaid = Boolean(!isWaiter && isTableReopenedByAdmin);
-              const effectiveCart = (isWaiter && isTableReopenedByAdmin) ? [] : table.cart;
+              const isTableReopened = Boolean(table.linkedSaleId || table.isPaidOrder);
+              const isReopenOwner = Boolean(
+                isTableReopened &&
+                (table.reopenedByUserId ? table.reopenedByUserId === currentUser?.id : (!isWaiter && currentUser?.role === 'ADMIN'))
+              );
+              const isReopenedPaid = isReopenOwner;
+              const effectiveCart = (isTableReopened && !isReopenOwner) ? [] : table.cart;
               const tableSubtotal = effectiveCart.reduce((s, i) => s + (i.price * i.qty), 0);
               const reopenedPaidAmount = isReopenedPaid ? (Number(table.paidAmount) || 0) : 0;
               const tableRemainingDue = Math.max(0, tableSubtotal - reopenedPaidAmount);
@@ -864,11 +872,11 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
               const isHoldSyncOnKotOnly = data.restaurantProfile?.tableHoldSyncMode === 'on_kot';
               const hasAnyKotPrinted = !isReallyEmpty && effectiveCart.some(item => (item.kotPrintedQty || 0) > 0 || item.kotPrinted);
               
-              const isBilled = !isReallyEmpty && table.status === 'billed' && !(isWaiter && isTableReopenedByAdmin);
-              const isHold = !isReallyEmpty && table.status === 'hold' && (!isHoldSyncOnKotOnly || hasAnyKotPrinted) && !(isWaiter && isTableReopenedByAdmin);
-              const isFree = (table.status === 'free' || isReallyEmpty) || (isHoldSyncOnKotOnly && !hasAnyKotPrinted && !isBilled) || (isWaiter && isTableReopenedByAdmin);
+              const isBilled = !isReallyEmpty && table.status === 'billed' && !isTableReopened;
+              const isHold = !isReallyEmpty && table.status === 'hold' && (!isHoldSyncOnKotOnly || hasAnyKotPrinted) && !(isTableReopened && !isReopenOwner);
+              const isFree = (table.status === 'free' || isReallyEmpty) || (isHoldSyncOnKotOnly && !hasAnyKotPrinted && !isBilled) || (isTableReopened && !isReopenOwner);
               const hasUnprintedKot = !isReallyEmpty && effectiveCart.length > 0 && effectiveCart.some(item => !item.kotPrinted || item.qty > (item.kotPrintedQty || 0));
-              const isBillPrinted = !isReallyEmpty && table.status === 'billed' && !(isWaiter && isTableReopenedByAdmin);
+              const isBillPrinted = !isReallyEmpty && table.status === 'billed' && !isTableReopened;
               const zoneLabel = table.zone || 'Floor 1';
 
               // Sizing specific variables
@@ -1579,7 +1587,10 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
       {/* Right Column: Dedicated POS Cart (Exact compact fixed width like on lg, never bloated on 2xl/3xl/4xl) */}
       <div className={`${mobilePosTab === 'cart' ? 'flex' : 'hidden'} lg:flex w-full lg:w-[380px] xl:w-[410px] 2xl:w-[430px] flex-1 min-h-0 lg:flex-initial lg:h-full lg:shrink-0 flex-col overflow-hidden`}>
         {(() => {
-          const isReopenedPaidActive = Boolean(activeTable?.linkedSaleId && !isWaiter);
+          const isReopenedPaidActive = Boolean(
+            activeTable?.linkedSaleId &&
+            (activeTable?.reopenedByUserId ? activeTable.reopenedByUserId === currentUser?.id : (!isWaiter && currentUser?.role === 'ADMIN'))
+          );
           return (
             <div className="bg-white border border-slate-200 rounded-2xl p-2.5 sm:p-3.5 shadow-sm flex flex-col h-full min-h-0 overflow-hidden">
               {/* Cart Header with Table Name & Zone */}

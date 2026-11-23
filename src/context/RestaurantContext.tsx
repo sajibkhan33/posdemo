@@ -162,6 +162,14 @@ export const DEFAULT_ORDER_EDIT_PERMISSIONS: Record<UserRole, boolean> = {
   CHEF: false
 };
 
+export const DEFAULT_REOPEN_BILL_PERMISSIONS: Record<UserRole, boolean> = {
+  ADMIN: true,
+  MANAGER: true,
+  CASHIER: false,
+  WAITER: false,
+  CHEF: false
+};
+
 export const DEFAULT_USERS: AppUser[] = [
   {
     id: 'USR-01',
@@ -1390,6 +1398,7 @@ interface RestaurantContextType {
   deleteUser: (id: string) => void;
   updateRolePermissions: (role: UserRole, permissions: ActiveTab[]) => void;
   updateOrderEditPermission: (role: UserRole, allowed: boolean) => void;
+  updateReopenBillPermission: (role: UserRole, allowed: boolean) => void;
   canAccessTab: (tab: ActiveTab, ignoreShift?: boolean) => boolean;
 
   // Language & i18n
@@ -3274,6 +3283,14 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     });
   };
 
+  const updateReopenBillPermission = (role: UserRole, allowed: boolean) => {
+    setData(prev => {
+      const current = prev.reopenBillPermissions || DEFAULT_REOPEN_BILL_PERMISSIONS;
+      const updated = { ...current, [role]: allowed };
+      return { ...prev, reopenBillPermissions: updated };
+    });
+  };
+
   const canAccessTab = (tab: ActiveTab, ignoreShift: boolean = false): boolean => {
     if (!currentUser) return false;
     if (tab === 'launcher') return true;
@@ -3894,9 +3911,13 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     activeTableIdRef.current = tableId;
     posViewRef.current = 'order';
     const targetTable = data.tables?.find(t => t.id === tableId);
-    const isWaiter = currentUser?.role === 'WAITER';
+    const isReopenedOrder = Boolean(targetTable && (targetTable.linkedSaleId || targetTable.isPaidOrder));
+    const isReopenOwner = Boolean(
+      isReopenedOrder &&
+      (targetTable?.reopenedByUserId ? targetTable.reopenedByUserId === currentUser?.id : currentUser?.role === 'ADMIN')
+    );
 
-    if (isWaiter && targetTable && (targetTable.linkedSaleId || targetTable.isPaidOrder)) {
+    if (isReopenedOrder && !isReopenOwner) {
       const sanitized = data.tables.map(t => t.id === tableId ? {
         ...t,
         status: 'free' as const,
@@ -3913,6 +3934,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         linkedInvoiceNo: undefined,
         isPaidOrder: false,
         paidAmount: 0,
+        reopenedByUserId: undefined,
+        reopenedByUserName: undefined,
+        reopenedByUserRole: undefined,
         orderCreatedBy: currentUser?.name || '',
         orderCreatedRole: currentUser?.role || 'WAITER',
         orderCreatedId: currentUser?.id,
@@ -7255,6 +7279,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         linkedInvoiceNo: sale.invoiceNo,
         isPaidOrder: true,
         paidAmount: sale.total,
+        reopenedByUserId: currentUser?.id,
+        reopenedByUserName: currentUser?.name,
+        reopenedByUserRole: currentUser?.role,
         orderCreatedBy: sale.orderCreatedBy || sale.sellerName,
         orderCreatedRole: sale.orderCreatedRole || sale.sellerRole,
         orderCreatedAt: sale.createdAt || Date.now(),
@@ -7292,6 +7319,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       linkedInvoiceNo: undefined,
       isPaidOrder: false,
       paidAmount: 0,
+      reopenedByUserId: undefined,
+      reopenedByUserName: undefined,
+      reopenedByUserRole: undefined,
       orderCreatedBy: undefined,
       orderCreatedRole: undefined,
       orderCreatedId: undefined,
@@ -9224,6 +9254,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       deleteUser,
       updateRolePermissions,
       updateOrderEditPermission,
+      updateReopenBillPermission,
       canAccessTab,
       language,
       setLanguage,

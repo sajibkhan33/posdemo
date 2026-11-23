@@ -161,6 +161,9 @@ export interface Table {
   linkedInvoiceNo?: string;
   isPaidOrder?: boolean;
   paidAmount?: number;
+  reopenedByUserId?: string;
+  reopenedByUserName?: string;
+  reopenedByUserRole?: string;
   orderRef?: string;
   kotCount?: number;
   billCount?: number;
@@ -783,6 +786,7 @@ export interface AppData {
   users?: AppUser[];
   rolePermissions?: Record<UserRole, ActiveTab[]>;
   orderEditPermissions?: Record<UserRole, boolean>;
+  reopenBillPermissions?: Record<UserRole, boolean>;
   employees?: Employee[];
   attendanceRecords?: AttendanceRecord[];
   leaveApplications?: LeaveApplication[];
