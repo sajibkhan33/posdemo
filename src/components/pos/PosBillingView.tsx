@@ -853,6 +853,9 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
           >
             {filteredTables.map(table => {
               const tableSubtotal = table.cart.reduce((s, i) => s + (i.price * i.qty), 0);
+              const isReopenedPaid = Boolean(table.linkedSaleId || table.isPaidOrder);
+              const reopenedPaidAmount = isReopenedPaid ? (Number(table.paidAmount) || 0) : 0;
+              const tableRemainingDue = Math.max(0, tableSubtotal - reopenedPaidAmount);
               const isReallyEmpty = !table.cart || table.cart.length === 0;
               const isHoldSyncOnKotOnly = data.restaurantProfile?.tableHoldSyncMode === 'on_kot';
               const hasAnyKotPrinted = !isReallyEmpty && table.cart.some(item => (item.kotPrintedQty || 0) > 0 || item.kotPrinted);
@@ -919,9 +922,11 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
                       ? 'border-[#004b9b] ring-4 ring-blue-400/30 bg-blue-50/70 shadow-lg z-30'
                       : isFree 
                         ? 'bg-emerald-500 hover:bg-emerald-600 border-emerald-600 text-white' 
-                        : isHold
-                          ? 'bg-[#004b9b] border-[#002b59] text-white ring-2 ring-blue-400/30'
-                          : 'bg-blue-600 border-blue-700 text-white ring-2 ring-blue-400/30'
+                        : isReopenedPaid
+                          ? 'bg-amber-600 hover:bg-amber-700 border-amber-800 text-white ring-2 ring-amber-400/50'
+                          : isHold
+                            ? 'bg-[#004b9b] border-[#002b59] text-white ring-2 ring-blue-400/30'
+                            : 'bg-blue-600 border-blue-700 text-white ring-2 ring-blue-400/30'
                   }`}
                 >
                   {/* Active Resizing Overlay & Dimensions Badge */}
@@ -955,10 +960,15 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
                             {table.name}
                           </h3>
                         </div>
-                        <div className={`inline-flex items-center gap-1 font-bold text-blue-100 ${zoneBadgeClass}`}>
+                        <div className={`inline-flex items-center gap-1 font-bold ${isReopenedPaid ? 'text-amber-100' : 'text-blue-100'} ${zoneBadgeClass}`}>
                           <MapPin className="w-2.5 h-2.5 shrink-0" />
                           <span className="truncate">{zoneLabel}</span>
                         </div>
+                        {isReopenedPaid && (
+                          <div className="bg-amber-950/50 text-amber-100 text-[9px] font-black px-1.5 py-0.5 rounded-md border border-amber-300/40 mt-1 truncate max-w-full shadow-2xs">
+                            Reopened: {table.linkedInvoiceNo || 'Paid'} (৳{reopenedPaidAmount})
+                          </div>
+                        )}
                       </div>
 
                       {/* Middle: Cart Overview */}
@@ -966,13 +976,13 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
                         <div className={`${isUltraCompact ? 'text-xs font-black' : isCompact ? 'text-sm font-black' : isLarge ? 'text-2xl font-black' : 'text-lg font-black'} text-white`}>
                           ৳ {tableSubtotal.toLocaleString()}
                         </div>
-                        <div className={`${isUltraCompact ? 'text-[8px]' : 'text-[10px]'} text-blue-100 font-semibold truncate`}>
+                        <div className={`${isUltraCompact ? 'text-[8px]' : 'text-[10px]'} ${isReopenedPaid ? 'text-amber-100' : 'text-blue-100'} font-semibold truncate`}>
                           {table.cart.length} items • <span>{table.waiter ? `Waiter: ${table.waiter}` : 'No Waiter'}</span>
                         </div>
                       </div>
 
                       {/* Bottom: Action bar */}
-                      <div className={`border-t border-blue-700/60 flex items-center justify-between gap-1 ${isUltraCompact ? 'pt-1' : isCompact ? 'pt-1.5' : 'pt-2'} relative`}>
+                      <div className={`border-t ${isReopenedPaid ? 'border-amber-700/60' : 'border-blue-700/60'} flex items-center justify-between gap-1 ${isUltraCompact ? 'pt-1' : isCompact ? 'pt-1.5' : 'pt-2'} relative`}>
                         <div className="w-full flex items-center gap-1 pr-1.5">
                           {/* Quick KOT Direct Print - only if KOT printer active and table not billed */}
                           {hasActiveKotPrinter && hasUnprintedKot && !isBillPrinted && (
@@ -1000,7 +1010,7 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
                           )}
 
                           {/* Quick Bill Direct Print - only if Bill printer active and table not billed */}
-                          {!isBillPrinted && (!table.cart || table.cart.length > 0) && (
+                          {!isBillPrinted && (!table.cart || table.cart.length > 0) && !isReopenedPaid && (
                             <button
                               type="button"
                               title="Direct Print Bill"
@@ -1019,17 +1029,47 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
 
                           {/* Settle / Pay Button (Hidden for WAITER role) */}
                           {!isWaiter && (
-                            <button
-                              type="button"
-                              title="Settle Payment & Pay"
-                              onClick={(e) => { e.stopPropagation(); openSettleModal(table.id); }}
-                              className={`flex-1 bg-black hover:bg-slate-900 text-blue-300 font-black flex items-center justify-center gap-0.5 transition cursor-pointer shadow-xs active:scale-95 ${
-                                isUltraCompact ? 'py-0.5 px-0.5 rounded text-[8px]' : isCompact ? 'py-1 px-1 rounded-md text-[10px]' : isLarge ? 'py-2 px-2 rounded-xl text-xs' : 'py-1.5 px-1.5 rounded-lg text-[11px]'
-                              }`}
-                            >
-                              <CreditCard className={isUltraCompact ? 'w-2 h-2' : isCompact ? 'w-2.5 h-2.5' : 'w-3 h-3'} />
-                              <span className={isUltraCompact ? 'hidden' : ''}>Pay</span>
-                            </button>
+                            isReopenedPaid ? (
+                              <button
+                                type="button"
+                                title={tableRemainingDue > 0 ? `Settle Due: ৳${tableRemainingDue}` : 'Done / Release Table'}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (tableRemainingDue > 0) {
+                                    openSettleModal(table.id);
+                                  } else {
+                                    finishLinkedOrderInPos(table.id);
+                                  }
+                                }}
+                                className={`flex-1 ${tableRemainingDue > 0 ? 'bg-amber-950 hover:bg-black text-amber-200' : 'bg-emerald-700 hover:bg-emerald-800 text-white'} font-black flex items-center justify-center gap-0.5 transition cursor-pointer shadow-xs active:scale-95 ${
+                                  isUltraCompact ? 'py-0.5 px-0.5 rounded text-[8px]' : isCompact ? 'py-1 px-1 rounded-md text-[10px]' : isLarge ? 'py-2 px-2 rounded-xl text-xs' : 'py-1.5 px-1.5 rounded-lg text-[11px]'
+                                }`}
+                              >
+                                {tableRemainingDue > 0 ? (
+                                  <>
+                                    <CreditCard className={isUltraCompact ? 'w-2 h-2' : isCompact ? 'w-2.5 h-2.5' : 'w-3 h-3'} />
+                                    <span className={isUltraCompact ? 'hidden' : ''}>Due (৳{tableRemainingDue})</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Check className={isUltraCompact ? 'w-2 h-2' : isCompact ? 'w-2.5 h-2.5' : 'w-3 h-3'} />
+                                    <span className={isUltraCompact ? 'hidden' : ''}>Release</span>
+                                  </>
+                                )}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                title="Settle Payment & Pay"
+                                onClick={(e) => { e.stopPropagation(); openSettleModal(table.id); }}
+                                className={`flex-1 bg-black hover:bg-slate-900 text-blue-300 font-black flex items-center justify-center gap-0.5 transition cursor-pointer shadow-xs active:scale-95 ${
+                                  isUltraCompact ? 'py-0.5 px-0.5 rounded text-[8px]' : isCompact ? 'py-1 px-1 rounded-md text-[10px]' : isLarge ? 'py-2 px-2 rounded-xl text-xs' : 'py-1.5 px-1.5 rounded-lg text-[11px]'
+                                }`}
+                              >
+                                <CreditCard className={isUltraCompact ? 'w-2 h-2' : isCompact ? 'w-2.5 h-2.5' : 'w-3 h-3'} />
+                                <span className={isUltraCompact ? 'hidden' : ''}>Pay</span>
+                              </button>
+                            )
                           )}
                         </div>
                       </div>

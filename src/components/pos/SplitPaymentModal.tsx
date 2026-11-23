@@ -25,7 +25,8 @@ export const SplitPaymentModal: React.FC = () => {
     data, 
     setTableCustomer, 
     setTableWaiter,
-    getCustomerAvailableAdvance 
+    getCustomerAvailableAdvance,
+    finishLinkedOrderInPos
   } = useRestaurant();
 
   const paymentMethods: PaymentMethodConfig[] = (
@@ -84,40 +85,45 @@ export const SplitPaymentModal: React.FC = () => {
     }
   }
 
+  const isReopenedPaidOrder = Boolean(activeSettlingTable.linkedSaleId || activeSettlingTable.isPaidOrder);
+  const alreadyPaidAmount = isReopenedPaidOrder ? (Number(activeSettlingTable.paidAmount) || 0) : 0;
+  const remainingDue = Math.max(0, netTotal - alreadyPaidAmount);
+  const payableTarget = isReopenedPaidOrder ? remainingDue : netTotal;
+
   const effectiveCustomer = (selectedCustomer.trim() || activeSettlingTable.customer || '').trim();
   const isWalkIn = !effectiveCustomer || effectiveCustomer.toLowerCase().includes('walk-in');
   const availableAdvance = !isWalkIn && getCustomerAvailableAdvance ? getCustomerAvailableAdvance(effectiveCustomer) : 0;
 
   // Auto-suggest available advance if customer has advance and no payment entered yet
   useEffect(() => {
-    if (availableAdvance > 0 && advanceInputAmt === 0) {
+    if (availableAdvance > 0 && advanceInputAmt === 0 && payableTarget > 0) {
       const hasAnySplit = Object.values(splitAmounts).some(v => Number(v) > 0);
       if (!hasAnySplit) {
-        setAdvanceInputAmt(Math.min(netTotal, availableAdvance));
+        setAdvanceInputAmt(Math.min(payableTarget, availableAdvance));
       }
     }
-  }, [availableAdvance, netTotal]);
+  }, [availableAdvance, payableTarget]);
 
   const totalEntered = paymentMethods.reduce((sum, m) => sum + (Number(splitAmounts[m.id]) || 0), 0) + advanceInputAmt;
-  const remaining = Math.max(0, netTotal - totalEntered);
-  const changeReturn = Math.max(0, totalEntered - netTotal);
+  const remaining = Math.max(0, payableTarget - totalEntered);
+  const changeReturn = Math.max(0, totalEntered - payableTarget);
 
   const handleFillAll = (mId: string) => {
     setAdvanceInputAmt(0);
     const next: Record<string, number> = {};
     paymentMethods.forEach(m => {
-      next[m.id] = m.id === mId ? netTotal : 0;
+      next[m.id] = m.id === mId ? payableTarget : 0;
     });
     setSplitAmounts(next);
   };
 
   const handleApplyAdvance = (customAmt?: number) => {
-    const amtToUse = customAmt !== undefined ? customAmt : Math.min(netTotal, availableAdvance);
+    const amtToUse = customAmt !== undefined ? customAmt : Math.min(payableTarget, availableAdvance);
     setAdvanceInputAmt(amtToUse);
-    if (amtToUse >= netTotal) {
+    if (amtToUse >= payableTarget) {
       setSplitAmounts({});
     } else {
-      const rem = netTotal - amtToUse;
+      const rem = payableTarget - amtToUse;
       const cashMethod = paymentMethods.find(m => m.type === 'CASH');
       if (cashMethod) {
         setSplitAmounts({ [cashMethod.id]: rem });
@@ -164,7 +170,13 @@ export const SplitPaymentModal: React.FC = () => {
     e.preventDefault();
     if (isSubmitting || isAlreadySettled) return;
 
-    if (totalEntered < netTotal) {
+    if (isReopenedPaidOrder && remainingDue <= 0) {
+      finishLinkedOrderInPos(activeSettlingTable.id);
+      closeSettleModal();
+      return;
+    }
+
+    if (totalEntered < payableTarget) {
       alert(`Payment incomplete! Remaining ৳${remaining.toLocaleString()} is due.`);
       return;
     }
@@ -391,13 +403,59 @@ export const SplitPaymentModal: React.FC = () => {
           </div>
         )}
 
+        {/* Reopened Paid Order Banner - No Due */}
+        {isReopenedPaidOrder && remainingDue <= 0 && (
+          <div className="p-3.5 bg-emerald-50 border-2 border-emerald-300 rounded-xl text-emerald-950 flex items-center justify-between gap-3 shadow-xs">
+            <div>
+              <div className="flex items-center gap-1.5 font-black text-sm text-emerald-900">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>Order Already Settled: {activeSettlingTable.linkedInvoiceNo || 'Paid'}</span>
+              </div>
+              <p className="text-xs text-emerald-800 font-medium mt-0.5">
+                This bill was already settled & paid (৳{alreadyPaidAmount.toLocaleString()}). No extra items were added.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                finishLinkedOrderInPos(activeSettlingTable.id);
+                closeSettleModal();
+              }}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-sm transition cursor-pointer shrink-0"
+            >
+              Done / Release Table
+            </button>
+          </div>
+        )}
+
+        {/* Reopened Paid Order Banner - With Additional Due */}
+        {isReopenedPaidOrder && remainingDue > 0 && (
+          <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-amber-950">
+            <div className="flex items-center justify-between font-bold text-xs">
+              <span>Reopened Order: <strong>{activeSettlingTable.linkedInvoiceNo || 'Paid'}</strong></span>
+              <span className="text-emerald-700 font-black">Already Settled: ৳{alreadyPaidAmount.toLocaleString()}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between text-xs font-black">
+              <span>New Total: ৳{netTotal.toLocaleString()}</span>
+              <span className="text-rose-700 font-black text-sm">Additional Due to Pay: ৳{remainingDue.toLocaleString()}</span>
+            </div>
+          </div>
+        )}
+
         {/* Bill Summary Banner */}
         <div className="my-4 p-4 rounded-xl bg-slate-900 text-white flex items-center justify-between shadow-inner">
           <div>
-            <div className="text-xs text-slate-400 font-medium">Net Payable Bill</div>
-            <div className="text-2xl font-extrabold text-blue-400 tracking-tight">
-              ৳ {netTotal.toLocaleString()}
+            <div className="text-xs text-slate-400 font-medium">
+              {isReopenedPaidOrder ? 'Additional Due to Collect' : 'Net Payable Bill'}
             </div>
+            <div className="text-2xl font-extrabold text-blue-400 tracking-tight">
+              ৳ {payableTarget.toLocaleString()}
+            </div>
+            {isReopenedPaidOrder && (
+              <div className="text-[11px] text-amber-300 font-bold">
+                Bill Total: ৳{netTotal.toLocaleString()} (Already Paid: ৳{alreadyPaidAmount.toLocaleString()})
+              </div>
+            )}
             {discDeduction > 0 && (
               <div className="text-[11px] text-emerald-400">
                 Discount: ৳{discDeduction.toLocaleString()} (Subtotal: ৳{subtotal.toLocaleString()})
@@ -651,13 +709,15 @@ export const SplitPaymentModal: React.FC = () => {
         <button
           type="submit"
           id="submit-settle-payment"
-          disabled={totalEntered < netTotal || isSubmitting || isAlreadySettled}
+          disabled={(isReopenedPaidOrder ? (remainingDue > 0 && totalEntered < payableTarget) : totalEntered < netTotal) || isSubmitting || isAlreadySettled}
           className={`flex-1 py-3 rounded-xl font-extrabold text-sm shadow-md transition flex items-center justify-center gap-2 ${
             isAlreadySettled
               ? 'bg-slate-200 border border-slate-300 text-slate-500 cursor-not-allowed shadow-none'
-              : totalEntered >= netTotal && !isSubmitting
-                ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer' 
-                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+              : (isReopenedPaidOrder && remainingDue <= 0)
+                ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'
+                : totalEntered >= payableTarget && !isSubmitting
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer' 
+                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
           }`}
         >
           {isAlreadySettled ? (
@@ -670,10 +730,15 @@ export const SplitPaymentModal: React.FC = () => {
               <div className="w-4 h-4 border-2 border-white/60 border-t-white rounded-full animate-spin" />
               <span>Processing Settlement...</span>
             </>
+          ) : (isReopenedPaidOrder && remainingDue <= 0) ? (
+            <>
+              <CheckCircle2 className="w-5 h-5" />
+              <span>Done / Release Table (No Due)</span>
+            </>
           ) : (
             <>
               <CheckCircle2 className="w-5 h-5" />
-              <span>Confirm Payment & Settle Bill</span>
+              <span>{isReopenedPaidOrder ? 'Collect Due & Update Bill' : 'Confirm Payment & Settle Bill'}</span>
             </>
           )}
         </button>

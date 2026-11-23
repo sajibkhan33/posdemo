@@ -2293,12 +2293,13 @@ async function startServer() {
       if (Array.isArray(tables) && cachedState) {
         if (newSale && newSale.invoiceNo) {
           if (!Array.isArray(cachedState.sales)) cachedState.sales = [];
-          const exists = cachedState.sales.some((s: any) => 
-            s.invoiceNo === newSale.invoiceNo || 
+          const existingIdx = cachedState.sales.findIndex((s: any) => 
             (s.id && newSale.id && s.id === newSale.id) ||
-            (s.orderRef && newSale.orderRef && s.orderRef === newSale.orderRef)
+            s.invoiceNo === newSale.invoiceNo
           );
-          if (!exists) {
+          if (existingIdx !== -1) {
+            cachedState.sales[existingIdx] = { ...cachedState.sales[existingIdx], ...newSale };
+          } else {
             cachedState.sales.push(newSale);
           }
         }

@@ -2710,8 +2710,10 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       let updatedSales = prev.sales || [];
       if (newSale && newSale.invoiceNo) {
-        const exists = updatedSales.some(s => s.invoiceNo === newSale.invoiceNo);
-        if (!exists) {
+        const existingIdx = updatedSales.findIndex(s => (s.id && newSale.id && s.id === newSale.id) || s.invoiceNo === newSale.invoiceNo);
+        if (existingIdx !== -1) {
+          updatedSales = updatedSales.map((s, idx) => idx === existingIdx ? { ...s, ...newSale } : s);
+        } else {
           updatedSales = [...updatedSales, newSale];
         }
       }
@@ -5818,22 +5820,39 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       paymentBreakdown['advance'] = computedAdvance;
     }
 
+    const isReopenedPaidOrder = Boolean(table.linkedSaleId || table.isPaidOrder);
+    const alreadyPaidAmount = isReopenedPaidOrder ? (Number(table.paidAmount) || 0) : 0;
+    const remainingDue = Math.max(0, netTotal - alreadyPaidAmount);
+
+    if (isReopenedPaidOrder && remainingDue <= 0) {
+      // Reopened order was already fully settled and no extra items were added.
+      // Safely release the table and do NOT create any duplicate invoice or duplicate sale!
+      inFlightSettleRef.current.delete(tableId);
+      finishLinkedOrderInPos(tableId);
+      return;
+    }
+
+    const payableRequired = isReopenedPaidOrder ? remainingDue : netTotal;
     const totalEntered = computedCash + computedCard + computedBkash + computedNagad + computedDue + computedAdvance;
-    if (totalEntered < netTotal) {
-      alert(`Payment is incomplete! Remaining balance: ৳ ${(netTotal - totalEntered).toLocaleString()}`);
+    if (totalEntered < payableRequired) {
+      alert(`Payment is incomplete! Remaining balance: ৳ ${(payableRequired - totalEntered).toLocaleString()}`);
+      inFlightSettleRef.current.delete(tableId);
       return;
     }
 
     // Auto-dispatch KOT to kitchen handled via receipt hardware print below without conflicting network KOT_SUBMIT
-    const changeReturn = Math.max(0, totalEntered - netTotal);
+    const changeReturn = Math.max(0, totalEntered - payableRequired);
     const cashRetained = Math.max(0, computedCash - changeReturn);
     let activeSerialConfig = { ...(dataRef.current?.serialConfig || data.serialConfig || DEFAULT_SERIAL_CONFIG) };
     let serialConfigChanged = false;
     let invoiceNo = (table.billCount && table.billCount > 0) ? table.linkedInvoiceNo : undefined;
-    const isAlreadyInSales = invoiceNo && (dataRef.current?.sales || data.sales || []).some((s: any) => s.invoiceNo === invoiceNo);
+    if (isReopenedPaidOrder && table.linkedInvoiceNo) {
+      invoiceNo = table.linkedInvoiceNo;
+    }
+    const isAlreadyInSales = !isReopenedPaidOrder && invoiceNo && (dataRef.current?.sales || data.sales || []).some((s: any) => s.invoiceNo === invoiceNo);
     const isLegacyRandomInvoice = invoiceNo && (/POS-\d{5,6}$/.test(invoiceNo) || invoiceNo.length > 8);
 
-    if (!invoiceNo || isLegacyRandomInvoice || isAlreadyInSales) {
+    if (!isReopenedPaidOrder && (!invoiceNo || isLegacyRandomInvoice || isAlreadyInSales)) {
       const todayDateStr = data.businessDay?.date || new Date().toISOString().split('T')[0];
       const num = activeSerialConfig.posInvoiceNextNumber || 1;
       const padded = String(num).padStart(activeSerialConfig.posInvoicePadding || 4, '0');
@@ -5995,51 +6014,86 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const sellerRole = table.orderCreatedRole || currentUser?.role || 'CASHIER';
     const sellerId = table.orderCreatedId || currentUser?.id;
 
-    const newSale: SaleRecord = {
-      id: Date.now(),
-      date: today,
-      invoiceNo,
-      orderRef: effectiveKotBase,
-      kotBaseSerial: effectiveKotBase,
-      kotCount: effectiveKotCount,
-      tableId: table.id,
-      table: table.name,
-      subtotal: subtotal,
-      discountVal: table.discountVal,
-      discountType: table.discountType,
-      vatVal: vatVal,
-      vatPercent: isVatEnabled ? vatPercent : 0,
-      vatMode,
-      details: `${table.name} [Zone: ${table.zone || 'Floor 1'}] (W: ${assignedWaiter || 'N/A'}${agent ? `, Ch: ${agent.name}` : ''}, KOT: ${effectiveKotBase}${effectiveKotCount > 1 ? ` #${effectiveKotCount}` : ''}): ${itemSummary}`,
-      items: JSON.parse(JSON.stringify(table.cart)),
-      cash: cashRetained,
-      card: computedCard,
-      bkash: computedBkash,
-      nagad: computedNagad,
-      dueGiven: computedDue,
-      dueCustomer: computedDue > 0 ? assignedCustomer : '',
-      dueCollected: 0,
-      advanceAdjusted: computedAdvance,
-      paymentBreakdown,
-      change: changeReturn,
-      total: netTotal,
-      channelOrAgent: agent ? `${agent.name} (${agent.commissionPercent}%)` : (table.channelOrAgentId !== 'dine_in' ? table.channelOrAgentId : undefined),
-      channelCommissionPercent: commissionPercent,
-      channelCommissionAmount: commissionAmount,
-      netRestaurantRevenue,
-      sessionId: data.session?.id || 'SES-DEFAULT',
-      waiterName: assignedWaiter || 'Staff',
-      cashierName: currentUser?.name || data.session?.openedBy || 'Cashier',
-      cashierRole: currentUser?.role || 'CASHIER',
-      cashierId: currentUser?.id,
-      sellerName: sellerName,
-      sellerRole: sellerRole,
-      sellerId: sellerId,
-      orderCreatedBy: sellerName,
-      orderCreatedRole: sellerRole,
-      shift: data.session?.shiftType || 'Shift 1',
-      createdAt: Date.now()
-    };
+    const existingLinkedSale = isReopenedPaidOrder && table.linkedSaleId 
+      ? (dataRef.current?.sales || data.sales || []).find(s => s.id === table.linkedSaleId) 
+      : null;
+
+    let finalSaleRecord: SaleRecord;
+    if (existingLinkedSale) {
+      const mergedPaymentBreakdown = { ...(existingLinkedSale.paymentBreakdown || {}) };
+      Object.entries(paymentBreakdown).forEach(([k, v]) => {
+        mergedPaymentBreakdown[k] = (mergedPaymentBreakdown[k] || 0) + v;
+      });
+
+      finalSaleRecord = {
+        ...existingLinkedSale,
+        subtotal: subtotal,
+        discountVal: table.discountVal,
+        discountType: table.discountType,
+        vatVal: vatVal,
+        vatPercent: isVatEnabled ? vatPercent : 0,
+        vatMode,
+        details: `${table.name} [Zone: ${table.zone || 'Floor 1'}] (W: ${assignedWaiter || 'N/A'}${agent ? `, Ch: ${agent.name}` : ''}, KOT: ${effectiveKotBase}${effectiveKotCount > 1 ? ` #${effectiveKotCount}` : ''}): ${itemSummary}`,
+        items: JSON.parse(JSON.stringify(table.cart)),
+        cash: (existingLinkedSale.cash || 0) + cashRetained,
+        card: (existingLinkedSale.card || 0) + computedCard,
+        bkash: (existingLinkedSale.bkash || 0) + computedBkash,
+        nagad: (existingLinkedSale.nagad || 0) + computedNagad,
+        dueGiven: (existingLinkedSale.dueGiven || 0) + computedDue,
+        dueCustomer: computedDue > 0 ? assignedCustomer : (existingLinkedSale.dueCustomer || ''),
+        advanceAdjusted: (existingLinkedSale.advanceAdjusted || 0) + computedAdvance,
+        paymentBreakdown: mergedPaymentBreakdown,
+        change: changeReturn,
+        total: netTotal,
+        netRestaurantRevenue
+      };
+    } else {
+      finalSaleRecord = {
+        id: Date.now(),
+        date: today,
+        invoiceNo,
+        orderRef: effectiveKotBase,
+        kotBaseSerial: effectiveKotBase,
+        kotCount: effectiveKotCount,
+        tableId: table.id,
+        table: table.name,
+        subtotal: subtotal,
+        discountVal: table.discountVal,
+        discountType: table.discountType,
+        vatVal: vatVal,
+        vatPercent: isVatEnabled ? vatPercent : 0,
+        vatMode,
+        details: `${table.name} [Zone: ${table.zone || 'Floor 1'}] (W: ${assignedWaiter || 'N/A'}${agent ? `, Ch: ${agent.name}` : ''}, KOT: ${effectiveKotBase}${effectiveKotCount > 1 ? ` #${effectiveKotCount}` : ''}): ${itemSummary}`,
+        items: JSON.parse(JSON.stringify(table.cart)),
+        cash: cashRetained,
+        card: computedCard,
+        bkash: computedBkash,
+        nagad: computedNagad,
+        dueGiven: computedDue,
+        dueCustomer: computedDue > 0 ? assignedCustomer : '',
+        dueCollected: 0,
+        advanceAdjusted: computedAdvance,
+        paymentBreakdown,
+        change: changeReturn,
+        total: netTotal,
+        channelOrAgent: agent ? `${agent.name} (${agent.commissionPercent}%)` : (table.channelOrAgentId !== 'dine_in' ? table.channelOrAgentId : undefined),
+        channelCommissionPercent: commissionPercent,
+        channelCommissionAmount: commissionAmount,
+        netRestaurantRevenue,
+        sessionId: data.session?.id || 'SES-DEFAULT',
+        waiterName: assignedWaiter || 'Staff',
+        cashierName: currentUser?.name || data.session?.openedBy || 'Cashier',
+        cashierRole: currentUser?.role || 'CASHIER',
+        cashierId: currentUser?.id,
+        sellerName: sellerName,
+        sellerRole: sellerRole,
+        sellerId: sellerId,
+        orderCreatedBy: sellerName,
+        orderCreatedRole: sellerRole,
+        shift: data.session?.shiftType || 'Shift 1',
+        createdAt: Date.now()
+      };
+    }
 
     const currentTables = dataRef.current?.tables || data.tables;
     const freedTables = currentTables.map(t => t.id === tableId ? {
@@ -6077,7 +6131,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setActiveTableId(null);
     }
     lastSyncedTablesStrRef.current = JSON.stringify(freedTables);
-    syncPosTablesToServer(freedTables, newSale, 'TABLE_SETTLE', serialConfigChanged ? activeSerialConfig : undefined, tableId);
+    syncPosTablesToServer(freedTables, finalSaleRecord, 'TABLE_SETTLE', serialConfigChanged ? activeSerialConfig : undefined, tableId);
 
     // Update state
     setData(prev => {
@@ -6115,7 +6169,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         ...prev,
         customers: updatedCustomers,
         customerAdvances: updatedCustomerAdvances,
-        sales: [...prev.sales, newSale],
+        sales: existingLinkedSale
+          ? prev.sales.map(s => s.id === existingLinkedSale.id ? finalSaleRecord : s)
+          : [...prev.sales, finalSaleRecord],
         tables: freedTables,
         serialConfig: serialConfigChanged ? activeSerialConfig : prev.serialConfig
       };
