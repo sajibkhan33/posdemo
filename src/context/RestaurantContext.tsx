@@ -3894,7 +3894,38 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     activeTableIdRef.current = tableId;
     posViewRef.current = 'order';
     const targetTable = data.tables?.find(t => t.id === tableId);
-    if (targetTable && (!targetTable.cart || targetTable.cart.length === 0) && !targetTable.linkedSaleId && targetTable.status !== 'free') {
+    const isWaiter = currentUser?.role === 'WAITER';
+
+    if (isWaiter && targetTable && (targetTable.linkedSaleId || targetTable.isPaidOrder)) {
+      const sanitized = data.tables.map(t => t.id === tableId ? {
+        ...t,
+        status: 'free' as const,
+        waiter: currentUser?.name || '',
+        customer: 'Walk-in Customer',
+        channelOrAgentId: 'dine_in',
+        cart: [],
+        discountVal: 0,
+        discountType: 'taka' as const,
+        orderRef: undefined,
+        kotCount: 0,
+        billCount: 0,
+        linkedSaleId: undefined,
+        linkedInvoiceNo: undefined,
+        isPaidOrder: false,
+        paidAmount: 0,
+        orderCreatedBy: currentUser?.name || '',
+        orderCreatedRole: currentUser?.role || 'WAITER',
+        orderCreatedId: currentUser?.id,
+        orderCreatedAt: Date.now()
+      } : t);
+      lastLocalEditTimeRef.current = Date.now();
+      lastSyncedTablesStrRef.current = JSON.stringify(sanitized);
+      setData(prev => ({
+        ...prev,
+        tables: sanitized
+      }));
+      syncPosTablesToServer(sanitized);
+    } else if (targetTable && (!targetTable.cart || targetTable.cart.length === 0) && !targetTable.linkedSaleId && targetTable.status !== 'free') {
       const sanitized = data.tables.map(t => t.id === tableId ? {
         ...t,
         status: 'free' as const,
