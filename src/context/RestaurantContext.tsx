@@ -1589,6 +1589,7 @@ interface RestaurantContextType {
   // Menu & Recipe
   saveMenuItem: (item: Partial<MenuItem> & { id?: number }) => void;
   deleteMenuItem: (id: number) => void;
+  reorderMenuItems: (items: MenuItem[]) => void;
   importMenuItems: (items: MenuItem[], overwrite?: boolean, extraData?: { newDepartments?: string[]; newCategories?: string[] }) => { added: number; updated: number };
   
   // Master Raw Items
@@ -7460,6 +7461,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setData(prev => ({ ...prev, menuItems: prev.menuItems.filter(i => i.id !== id) }));
   };
 
+  const reorderMenuItems = (newOrder: MenuItem[]) => {
+    lastLocalEditTimeRef.current = Date.now();
+    setData(prev => ({ ...prev, menuItems: newOrder }));
+  };
+
   const importMenuItems = (
     importedItems: MenuItem[],
     overwrite = true,
@@ -9429,6 +9435,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       updateSaleWaiter,
       saveMenuItem,
       deleteMenuItem,
+      reorderMenuItems,
       importMenuItems,
       saveMasterItem,
       deleteMasterItem,

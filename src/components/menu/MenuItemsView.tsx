@@ -31,7 +31,11 @@ import {
   FileSpreadsheet,
   Camera,
   Utensils,
-  Image as ImageIcon
+  Image as ImageIcon,
+  GripVertical,
+  ArrowDownAZ,
+  ArrowUpZA,
+  ArrowUpDown
 } from 'lucide-react';
 import { AIChefAssistantModal } from '../ai/AIChefAssistantModal';
 import { ExcelImportModal } from '../common/ExcelImportModal';
@@ -43,10 +47,13 @@ import {
 } from '../../utils/excelUtils';
 
 export const MenuItemsView: React.FC = () => {
-  const { data, saveMenuItem, deleteMenuItem, importMenuItems, language, t, setActiveTab, setPosView, canAccessTab } = useRestaurant();
+  const { data, saveMenuItem, deleteMenuItem, reorderMenuItems, importMenuItems, language, t, setActiveTab, setPosView, canAccessTab } = useRestaurant();
   const [search, setSearch] = useState('');
   const [selectedDept, setSelectedDept] = useState('ALL');
   const [selectedCat, setSelectedCat] = useState('ALL');
+  const [draggedId, setDraggedId] = useState<number | null>(null);
+  const [dragOverId, setDragOverId] = useState<number | null>(null);
+  const [activeSortOrder, setActiveSortOrder] = useState<'asc' | 'desc' | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -260,6 +267,77 @@ export const MenuItemsView: React.FC = () => {
     setIsModalOpen(false);
   };
 
+  const handleSortAlphabetical = (order: 'asc' | 'desc') => {
+    setActiveSortOrder(order);
+    const direction = order === 'asc' ? 1 : -1;
+
+    if (selectedDept === 'ALL' && selectedCat === 'ALL') {
+      const sorted = [...data.menuItems].sort((a, b) =>
+        direction * a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
+      );
+      reorderMenuItems(sorted);
+    } else {
+      const filtered = data.menuItems.filter(item => {
+        if (selectedDept !== 'ALL' && item.department !== selectedDept) return false;
+        if (selectedCat !== 'ALL' && item.category !== selectedCat) return false;
+        return true;
+      });
+      const sortedFiltered = [...filtered].sort((a, b) =>
+        direction * a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
+      );
+      let fIdx = 0;
+      const updated = data.menuItems.map(item => {
+        if (selectedDept !== 'ALL' && item.department !== selectedDept) return item;
+        if (selectedCat !== 'ALL' && item.category !== selectedCat) return item;
+        return sortedFiltered[fIdx++];
+      });
+      reorderMenuItems(updated);
+    }
+  };
+
+  const handleDragStart = (e: React.DragEvent, id: number) => {
+    e.dataTransfer.setData('text/plain', String(id));
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedId(id);
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverId !== id) {
+      setDragOverId(id);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent, id: number) => {
+    if (dragOverId === id) {
+      setDragOverId(null);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: number) => {
+    e.preventDefault();
+    setDragOverId(null);
+    const sourceId = draggedId || Number(e.dataTransfer.getData('text/plain'));
+    setDraggedId(null);
+    if (!sourceId || sourceId === targetId) return;
+
+    const items = [...data.menuItems];
+    const sourceIndex = items.findIndex(i => i.id === sourceId);
+    const targetIndex = items.findIndex(i => i.id === targetId);
+    if (sourceIndex === -1 || targetIndex === -1) return;
+
+    const [moved] = items.splice(sourceIndex, 1);
+    items.splice(targetIndex, 0, moved);
+    reorderMenuItems(items);
+    setActiveSortOrder(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedId(null);
+    setDragOverId(null);
+  };
+
   const filteredItems = data.menuItems.filter(item => {
     if (selectedDept !== 'ALL' && item.department !== selectedDept) return false;
     if (selectedCat !== 'ALL' && item.category !== selectedCat) return false;
@@ -442,6 +520,36 @@ export const MenuItemsView: React.FC = () => {
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
+
+            {/* Quick Alphabetical Sorting Buttons */}
+            <div className="flex items-center bg-white p-0.5 rounded-xl border border-slate-300 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => handleSortAlphabetical('asc')}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                  activeSortOrder === 'asc'
+                    ? 'bg-amber-500 text-white shadow-2xs'
+                    : 'text-slate-700 hover:bg-slate-100'
+                }`}
+                title="Sort Alphabetically A → Z (Ascending Order)"
+              >
+                <ArrowDownAZ className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">A → Z</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSortAlphabetical('desc')}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                  activeSortOrder === 'desc'
+                    ? 'bg-amber-500 text-white shadow-2xs'
+                    : 'text-slate-700 hover:bg-slate-100'
+                }`}
+                title="Sort Alphabetically Z → A (Descending Order)"
+              >
+                <ArrowUpZA className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Z → A</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -450,7 +558,22 @@ export const MenuItemsView: React.FC = () => {
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
-                <th className="py-3 px-4">Dish & Details</th>
+                <th className="py-3 px-3 w-10 text-center" title="Drag & drop rows to reorder dishes">
+                  <span className="sr-only">Reorder</span>
+                  <GripVertical className="w-3.5 h-3.5 text-slate-400 mx-auto" />
+                </th>
+                <th 
+                  className="py-3 px-4 cursor-pointer select-none hover:text-amber-600 transition"
+                  onClick={() => handleSortAlphabetical(activeSortOrder === 'asc' ? 'desc' : 'asc')}
+                  title="Click to toggle Alphabetical Sort (A-Z / Z-A)"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>Dish & Details</span>
+                    {activeSortOrder === 'asc' && <ArrowDownAZ className="w-3.5 h-3.5 text-amber-600" />}
+                    {activeSortOrder === 'desc' && <ArrowUpZA className="w-3.5 h-3.5 text-amber-600" />}
+                    {!activeSortOrder && <ArrowUpDown className="w-3 h-3 text-slate-400" />}
+                  </div>
+                </th>
                 <th className="py-3 px-4">Dept / Category</th>
                 <th className="py-3 px-4 text-right">Cost (BOM)</th>
                 <th className="py-3 px-4 text-right">Base Dine-in Price</th>
@@ -463,7 +586,7 @@ export const MenuItemsView: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400 font-medium">
+                  <td colSpan={9} className="py-12 text-center text-slate-400 font-medium">
                     No menu items found. Click "+ Add Menu Item" to create one.
                   </td>
                 </tr>
@@ -473,9 +596,31 @@ export const MenuItemsView: React.FC = () => {
                   const bomPercent = item.price > 0 
                     ? ((costVal / item.price) * 100)
                     : 0;
+                  const isDragging = draggedId === item.id;
+                  const isDragOver = dragOverId === item.id;
 
                   return (
-                    <tr key={item.id} className="hover:bg-slate-50/80 transition">
+                    <tr 
+                      key={item.id} 
+                      draggable={!search.trim()}
+                      onDragStart={e => handleDragStart(e, item.id)}
+                      onDragOver={e => handleDragOver(e, item.id)}
+                      onDragLeave={e => handleDragLeave(e, item.id)}
+                      onDrop={e => handleDrop(e, item.id)}
+                      onDragEnd={handleDragEnd}
+                      className={`transition ${
+                        isDragging 
+                          ? 'opacity-30 bg-amber-50' 
+                          : isDragOver 
+                            ? 'bg-amber-100/70 border-t-2 border-amber-500' 
+                            : 'hover:bg-slate-50/80'
+                      }`}
+                    >
+                      <td className="py-3.5 px-3 text-center align-middle cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-600" title="Drag to reorder dish position">
+                        <div className="flex items-center justify-center">
+                          <GripVertical className="w-4 h-4" />
+                        </div>
+                      </td>
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-2.5">
                           {item.imageUrl ? (
