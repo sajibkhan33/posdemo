@@ -1022,8 +1022,8 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
                             </button>
                           )}
 
-                          {/* Quick Bill Direct Print - only if Bill printer active and table not billed */}
-                          {!isBillPrinted && (!table.cart || table.cart.length > 0) && !isReopenedPaid && (
+                          {/* Quick Bill Direct Print - available for any table with items */}
+                          {!isBillPrinted && (!table.cart || table.cart.length > 0) && (
                             <button
                               type="button"
                               title="Direct Print Bill"
@@ -1031,58 +1031,46 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
                                 e.stopPropagation();
                                 await directPrintBill(table.id);
                               }}
-                              className={`flex-1 bg-white/90 hover:bg-white text-slate-900 font-bold flex items-center justify-center gap-0.5 transition cursor-pointer shadow-xs active:scale-95 ${
-                                isUltraCompact ? 'py-0.5 px-0.5 rounded text-[8px]' : isCompact ? 'py-1 px-1 rounded-md text-[10px]' : isLarge ? 'py-2 px-2 rounded-xl text-xs' : 'py-1.5 px-1.5 rounded-lg text-[11px]'
+                              className={`flex-1 bg-white/90 hover:bg-white text-slate-900 font-bold flex items-center justify-center gap-1 transition cursor-pointer shadow-xs active:scale-95 ${
+                                isUltraCompact ? 'py-1 px-1 rounded-md text-[10px]' : isCompact ? 'py-1 px-1.5 rounded-md text-[11px]' : isLarge ? 'py-2 px-2 rounded-xl text-xs' : 'py-1.5 px-1.5 rounded-lg text-[11px]'
                               }`}
                             >
-                              <Printer className={isUltraCompact ? 'w-2 h-2 text-slate-600' : isCompact ? 'w-2.5 h-2.5 text-slate-600' : 'w-3 h-3 text-slate-600'} />
-                              <span className={isUltraCompact ? 'hidden' : ''}>Bill</span>
+                              <Printer className="w-3 h-3 text-slate-700 shrink-0" />
+                              <span className="font-bold">Bill</span>
                             </button>
                           )}
 
-                          {/* Settle / Pay Button (Hidden for WAITER role) */}
+                          {/* Settle / Pay Button (for Admin, Cashier, Manager) */}
                           {!isWaiter && (
-                            isReopenedPaid ? (
-                              <button
-                                type="button"
-                                title={tableRemainingDue > 0 ? `Settle Due: ৳${tableRemainingDue}` : 'Done / Release Table'}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (tableRemainingDue > 0) {
-                                    openSettleModal(table.id);
-                                  } else {
-                                    finishLinkedOrderInPos(table.id);
-                                  }
-                                }}
-                                className={`flex-1 ${tableRemainingDue > 0 ? 'bg-amber-950 hover:bg-black text-amber-200' : 'bg-emerald-700 hover:bg-emerald-800 text-white'} font-black flex items-center justify-center gap-0.5 transition cursor-pointer shadow-xs active:scale-95 ${
-                                  isUltraCompact ? 'py-0.5 px-0.5 rounded text-[8px]' : isCompact ? 'py-1 px-1 rounded-md text-[10px]' : isLarge ? 'py-2 px-2 rounded-xl text-xs' : 'py-1.5 px-1.5 rounded-lg text-[11px]'
-                                }`}
-                              >
-                                {tableRemainingDue > 0 ? (
-                                  <>
-                                    <CreditCard className={isUltraCompact ? 'w-2 h-2' : isCompact ? 'w-2.5 h-2.5' : 'w-3 h-3'} />
-                                    <span className={isUltraCompact ? 'hidden' : ''}>Due (৳{tableRemainingDue})</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Check className={isUltraCompact ? 'w-2 h-2' : isCompact ? 'w-2.5 h-2.5' : 'w-3 h-3'} />
-                                    <span className={isUltraCompact ? 'hidden' : ''}>Release</span>
-                                  </>
-                                )}
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                title="Settle Payment & Pay"
-                                onClick={(e) => { e.stopPropagation(); openSettleModal(table.id); }}
-                                className={`flex-1 bg-black hover:bg-slate-900 text-blue-300 font-black flex items-center justify-center gap-0.5 transition cursor-pointer shadow-xs active:scale-95 ${
-                                  isUltraCompact ? 'py-0.5 px-0.5 rounded text-[8px]' : isCompact ? 'py-1 px-1 rounded-md text-[10px]' : isLarge ? 'py-2 px-2 rounded-xl text-xs' : 'py-1.5 px-1.5 rounded-lg text-[11px]'
-                                }`}
-                              >
-                                <CreditCard className={isUltraCompact ? 'w-2 h-2' : isCompact ? 'w-2.5 h-2.5' : 'w-3 h-3'} />
-                                <span className={isUltraCompact ? 'hidden' : ''}>Pay</span>
-                              </button>
-                            )
+                            <button
+                              type="button"
+                              title="Settle Payment & Pay"
+                              onClick={(e) => { e.stopPropagation(); openSettleModal(table.id); }}
+                              className={`flex-1 bg-black hover:bg-slate-900 text-blue-300 font-black flex items-center justify-center gap-1 transition cursor-pointer shadow-xs active:scale-95 ${
+                                isUltraCompact ? 'py-1 px-1 rounded-md text-[10px]' : isCompact ? 'py-1 px-1.5 rounded-md text-[11px]' : isLarge ? 'py-2 px-2 rounded-xl text-xs' : 'py-1.5 px-1.5 rounded-lg text-[11px]'
+                              }`}
+                            >
+                              <CreditCard className="w-3 h-3 text-blue-300 shrink-0" />
+                              <span className="font-black">Pay</span>
+                            </button>
+                          )}
+
+                          {/* Quick Release Button for reopened settled table with 0 due */}
+                          {!isWaiter && isReopenedPaid && tableRemainingDue === 0 && (
+                            <button
+                              type="button"
+                              title="Done / Release Table"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                finishLinkedOrderInPos(table.id);
+                              }}
+                              className={`flex-1 bg-emerald-700 hover:bg-emerald-800 text-white font-black flex items-center justify-center gap-1 transition cursor-pointer shadow-xs active:scale-95 ${
+                                isUltraCompact ? 'py-1 px-1 rounded-md text-[10px]' : isCompact ? 'py-1 px-1.5 rounded-md text-[11px]' : isLarge ? 'py-2 px-2 rounded-xl text-xs' : 'py-1.5 px-1.5 rounded-lg text-[11px]'
+                              }`}
+                            >
+                              <Check className="w-3 h-3 shrink-0" />
+                              <span className="font-bold">Release</span>
+                            </button>
                           )}
                         </div>
                       </div>
@@ -2227,39 +2215,70 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
             // Special State: Reopened Settled Sale (Paid Order being modified or voided)
             if (isReopenedPaidActive) {
               const remainingDue = Math.max(0, netTotal - (activeTable.paidAmount || 0));
+              const reopenedButtons: React.ReactNode[] = [];
+
+              // 1. Release / Back to Sales button
+              reopenedButtons.push(
+                <button
+                  key="btn-release"
+                  type="button"
+                  onClick={() => finishLinkedOrderInPos(activeTable.id)}
+                  className="py-2.5 sm:py-3 min-h-[44px] sm:min-h-[46px] px-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs sm:text-[13px] transition flex items-center justify-center gap-1.5 shadow-2xs border border-slate-300 cursor-pointer"
+                  title="Save and return to Sales Ledger"
+                >
+                  <RotateCcw className="w-4 h-4 text-slate-500 shrink-0" />
+                  <span className="truncate">Release</span>
+                </button>
+              );
+
+              // 2. Print Bill button (Always accessible)
+              reopenedButtons.push(
+                <React.Fragment key="btn-print-bill">
+                  {printBillBtn(false)}
+                </React.Fragment>
+              );
+
+              // 3. Settle & Pay button (for Admin, Manager, Cashier)
+              if (!isWaiter) {
+                if (remainingDue > 0) {
+                  reopenedButtons.push(
+                    <button
+                      key="btn-settle-due"
+                      type="button"
+                      onClick={() => openSettleModal(activeTable.id)}
+                      className="py-2.5 sm:py-3 min-h-[44px] sm:min-h-[46px] px-2 rounded-xl bg-[#004b9b] hover:bg-[#005bb8] text-white font-black text-xs sm:text-[13px] transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
+                      title="Settle additional items added to this order"
+                    >
+                      <CreditCard className="w-4 h-4 shrink-0" />
+                      <span className="truncate">Settle Due (৳{remainingDue})</span>
+                    </button>
+                  );
+                } else {
+                  reopenedButtons.push(
+                    <button
+                      key="btn-settle-pay"
+                      type="button"
+                      onClick={() => openSettleModal(activeTable.id)}
+                      className="py-2.5 sm:py-3 min-h-[44px] sm:min-h-[46px] px-2 rounded-xl bg-[#004b9b] hover:bg-[#005bb8] text-white font-black text-xs sm:text-[13px] transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
+                      title="Settle or change payment method"
+                    >
+                      <CreditCard className="w-4 h-4 shrink-0" />
+                      <span className="truncate">Settle & Pay</span>
+                    </button>
+                  );
+                }
+              }
+
+              const reopenedGridCols = reopenedButtons.length === 1 
+                ? 'grid-cols-1' 
+                : reopenedButtons.length === 2 
+                  ? 'grid-cols-2' 
+                  : 'grid-cols-3';
+
               return (
                 <div className="pt-2 sm:pt-2.5 shrink-0">
-                  <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
-                    <button
-                      type="button"
-                      onClick={() => finishLinkedOrderInPos(activeTable.id)}
-                      className="py-2.5 sm:py-3 min-h-[44px] sm:min-h-[46px] px-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs sm:text-[13px] transition flex items-center justify-center gap-1.5 shadow-2xs border border-slate-300 cursor-pointer"
-                      title="Save and return to Sales Ledger"
-                    >
-                      <RotateCcw className="w-4 h-4 text-slate-500 shrink-0" />
-                      <span>Back to Sales</span>
-                    </button>
-                    {remainingDue > 0 ? (
-                      <button
-                        type="button"
-                        onClick={() => openSettleModal(activeTable.id)}
-                        className="py-2.5 sm:py-3 min-h-[44px] sm:min-h-[46px] px-2 rounded-xl bg-[#004b9b] hover:bg-[#005bb8] text-white font-black text-xs sm:text-[13px] transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
-                        title="Settle additional items added to this order"
-                      >
-                        <CreditCard className="w-4 h-4 shrink-0" />
-                        <span>Settle Due (৳{remainingDue})</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => finishLinkedOrderInPos(activeTable.id)}
-                        className="py-2.5 sm:py-3 min-h-[44px] sm:min-h-[46px] px-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-[13px] transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
-                        title="Done modifying order - save and release table"
-                      >
-                        <Check className="w-4 h-4 shrink-0" />
-                        <span>Done / Release</span>
-                      </button>
-                    )}
+                  <div className={`grid ${reopenedGridCols} gap-1.5 sm:gap-2`}>
+                    {reopenedButtons}
                   </div>
                 </div>
               );
