@@ -1023,20 +1023,20 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
                           )}
 
                           {/* Quick Bill Direct Print - available for any table with items */}
-                          {!isBillPrinted && (!table.cart || table.cart.length > 0) && (
+                          {(!table.cart || table.cart.length > 0) && (
                             <button
                               type="button"
-                              title="Direct Print Bill"
+                              title={isBillPrinted ? "Re-print Bill" : "Direct Print Bill"}
                               onClick={async (e) => {
                                 e.stopPropagation();
                                 await directPrintBill(table.id);
                               }}
-                              className={`flex-1 bg-white/90 hover:bg-white text-slate-900 font-bold flex items-center justify-center gap-1 transition cursor-pointer shadow-xs active:scale-95 ${
+                              className={`flex-1 ${isBillPrinted ? 'bg-emerald-50 hover:bg-white text-emerald-900 border border-emerald-300/60' : 'bg-white/95 hover:bg-white text-slate-900'} font-bold flex items-center justify-center gap-1 transition cursor-pointer shadow-xs active:scale-95 ${
                                 isUltraCompact ? 'py-1 px-1 rounded-md text-[10px]' : isCompact ? 'py-1 px-1.5 rounded-md text-[11px]' : isLarge ? 'py-2 px-2 rounded-xl text-xs' : 'py-1.5 px-1.5 rounded-lg text-[11px]'
                               }`}
                             >
                               <Printer className="w-3 h-3 text-slate-700 shrink-0" />
-                              <span className="font-bold">Bill</span>
+                              <span className="font-bold">{isBillPrinted ? 'Billed' : 'Bill'}</span>
                             </button>
                           )}
 
@@ -1052,24 +1052,6 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
                             >
                               <CreditCard className="w-3 h-3 text-blue-300 shrink-0" />
                               <span className="font-black">Pay</span>
-                            </button>
-                          )}
-
-                          {/* Void / Cancel Active Order Button (for Admin, Cashier, Manager) */}
-                          {!isWaiter && (
-                            <button
-                              type="button"
-                              title="Void / Cancel Active Order & Release Table"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setReleasingTable(table);
-                              }}
-                              className={`bg-rose-600 hover:bg-rose-700 text-white font-black flex items-center justify-center gap-1 transition cursor-pointer shadow-xs active:scale-95 ${
-                                isUltraCompact ? 'py-1 px-1.5 rounded-md text-[10px]' : isCompact ? 'py-1 px-1.5 rounded-md text-[11px]' : isLarge ? 'py-2 px-2.5 rounded-xl text-xs' : 'py-1.5 px-2 rounded-lg text-[11px]'
-                              }`}
-                            >
-                              <Ban className="w-3 h-3 shrink-0" />
-                              {!isUltraCompact && <span className="font-bold">Void</span>}
                             </button>
                           )}
 
