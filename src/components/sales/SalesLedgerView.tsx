@@ -72,7 +72,7 @@ export const SalesLedgerView: React.FC = () => {
 
   const [refundPayment, setRefundPayment] = useState<boolean>(true);
   const [refundMethod, setRefundMethod] = useState<string>(() => activeFundMethods[0]?.id || 'cash');
-  const [restoreToTable, setRestoreToTable] = useState<boolean>(true);
+  const [restoreToTable, setRestoreToTable] = useState<boolean>(false);
 
   // Direct Bill Edit / Refund Modal state (Option 3 - 0% floor table conflict)
   const [editingSale, setEditingSale] = useState<SaleRecord | null>(null);
@@ -212,7 +212,7 @@ export const SalesLedgerView: React.FC = () => {
     } else {
       setRefundMethod(firstMethod);
     }
-    setRestoreToTable(true);
+    setRestoreToTable(false);
   };
 
   const handleConfirmVoid = () => {
@@ -222,7 +222,7 @@ export const SalesLedgerView: React.FC = () => {
       reason: finalReason,
       refundPayment,
       refundMethod,
-      restoreToTable
+      restoreToTable: false
     });
     setVoidingSale(null);
   };
@@ -1443,25 +1443,6 @@ export const SalesLedgerView: React.FC = () => {
               )}
             </div>
 
-            {/* Step 3: Undo Settlement & Re-open Table in POS Billing */}
-            <div className="bg-blue-50/60 rounded-2xl p-3.5 border border-blue-200/80">
-              <div className="flex items-start gap-2.5">
-                <input
-                  type="checkbox"
-                  id="chk-restore-table"
-                  checked={restoreToTable}
-                  onChange={e => setRestoreToTable(e.target.checked)}
-                  className="mt-0.5 w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 cursor-pointer"
-                />
-                <label htmlFor="chk-restore-table" className="text-xs font-bold text-slate-900 cursor-pointer">
-                  Re-open Table in Live POS with Order Cart
-                  <span className="block text-[11px] font-normal text-slate-600 mt-0.5">
-                    Restore the table as occupied with these items in POS Billing so staff can make changes or re-bill.
-                  </span>
-                </label>
-              </div>
-            </div>
-
             {/* Action Buttons */}
             <div className="pt-2 flex gap-3">
               <button
@@ -1474,12 +1455,10 @@ export const SalesLedgerView: React.FC = () => {
               <button
                 type="button"
                 onClick={handleConfirmVoid}
-                className={`flex-2 py-2.5 rounded-xl text-white font-extrabold text-xs shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${
-                  restoreToTable ? 'bg-amber-600 hover:bg-amber-700' : 'bg-rose-600 hover:bg-rose-700'
-                }`}
+                className="flex-2 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
               >
-                {restoreToTable ? <RotateCcw className="w-4 h-4" /> : <Ban className="w-4 h-4" />}
-                <span>{restoreToTable ? 'Confirm Void & Re-open in POS Cart' : 'Confirm Void & Refund'}</span>
+                <Ban className="w-4 h-4" />
+                <span>{refundPayment ? 'Confirm Void & Refund' : 'Confirm Void Order'}</span>
               </button>
             </div>
           </div>
