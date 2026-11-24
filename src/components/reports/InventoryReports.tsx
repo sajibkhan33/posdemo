@@ -12,6 +12,7 @@ import {
   Sparkles, 
   Package, 
   AlertTriangle,
+  ChefHat,
   FileSpreadsheet,
   Eye,
   X,
@@ -62,7 +63,7 @@ interface ContinuousLedgerRow {
   item: string;
   category: string;
   uom: string;
-  type: 'OPENING' | 'PURCHASE' | 'POS_BOM' | 'WASTAGE';
+  type: 'OPENING' | 'PURCHASE' | 'POS_BOM' | 'MANUAL_USED' | 'WASTAGE';
   typeLabel: string;
   inQty: number;
   inRate: number;
@@ -87,11 +88,12 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [stockStatusFilter, setStockStatusFilter] = useState<'ALL' | 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK'>('ALL');
   const [ledgerViewMode, setLedgerViewMode] = useState<'consolidated' | 'continuous'>('consolidated');
+  const [outwardTypeFilter, setOutwardTypeFilter] = useState<'ALL' | 'BOM' | 'MANUAL' | 'WASTAGE'>('ALL');
 
   // Drilldown Modal State
   const [selectedLedgerItem, setSelectedLedgerItem] = useState<RawMasterItem | null>(null);
   const [modalSearch, setModalSearch] = useState('');
-  const [modalTypeFilter, setModalTypeFilter] = useState<'ALL' | 'PURCHASE' | 'POS_BOM' | 'WASTAGE'>('ALL');
+  const [modalTypeFilter, setModalTypeFilter] = useState<'ALL' | 'PURCHASE' | 'POS_BOM' | 'MANUAL_USED' | 'WASTAGE'>('ALL');
 
   // Date filter checker helper
   const matchesDate = (itemDate: string) => {
@@ -156,7 +158,7 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
       date: string;
       refNo: string;
       source: string;
-      type: 'BOM Consumption' | 'Manual Wastage / Usage';
+      type: 'BOM Consumption' | 'Manual Kitchen Usage' | 'Kitchen Wastage';
       itemId: number;
       item: string;
       category: string;
@@ -209,40 +211,67 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
       });
     });
 
-    // Outward 2: Manual Wastage / Usage
+    // Outward 2 & 3: Manual Kitchen Usage & Kitchen Wastage (Accurately Separated)
     data.inventory.forEach(inv => {
-      if ((inv.used || 0) <= 0) return;
       const raw = data.masterItems.find(r => r.id === inv.id);
       if (!raw) return;
 
       const rate = inv.rate || raw.defaultRate || 0;
-      const totalVal = (inv.used || 0) * rate;
+      const mUsed = inv.manualUsed !== undefined ? Number(inv.manualUsed) : (Number(inv.used) || 0);
+      const wUsed = Number(inv.wastage) || 0;
 
       const query = searchQuery.toLowerCase();
-      const matchesSearch = !searchQuery ||
+      const matchesRaw = !searchQuery ||
         raw.name.toLowerCase().includes(query) ||
-        raw.category.toLowerCase().includes(query) ||
-        'wastage'.includes(query);
+        raw.category.toLowerCase().includes(query);
 
-      if (matchesSearch) {
+      // Separate Entry: Manual Kitchen Prep / Direct Cooking Usage
+      if (mUsed > 0 && (matchesRaw || 'manual'.includes(query) || 'usage'.includes(query) || 'kitchen'.includes(query))) {
         rows.push({
           date: new Date().toISOString().split('T')[0],
-          refNo: `ADJ-INV-${raw.id}`,
-          source: `Kitchen Wastage / Spoilage Adjustment`,
-          type: 'Manual Wastage / Usage',
+          refNo: `USE-INV-${raw.id}`,
+          source: `Kitchen Manual Prep / Bulk Usage`,
+          type: 'Manual Kitchen Usage',
           itemId: raw.id,
           item: raw.name,
           category: raw.category,
           uom: raw.uom,
-          qty: inv.used,
+          qty: mUsed,
           rate: rate,
-          total: Math.round(totalVal)
+          total: Math.round(mUsed * rate)
+        });
+      }
+
+      // Separate Entry: Kitchen Spoilage & Wastage Loss
+      if (wUsed > 0 && (matchesRaw || 'wastage'.includes(query) || 'spoilage'.includes(query) || 'damage'.includes(query))) {
+        rows.push({
+          date: new Date().toISOString().split('T')[0],
+          refNo: `WST-INV-${raw.id}`,
+          source: `Kitchen Spoilage & Wastage Loss`,
+          type: 'Kitchen Wastage',
+          itemId: raw.id,
+          item: raw.name,
+          category: raw.category,
+          uom: raw.uom,
+          qty: wUsed,
+          rate: rate,
+          total: Math.round(wUsed * rate)
         });
       }
     });
 
     return rows.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [data.sales, data.inventory, data.masterItems, data.menuItems, startDate, endDate, searchQuery]);
+
+  // Filtered Outwards Data (Aware of outwardTypeFilter)
+  const filteredOutwards = useMemo(() => {
+    return outwardsData.filter(row => {
+      if (outwardTypeFilter === 'BOM') return row.type === 'BOM Consumption';
+      if (outwardTypeFilter === 'MANUAL') return row.type === 'Manual Kitchen Usage';
+      if (outwardTypeFilter === 'WASTAGE') return row.type === 'Kitchen Wastage';
+      return true;
+    });
+  }, [outwardsData, outwardTypeFilter]);
 
   // --- 3. EXACT STOCK VALUATION LEDGER (CONSOLIDATED ITEM-WISE & PERIOD-AWARE) ---
   const stockValuationData = useMemo(() => {
@@ -550,24 +579,50 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
         });
       });
 
-      // Event 4: Spoilage / Wastage
-      if (inv && inv.used > 0) {
+      const mUsed = inv ? (inv.manualUsed !== undefined ? Number(inv.manualUsed) : (Number(inv.used) || 0)) : 0;
+      const wUsed = inv ? (Number(inv.wastage) || 0) : 0;
+
+      // Event 4: Manual Kitchen Usage
+      if (mUsed > 0) {
+        rawEvents.push({
+          id: `manual-use-${raw.id}`,
+          date: new Date().toISOString().split('T')[0],
+          refNo: `USE-INV-${raw.id}`,
+          itemId: raw.id,
+          item: raw.name,
+          category: raw.category,
+          uom: raw.uom,
+          type: 'MANUAL_USED',
+          typeLabel: 'Manual Kitchen Prep Usage',
+          inQty: 0,
+          inRate: 0,
+          inVal: 0,
+          outQty: mUsed,
+          outRate: rate,
+          outVal: mUsed * rate,
+          defaultRate: rate,
+          notes: 'Kitchen manual recipe & bulk food preparation'
+        });
+      }
+
+      // Event 5: Kitchen Spoilage / Wastage
+      if (wUsed > 0) {
         rawEvents.push({
           id: `waste-${raw.id}`,
           date: new Date().toISOString().split('T')[0],
-          refNo: `WASTE-${raw.id}`,
+          refNo: `WST-INV-${raw.id}`,
           itemId: raw.id,
           item: raw.name,
           category: raw.category,
           uom: raw.uom,
           type: 'WASTAGE',
-          typeLabel: 'Wastage / Spoilage Deduction',
+          typeLabel: 'Kitchen Spoilage & Wastage Loss',
           inQty: 0,
           inRate: 0,
           inVal: 0,
-          outQty: inv.used,
+          outQty: wUsed,
           outRate: rate,
-          outVal: inv.used * rate,
+          outVal: wUsed * rate,
           defaultRate: rate,
           notes: 'Kitchen spoilage, damage & physical adjustment'
         });
@@ -681,7 +736,7 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
 
   const handleExportOutwards = () => {
     const headers = ['Date', 'Ref No', 'Source / Order', 'Type', 'Raw Material', 'Category', 'Outward Qty', 'UoM', 'Unit Cost (৳)', 'Total Value (৳)'];
-    const rows = outwardsData.map(r => [
+    const rows = filteredOutwards.map(r => [
       r.date,
       r.refNo,
       r.source,
@@ -953,57 +1008,114 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
             }}
           />
 
-          {/* Metric Highlights */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-              <div className="text-xs font-bold text-slate-500 flex items-center justify-between">
-                <span>Total Outward Cost Value</span>
-                <ArrowUpRight className="w-4 h-4 text-rose-600" />
-              </div>
-              <div className="text-xl sm:text-2xl font-black text-rose-700 mt-1">
-                ৳{outwardsData.reduce((s, r) => s + r.total, 0).toLocaleString()}
-              </div>
-              <div className="text-[11px] text-slate-400 mt-0.5">
-                BOM ingredient consumption & kitchen wastage
-              </div>
-            </div>
+          {/* Summary Metric Highlights */}
+          {(() => {
+            const totalOutwardVal = filteredOutwards.reduce((s, r) => s + r.total, 0);
+            const totalOutwardQty = filteredOutwards.reduce((s, r) => s + r.qty, 0);
+            const bomCostVal = outwardsData.filter(r => r.type === 'BOM Consumption').reduce((s, r) => s + r.total, 0);
+            const manualCostVal = outwardsData.filter(r => r.type === 'Manual Kitchen Usage').reduce((s, r) => s + r.total, 0);
+            const wastageCostVal = outwardsData.filter(r => r.type === 'Kitchen Wastage').reduce((s, r) => s + r.total, 0);
 
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-              <div className="text-xs font-bold text-slate-500 flex items-center justify-between">
-                <span>Total Outward Qty</span>
-                <Package className="w-4 h-4 text-amber-600" />
-              </div>
-              <div className="text-xl sm:text-2xl font-black text-amber-600 mt-1">
-                {outwardsData.reduce((s, r) => s + r.qty, 0).toFixed(2)} units
-              </div>
-              <div className="text-[11px] text-slate-400 mt-0.5">
-                Total aggregate raw materials consumed
-              </div>
-            </div>
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+                  <div className="text-xs font-bold text-slate-500 flex items-center justify-between">
+                    <span>Total Outwards Value</span>
+                    <ArrowUpRight className="w-4 h-4 text-rose-600" />
+                  </div>
+                  <div className="text-xl sm:text-2xl font-black text-rose-700 mt-1">
+                    ৳{totalOutwardVal.toLocaleString()}
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    {totalOutwardQty.toFixed(2)} units ({filteredOutwards.length} records)
+                  </div>
+                </div>
 
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-              <div className="text-xs font-bold text-slate-500 flex items-center justify-between">
-                <span>Outward Entry Count</span>
-                <Layers className="w-4 h-4 text-indigo-600" />
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+                  <div className="text-xs font-bold text-slate-500 flex items-center justify-between">
+                    <span>BOM Recipe Sales Cost</span>
+                    <Package className="w-4 h-4 text-indigo-600" />
+                  </div>
+                  <div className="text-xl sm:text-2xl font-black text-indigo-700 mt-1">
+                    ৳{bomCostVal.toLocaleString()}
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    Auto-deducted from POS Sales
+                  </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+                  <div className="text-xs font-bold text-slate-500 flex items-center justify-between">
+                    <span>Manual Kitchen Prep Cost</span>
+                    <ChefHat className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <div className="text-xl sm:text-2xl font-black text-emerald-700 mt-1">
+                    ৳{manualCostVal.toLocaleString()}
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    Direct bulk prep & food usage
+                  </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+                  <div className="text-xs font-bold text-slate-500 flex items-center justify-between">
+                    <span>Kitchen Wastage Loss</span>
+                    <AlertTriangle className="w-4 h-4 text-rose-500" />
+                  </div>
+                  <div className="text-xl sm:text-2xl font-black text-rose-600 mt-1">
+                    ৳{wastageCostVal.toLocaleString()}
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    Spoilage, damage & trimming losses
+                  </div>
+                </div>
               </div>
-              <div className="text-xl sm:text-2xl font-black text-slate-900 mt-1">
-                {outwardsData.length} records
-              </div>
-              <div className="text-[11px] text-slate-400 mt-0.5">
-                Individual dish recipe deductions
-              </div>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* Outwards Table */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+            <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div>
                 <h3 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
                   <ArrowUpRight className="w-4 h-4 text-rose-600" />
-                  <span>Inventory Outwards Register (BOM Sales Usage & Wastage)</span>
+                  <span>Inventory Outwards Register (BOM Sales Usage, Manual Prep & Wastage)</span>
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">Live raw material deductions linked to POS menu sales</p>
+                <p className="text-xs text-slate-500 mt-0.5">Live raw material deductions linked to POS menu sales, manual bulk preparation, and kitchen spoilage</p>
+              </div>
+
+              {/* Type Filter Tabs */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0">
+                {(['ALL', 'BOM', 'MANUAL', 'WASTAGE'] as const).map(tab => {
+                  const count = tab === 'ALL'
+                    ? outwardsData.length
+                    : tab === 'BOM'
+                      ? outwardsData.filter(r => r.type === 'BOM Consumption').length
+                      : tab === 'MANUAL'
+                        ? outwardsData.filter(r => r.type === 'Manual Kitchen Usage').length
+                        : outwardsData.filter(r => r.type === 'Kitchen Wastage').length;
+                  const label = tab === 'ALL' 
+                    ? `All Outwards (${count})` 
+                    : tab === 'BOM' 
+                      ? `BOM Sales (${count})` 
+                      : tab === 'MANUAL' 
+                        ? `Manual Prep (${count})` 
+                        : `Wastage (${count})`;
+                  return (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setOutwardTypeFilter(tab)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                        outwardTypeFilter === tab
+                          ? 'bg-[#004b9b] text-white shadow-2xs'
+                          : 'text-slate-600 hover:bg-white hover:text-slate-900'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -1022,21 +1134,25 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {outwardsData.length === 0 ? (
+                  {filteredOutwards.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="py-12 text-center text-slate-400 font-medium">
-                        No inventory outward consumption records found.
+                        No inventory outward consumption records found for this filter.
                       </td>
                     </tr>
                   ) : (
-                    outwardsData.map((row, idx) => (
+                    filteredOutwards.map((row, idx) => (
                       <tr key={idx} className="hover:bg-slate-50/70 transition">
                         <td className="py-3 px-4 font-mono text-slate-600">{row.date}</td>
                         <td className="py-3 px-4 font-mono font-bold text-slate-900">{row.refNo}</td>
                         <td className="py-3 px-4 font-medium text-slate-700">{row.source}</td>
                         <td className="py-3 px-4">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                            row.type === 'BOM Consumption' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-amber-50 text-amber-800 border border-amber-200'
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black border ${
+                            row.type === 'BOM Consumption' 
+                              ? 'bg-indigo-50 text-indigo-700 border-indigo-200' 
+                              : row.type === 'Manual Kitchen Usage'
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                : 'bg-rose-50 text-rose-800 border-rose-200'
                           }`}>
                             {row.type}
                           </span>
@@ -1053,16 +1169,16 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
                     ))
                   )}
                 </tbody>
-                {outwardsData.length > 0 && (
+                {filteredOutwards.length > 0 && (
                   <tfoot>
                     <tr className="bg-slate-100/90 font-black text-slate-900 border-t-2 border-slate-300">
-                      <td colSpan={5} className="py-3 px-4">Total Inventory Outward Valuation</td>
+                      <td colSpan={5} className="py-3 px-4">Total Filtered Outward Valuation</td>
                       <td className="py-3 px-4 text-right font-mono text-rose-800">
-                        -{outwardsData.reduce((s, r) => s + r.qty, 0).toFixed(2)}
+                        -{filteredOutwards.reduce((s, r) => s + r.qty, 0).toFixed(2)}
                       </td>
                       <td className="py-3 px-4"></td>
                       <td className="py-3 px-4 text-right font-mono font-black text-rose-700 text-sm">
-                        ৳{outwardsData.reduce((s, r) => s + r.total, 0).toLocaleString()}
+                        ৳{filteredOutwards.reduce((s, r) => s + r.total, 0).toLocaleString()}
                       </td>
                     </tr>
                   </tfoot>
@@ -1586,7 +1702,8 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
                       <option value="ALL">All Transactions</option>
                       <option value="PURCHASE">Inward Purchases</option>
                       <option value="POS_BOM">POS Recipe BOM Used</option>
-                      <option value="WASTAGE">Wastage / Adjustments</option>
+                      <option value="MANUAL_USED">Manual Kitchen Prep Used</option>
+                      <option value="WASTAGE">Kitchen Spoilage & Wastage</option>
                     </select>
                   </div>
 
@@ -1627,10 +1744,11 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
                                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
                                   entry.type === 'PURCHASE' ? 'bg-blue-100 text-blue-800' :
                                   entry.type === 'OPENING' ? 'bg-slate-100 text-slate-700' :
-                                  entry.type === 'POS_BOM' ? 'bg-amber-100 text-amber-800' :
+                                  entry.type === 'POS_BOM' ? 'bg-indigo-100 text-indigo-800' :
+                                  entry.type === 'MANUAL_USED' ? 'bg-emerald-100 text-emerald-800' :
                                   'bg-rose-100 text-rose-800'
                                 }`}>
-                                  {entry.type}
+                                  {entry.type === 'MANUAL_USED' ? 'MANUAL' : entry.type}
                                 </span>
                                 <span className="font-mono text-slate-700 font-bold">{entry.refNo}</span>
                               </div>

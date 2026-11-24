@@ -1077,7 +1077,8 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
       ['Less: Customer Discounts', `-${ifrsPnlData.totalDiscounts}`, 'Discounts conceded'],
       ['Net Revenue', ifrsPnlData.netRevenue, 'IFRS 15 Net Revenue'],
       ['Cost of Goods Sold (BOM Raw)', `-${ifrsPnlData.cogsRawCost}`, 'Recipe direct ingredient cost'],
-      ['Kitchen Wastage / Trimming', `-${ifrsPnlData.wastageCost}`, 'Spoilage loss'],
+      ['Manual Kitchen Usage (Direct Cooking)', `-${ifrsPnlData.manualKitchenCost}`, 'Manual food preparation cost'],
+      ['Kitchen Spoilage & Wastage Loss', `-${ifrsPnlData.wastageCost}`, 'Spoilage loss'],
       ['Total Cost of Sales', `-${ifrsPnlData.totalCostOfSales}`, 'Direct production cost'],
       ['Gross Profit', ifrsPnlData.grossProfit, `Gross Margin: ${ifrsPnlData.grossProfitMargin}%`],
       ...Object.entries(ifrsPnlData.expenseBreakdown).map(([h, amt]) => [`Operating Expense: ${h}`, `-${amt}`, 'General operational expense']),
@@ -1484,7 +1485,11 @@ export const FinancialStatementsReports: React.FC<SubReportProps> = ({ reportTyp
                     <span className="font-mono">-৳{formatTbNum(ifrsPnlData.cogsRawCost)}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span>Direct Kitchen Spoilage & Trimming Loss</span>
+                    <span>Manual Kitchen Preparation & Direct Usage</span>
+                    <span className="font-mono">-৳{formatTbNum(ifrsPnlData.manualKitchenCost)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-rose-600 font-medium">
+                    <span>Direct Kitchen Spoilage & Wastage Loss</span>
                     <span className="font-mono">-৳{formatTbNum(ifrsPnlData.wastageCost)}</span>
                   </div>
                 </div>

@@ -272,6 +272,8 @@ export const DEFAULT_CHART_OF_ACCOUNTS: AccountHead[] = [
   // EXPENSES (5000 & 6000)
   { id: '5010', code: '5010', name: 'COGS - Raw Meat & Poultry', type: 'EXPENSE', category: 'Cost of Goods Sold (BOM)', systemRole: 'COGS', balance: 0 },
   { id: '5020', code: '5020', name: 'COGS - Grocery, Rice & Oil', type: 'EXPENSE', category: 'Cost of Goods Sold (BOM)', systemRole: 'COGS', balance: 0 },
+  { id: '5030', code: '5030', name: 'COGS - General Food & Kitchen Prep', type: 'EXPENSE', category: 'Cost of Goods Sold (BOM)', systemRole: 'COGS', balance: 0 },
+  { id: '5090', code: '5090', name: 'Kitchen Spoilage & Wastage Loss', type: 'EXPENSE', category: 'Cost of Goods Sold (BOM)', systemRole: 'OPERATING_EXPENSE', balance: 0 },
   { id: '6010', code: '6010', name: 'Kitchen Staff Salaries', type: 'EXPENSE', category: 'Operating Expenses', systemRole: 'OPERATING_EXPENSE', balance: 0 },
   { id: '6020', code: '6020', name: 'Floor Rent & Utilities', type: 'EXPENSE', category: 'Operating Expenses', systemRole: 'OPERATING_EXPENSE', balance: 0 },
   { id: '6030', code: '6030', name: 'Electricity & Gas Bill', type: 'EXPENSE', category: 'Operating Expenses', systemRole: 'OPERATING_EXPENSE', balance: 0 },
@@ -1998,7 +2000,7 @@ export function computeCogsBomAllocation(
   );
   const dedicatedWastageAcc = chartAccounts.find(a => 
     a.type === 'EXPENSE' && ((a.name || '').toLowerCase().includes('wastage') || (a.name || '').toLowerCase().includes('spoilage'))
-  );
+  ) || chartAccounts.find(a => a.code === '5090');
 
   const bomAccounts = chartAccounts.filter(a => {
     if (a.type !== 'EXPENSE') return false;
