@@ -1434,7 +1434,8 @@ interface RestaurantContextType {
     tableId: string, 
     reason?: string, 
     authorizedBy?: string,
-    refundMethod?: string
+    refundMethod?: string,
+    printCancelKot?: boolean
   ) => void;
   cancelPosOrder: (tableId: string) => void;
   openPrintCancelKot: (
@@ -5411,14 +5412,20 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     dispatchHardwarePrint('/api/hardware/print-kot', cancelKotPayload);
   };
 
-  const releaseTable = (tableId: string, reason?: string, authorizedBy?: string, refundMethod: string = 'CASH') => {
+  const releaseTable = (
+    tableId: string, 
+    reason?: string, 
+    authorizedBy?: string, 
+    refundMethod: string = 'CASH',
+    printCancelKot: boolean = true
+  ) => {
     lastLocalEditTimeRef.current = Date.now();
     const table = data.tables.find(t => t.id === tableId);
     if (!table) return;
 
     const kotItems = table.cart.filter(i => (i.kotPrintedQty || 0) > 0 || i.kotPrinted);
 
-    if (kotItems.length > 0) {
+    if (kotItems.length > 0 && printCancelKot) {
       const cancelledList = kotItems.map(i => ({
         name: i.name + (i.selectedVariation ? ` (${i.selectedVariation.name})` : ''),
         qty: i.kotPrintedQty || i.qty,

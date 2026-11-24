@@ -1055,6 +1055,24 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
                             </button>
                           )}
 
+                          {/* Void / Cancel Active Order Button (for Admin, Cashier, Manager) */}
+                          {!isWaiter && (
+                            <button
+                              type="button"
+                              title="Void / Cancel Active Order & Release Table"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setReleasingTable(table);
+                              }}
+                              className={`bg-rose-600 hover:bg-rose-700 text-white font-black flex items-center justify-center gap-1 transition cursor-pointer shadow-xs active:scale-95 ${
+                                isUltraCompact ? 'py-1 px-1.5 rounded-md text-[10px]' : isCompact ? 'py-1 px-1.5 rounded-md text-[11px]' : isLarge ? 'py-2 px-2.5 rounded-xl text-xs' : 'py-1.5 px-2 rounded-lg text-[11px]'
+                              }`}
+                            >
+                              <Ban className="w-3 h-3 shrink-0" />
+                              {!isUltraCompact && <span className="font-bold">Void</span>}
+                            </button>
+                          )}
+
                           {/* Quick Release Button for reopened settled table with 0 due */}
                           {!isWaiter && isReopenedPaid && tableRemainingDue === 0 && (
                             <button
@@ -1624,9 +1642,20 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
                       {activeTable.waiter && activeTable.waiter !== 'Staff' && activeTable.waiter !== 'N/A' ? `Waiter: ${activeTable.waiter}` : 'Assign Waiter'}
                     </span>
                   </button>
-
-
                 </div>
+
+                {/* Void / Cancel Order button for Admin, Manager, Cashier */}
+                {!isWaiter && (activeTable.cart?.length > 0 || activeTable.status !== 'free') && (
+                  <button
+                    type="button"
+                    onClick={() => setReleasingTable(activeTable)}
+                    className="ml-auto px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-800 border border-rose-200 font-black text-[11px] flex items-center gap-1 shadow-2xs cursor-pointer active:scale-95 transition"
+                    title="Void / Cancel Active Order & Release Table"
+                  >
+                    <Ban className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Void Order</span>
+                  </button>
+                )}
               </div>
 
               {/* Linked Paid Order Alert Banner */}
