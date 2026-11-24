@@ -5,6 +5,7 @@ import {
   Search, 
   Trash2, 
   Plus, 
+  Minus,
   Coins, 
   Filter, 
   Printer, 
@@ -24,9 +25,12 @@ import {
   ArrowRightLeft,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Edit3,
+  Save,
+  CreditCard
 } from 'lucide-react';
-import { SaleRecord } from '../../types';
+import { SaleRecord, TableCartItem, DiscountType } from '../../types';
 
 export const SalesLedgerView: React.FC = () => {
   const { 
@@ -36,6 +40,7 @@ export const SalesLedgerView: React.FC = () => {
     voidSale, 
     restoreVoidedSale, 
     reopenSettledSaleInPos,
+    modifySettledSale,
     updateSaleWaiter, 
     saveDirectDueCollection, 
     openPrintBill, 
@@ -68,6 +73,17 @@ export const SalesLedgerView: React.FC = () => {
   const [refundPayment, setRefundPayment] = useState<boolean>(true);
   const [refundMethod, setRefundMethod] = useState<string>(() => activeFundMethods[0]?.id || 'cash');
   const [restoreToTable, setRestoreToTable] = useState<boolean>(true);
+
+  // Direct Bill Edit / Refund Modal state (Option 3 - 0% floor table conflict)
+  const [editingSale, setEditingSale] = useState<SaleRecord | null>(null);
+  const [editItems, setEditItems] = useState<TableCartItem[]>([]);
+  const [editDiscountVal, setEditDiscountVal] = useState<number>(0);
+  const [editDiscountType, setEditDiscountType] = useState<DiscountType>('taka');
+  const [editRefundMethod, setEditRefundMethod] = useState<string>('cash');
+  const [editRefundReason, setEditRefundReason] = useState<string>('Customer returned item');
+  const [editCustomReason, setEditCustomReason] = useState<string>('');
+  const [selectedAddMenuItemId, setSelectedAddMenuItemId] = useState<number | ''>('');
+  const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
 
   // Due collection modal state
   const [dueCust, setDueCust] = useState(data.customers[0] || 'Walk-in Customer');
@@ -250,6 +266,119 @@ export const SalesLedgerView: React.FC = () => {
       refundMethod: sale.refundMethod || 'CASH',
       refundStatus: sale.refundStatus || 'REFUNDED'
     });
+  };
+
+  const handleOpenEditModal = (sale: SaleRecord) => {
+    setEditingSale(sale);
+    let initialItems: TableCartItem[] = [];
+    if (sale.items && sale.items.length > 0) {
+      initialItems = JSON.parse(JSON.stringify(sale.items));
+    } else {
+      initialItems = [{
+        id: sale.id,
+        cartItemId: `item-${sale.id}-0`,
+        name: sale.details || 'Billed Items',
+        price: sale.total,
+        qty: 1,
+        basePrice: sale.total
+      }];
+    }
+    setEditItems(initialItems);
+    setEditDiscountVal(sale.discountVal || 0);
+    setEditDiscountType(sale.discountType || 'taka');
+    setEditRefundReason('Customer returned item');
+    setEditCustomReason('');
+    setSelectedAddMenuItemId('');
+
+    const firstMethod = activeFundMethods[0]?.id || 'cash';
+    if (sale.paymentBreakdown) {
+      const keys = Object.keys(sale.paymentBreakdown).filter(k => (sale.paymentBreakdown![k] || 0) > 0);
+      const matchedKey = keys.find(k => activeFundMethods.some(m => m.id === k || m.name === k));
+      setEditRefundMethod(matchedKey || keys[0] || firstMethod);
+    } else if (sale.card && !sale.cash) {
+      setEditRefundMethod('card');
+    } else if (sale.bkash && !sale.cash) {
+      setEditRefundMethod('bkash');
+    } else {
+      setEditRefundMethod('cash');
+    }
+  };
+
+  const handleIncreaseQty = (idx: number) => {
+    setEditItems(prev => prev.map((item, i) => i === idx ? { ...item, qty: item.qty + 1 } : item));
+  };
+
+  const handleDecreaseQty = (idx: number) => {
+    setEditItems(prev => {
+      const target = prev[idx];
+      if (!target) return prev;
+      if (target.qty <= 1) {
+        return prev.filter((_, i) => i !== idx);
+      }
+      return prev.map((item, i) => i === idx ? { ...item, qty: item.qty - 1 } : item);
+    });
+  };
+
+  const handleRemoveItem = (idx: number) => {
+    setEditItems(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleAddMenuItem = (menuItemId: number) => {
+    const m = (data.menuItems || []).find(item => item.id === menuItemId);
+    if (!m) return;
+    const existingIdx = editItems.findIndex(i => i.id === m.id);
+    if (existingIdx >= 0) {
+      handleIncreaseQty(existingIdx);
+    } else {
+      setEditItems(prev => [
+        ...prev,
+        {
+          id: m.id,
+          cartItemId: `edit-${Date.now()}-${m.id}`,
+          name: m.name,
+          department: m.department,
+          category: m.category,
+          basePrice: m.price,
+          price: m.price,
+          qty: 1,
+          addedAt: Date.now(),
+          addedAtTime: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+        }
+      ]);
+    }
+    setSelectedAddMenuItemId('');
+  };
+
+  const handleConfirmSaveEdit = () => {
+    if (!editingSale) return;
+    if (editItems.length === 0) {
+      alert("Bill cannot be empty! If you wish to cancel or void the entire bill, please use the Void / Cancel button.");
+      return;
+    }
+    setIsSavingEdit(true);
+    const finalReason = editCustomReason.trim() ? editCustomReason.trim() : editRefundReason;
+    
+    const computedSub = editItems.reduce((sum, item) => sum + (item.price * item.qty), 0);
+    const computedDisc = editDiscountType === 'percentage'
+      ? Math.round((computedSub * (editDiscountVal || 0)) / 100)
+      : Math.min(computedSub, editDiscountVal || 0);
+    const computedTot = Math.max(0, computedSub - computedDisc);
+    const diff = computedTot - (editingSale.total || 0);
+
+    const adjType = diff < 0 ? 'REFUND' : diff > 0 ? 'COLLECT' : 'EXACT';
+    const adjAmount = Math.abs(diff);
+
+    modifySettledSale(editingSale.id, editItems, {
+      discountVal: editDiscountVal,
+      discountType: editDiscountType,
+      adjustmentType: adjType,
+      adjustmentAmount: adjAmount,
+      adjustmentMethod: editRefundMethod,
+      reason: finalReason
+    });
+
+    setIsSavingEdit(false);
+    setEditingSale(null);
   };
 
   const handleOpenReceipt = (sale: any, defaultType: 'PAID_MEMO' | 'KOT' = 'PAID_MEMO') => {
@@ -960,12 +1089,12 @@ export const SalesLedgerView: React.FC = () => {
                               <>
                                 <button
                                   type="button"
-                                  onClick={() => reopenSettledSaleInPos(sale.id)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 active:scale-95 text-amber-800 hover:text-amber-950 border border-amber-300 text-[11px] font-bold shadow-2xs transition cursor-pointer"
-                                  title="Open this order in POS Cart to cancel specific items with partial refund, or modify order"
+                                  onClick={() => handleOpenEditModal(sale)}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 active:scale-95 text-amber-900 border border-amber-300 text-[11px] font-bold shadow-2xs transition cursor-pointer"
+                                  title="Edit items, change quantities, add dishes, or refund directly in ledger without hijacking floor tables"
                                 >
-                                  <RotateCcw className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                                  <span>Void / Edit in POS</span>
+                                  <Edit3 className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                  <span>Edit / Refund Bill</span>
                                 </button>
                                 <button
                                   type="button"
@@ -1356,6 +1485,259 @@ export const SalesLedgerView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Option 3: Direct Bill Edit & Refund Modal (Zero Floor Table Impact) */}
+      {editingSale && (() => {
+        const computedSubtotal = editItems.reduce((sum, item) => sum + (item.price * item.qty), 0);
+        const computedDiscount = editDiscountType === 'percentage'
+          ? Math.round((computedSubtotal * (editDiscountVal || 0)) / 100)
+          : Math.min(computedSubtotal, editDiscountVal || 0);
+        const computedTotal = Math.max(0, computedSubtotal - computedDiscount);
+        const originalTotal = editingSale.total || 0;
+        const diff = computedTotal - originalTotal;
+        const isRefund = diff < 0;
+        const isExtraPay = diff > 0;
+        const absDiff = Math.abs(diff);
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in">
+            <div className="bg-white rounded-3xl max-w-xl w-full p-5 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 space-y-4 max-h-[92vh] flex flex-col overflow-hidden">
+              
+              {/* Modal Header */}
+              <div className="flex items-start justify-between pb-3 border-b border-slate-100 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                    <Edit3 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                      <span>Edit & Refund Bill</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-black">
+                        DIRECT LEDGER
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Invoice: <span className="font-mono font-bold text-slate-800">{editingSale.invoiceNo}</span> • Table: <span className="font-bold text-slate-800">{editingSale.table || 'N/A'}</span>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingSale(null)}
+                  className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Scrollable Modal Content */}
+              <div className="space-y-4 overflow-y-auto pr-1 flex-1 min-h-0 text-xs">
+                
+                {/* 1. Items List with Quantity Controls */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-bold text-slate-700">Order Items ({editItems.length})</span>
+                    <span className="text-[11px] text-slate-400">Click + / - to change qty or trash to remove</span>
+                  </div>
+
+                  <div className="space-y-1.5 max-h-56 overflow-y-auto bg-slate-50 p-2.5 rounded-2xl border border-slate-200">
+                    {editItems.map((item, idx) => (
+                      <div key={item.cartItemId || idx} className="flex items-center justify-between p-2 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
+                        <div className="flex-1 min-w-0 pr-2">
+                          <p className="font-bold text-slate-900 truncate">{item.name}</p>
+                          <p className="text-[11px] font-mono text-slate-500">
+                            ৳{item.price.toLocaleString()} each
+                          </p>
+                        </div>
+
+                        {/* Qty Controls */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleDecreaseQty(idx)}
+                            className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-rose-100 text-slate-700 hover:text-rose-700 flex items-center justify-center font-black transition cursor-pointer"
+                            title="Decrease quantity"
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <span className="w-7 text-center font-mono font-black text-slate-900 text-sm">
+                            {item.qty}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleIncreaseQty(idx)}
+                            className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-700 flex items-center justify-center font-black transition cursor-pointer"
+                            title="Increase quantity"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                          
+                          <span className="w-16 text-right font-mono font-black text-slate-900 ml-1">
+                            ৳{(item.price * item.qty).toLocaleString()}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(idx)}
+                            className="p-1 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition ml-1 cursor-pointer"
+                            title="Remove this item completely"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    {editItems.length === 0 && (
+                      <p className="text-center py-4 text-slate-400 italic font-medium">
+                        No items remaining in this order.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* 2. Quick Add Menu Item Selector */}
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <select
+                      value={selectedAddMenuItemId}
+                      onChange={e => {
+                        const val = e.target.value ? Number(e.target.value) : '';
+                        setSelectedAddMenuItemId(val);
+                        if (val) handleAddMenuItem(val);
+                      }}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none cursor-pointer"
+                    >
+                      <option value="">+ Add Extra Dish / Item to this Bill...</option>
+                      {(data.menuItems || []).map(m => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} — ৳{m.price.toLocaleString()} ({m.category})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* 3. Discount Adjustment */}
+                <div className="grid grid-cols-2 gap-2 p-2.5 rounded-2xl bg-slate-50 border border-slate-200">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Discount Value</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editDiscountVal}
+                      onChange={e => setEditDiscountVal(Math.max(0, Number(e.target.value) || 0))}
+                      className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl font-bold font-mono text-slate-900 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Discount Type</label>
+                    <select
+                      value={editDiscountType}
+                      onChange={e => setEditDiscountType(e.target.value as DiscountType)}
+                      className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-xs cursor-pointer"
+                    >
+                      <option value="taka">Fixed Taka (৳)</option>
+                      <option value="percentage">Percentage (%)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* 4. Live Financial Reconciliation Box */}
+                <div className="p-3.5 rounded-2xl bg-slate-900 text-white space-y-2">
+                  <div className="flex justify-between items-center text-xs text-slate-400">
+                    <span>Original Paid Amount:</span>
+                    <span className="font-mono font-bold text-slate-200">৳{originalTotal.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs text-slate-400">
+                    <span>Revised New Bill Value:</span>
+                    <span className="font-mono font-bold text-amber-300">৳{computedTotal.toLocaleString()}</span>
+                  </div>
+                  <div className="pt-2 border-t border-slate-800 flex justify-between items-center">
+                    <span className="font-bold text-xs">
+                      {isRefund ? 'Customer Refund Amount:' : isExtraPay ? 'Additional Payment Due:' : 'Adjustment Difference:'}
+                    </span>
+                    <span className={`font-mono font-black text-base ${isRefund ? 'text-rose-400' : isExtraPay ? 'text-emerald-400' : 'text-slate-300'}`}>
+                      {isRefund ? `- ৳${absDiff.toLocaleString()}` : isExtraPay ? `+ ৳${absDiff.toLocaleString()}` : '৳0 (No Change)'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 5. Adjustment Payment Method & Reason (If amount changed) */}
+                {diff !== 0 && (
+                  <div className={`p-3 rounded-2xl border space-y-2.5 ${isRefund ? 'bg-rose-50/70 border-rose-200' : 'bg-emerald-50/70 border-emerald-200'}`}>
+                    <div>
+                      <label className="block font-bold text-slate-800 text-xs mb-1">
+                        {isRefund ? 'Refund From Payment Method *' : 'Receive Additional Payment In *'}
+                      </label>
+                      <select
+                        value={editRefundMethod}
+                        onChange={e => setEditRefundMethod(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none cursor-pointer"
+                      >
+                        {activeFundMethods.map(m => (
+                          <option key={m.id} value={m.id}>
+                            {m.name} ({m.type})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {isRefund && (
+                      <div>
+                        <label className="block font-bold text-slate-800 text-xs mb-1">Reason for Refund / Edit</label>
+                        <select
+                          value={editRefundReason}
+                          onChange={e => setEditRefundReason(e.target.value)}
+                          className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl font-semibold text-slate-800 text-xs mb-1.5 cursor-pointer"
+                        >
+                          <option value="Customer returned item">Customer returned item / Dish cancelled</option>
+                          <option value="Wrong item entered by waiter">Wrong item entered by waiter / mistake</option>
+                          <option value="Kitchen out of stock / unable to serve">Kitchen out of stock / unable to serve</option>
+                          <option value="Food quality issue">Food quality issue</option>
+                          <option value="Manager special discount conceded">Manager special discount conceded</option>
+                          <option value="Other">Other custom reason...</option>
+                        </select>
+                        {editRefundReason === 'Other' && (
+                          <input
+                            type="text"
+                            value={editCustomReason}
+                            onChange={e => setEditCustomReason(e.target.value)}
+                            placeholder="Enter custom reason..."
+                            className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-medium"
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer Actions */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setEditingSale(null)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleConfirmSaveEdit}
+                    disabled={isSavingEdit || editItems.length === 0}
+                    className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-300 font-extrabold text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer active:scale-95 disabled:opacity-50"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{isSavingEdit ? 'Saving...' : 'Save & Update Invoice'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Reassign Waiter Modal */}
       {reassignSale && (

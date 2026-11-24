@@ -1585,6 +1585,18 @@ interface RestaurantContextType {
   }) => boolean;
   restoreVoidedSale: (saleId: number) => void;
   reopenSettledSaleInPos: (saleId: number) => void;
+  modifySettledSale: (
+    saleId: number, 
+    updatedItems: TableCartItem[],
+    options: {
+      discountVal?: number;
+      discountType?: DiscountType;
+      adjustmentType: 'REFUND' | 'COLLECT' | 'EXACT';
+      adjustmentAmount: number;
+      adjustmentMethod: string;
+      reason?: string;
+    }
+  ) => SaleRecord | null;
   finishLinkedOrderInPos: (tableId: string) => void;
   updateSaleWaiter: (id: number, waiterName: string) => void;
   
@@ -7409,6 +7421,96 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }));
   };
 
+  const modifySettledSale = (
+    saleId: number, 
+    updatedItems: TableCartItem[],
+    options: {
+      discountVal?: number;
+      discountType?: DiscountType;
+      adjustmentType: 'REFUND' | 'COLLECT' | 'EXACT';
+      adjustmentAmount: number;
+      adjustmentMethod: string;
+      reason?: string;
+    }
+  ): SaleRecord | null => {
+    const sale = data.sales.find(s => s.id === saleId);
+    if (!sale) return null;
+
+    const newSubtotal = updatedItems.reduce((sum, item) => sum + (item.price * item.qty), 0);
+    const discType = options.discountType || sale.discountType || 'taka';
+    const discVal = options.discountVal !== undefined ? options.discountVal : (sale.discountVal || 0);
+    const discountAmount = discType === 'percentage' 
+      ? Math.round((newSubtotal * discVal) / 100) 
+      : Math.min(newSubtotal, discVal);
+    const newTotal = Math.max(0, newSubtotal - discountAmount);
+
+    const oldTotal = sale.total || 0;
+    const diff = newTotal - oldTotal;
+
+    const paymentBreakdown = { ...(sale.paymentBreakdown || {}) };
+    const methodKey = options.adjustmentMethod || 'cash';
+    
+    if (diff < 0) {
+      const refundAmt = Math.abs(diff);
+      paymentBreakdown[methodKey] = Math.max(0, (paymentBreakdown[methodKey] || 0) - refundAmt);
+    } else if (diff > 0) {
+      paymentBreakdown[methodKey] = (paymentBreakdown[methodKey] || 0) + diff;
+    }
+
+    const itemSummary = updatedItems.map(i => `${i.name} (${i.qty})`).join(', ');
+    const tablePrefixMatch = (sale.details || '').match(/^([^:]+:)/);
+    const prefix = tablePrefixMatch ? tablePrefixMatch[1] : `${sale.table || 'Table'} [Zone: Floor 1]:`;
+    const newDetails = `${prefix} ${itemSummary}`;
+
+    const now = new Date();
+    const timeStr = now.toLocaleDateString('en-GB') + ' ' + now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    const modifierName = currentUser?.name ? `${currentUser.name} (${currentUser.role || 'Staff'})` : 'Admin';
+
+    const refundItems = [...(sale.refundItems || [])];
+    if (options.reason && diff < 0) {
+      refundItems.push({
+        itemId: Date.now(),
+        itemName: options.reason || 'Bill Adjustment / Item Reduction',
+        qty: 1,
+        unitPrice: Math.abs(diff),
+        refundAmount: Math.abs(diff),
+        refundMethod: options.adjustmentMethod || 'cash',
+        reason: options.reason,
+        refundedAt: timeStr,
+        refundedBy: modifierName
+      });
+    }
+
+    const updatedSale: SaleRecord = {
+      ...sale,
+      subtotal: newSubtotal,
+      discountVal: discVal,
+      discountType: discType,
+      discountAmount,
+      total: newTotal,
+      details: newDetails,
+      items: JSON.parse(JSON.stringify(updatedItems)),
+      paymentBreakdown,
+      cash: paymentBreakdown['cash'] || 0,
+      card: paymentBreakdown['card'] || 0,
+      bkash: paymentBreakdown['bkash'] || 0,
+      nagad: paymentBreakdown['nagad'] || 0,
+      refundAmount: (sale.refundAmount || 0) + (diff < 0 ? Math.abs(diff) : 0),
+      refundItems
+    };
+
+    lastLocalEditTimeRef.current = Date.now();
+    setData(prev => {
+      const nextSales = prev.sales.map(s => s.id === saleId ? updatedSale : s);
+      const nextData = { ...prev, sales: nextSales };
+      dataRef.current = nextData;
+      return nextData;
+    });
+
+    syncPosTablesToServer(dataRef.current.tables, updatedSale, 'TABLES_UPDATE');
+    return updatedSale;
+  };
+
   const reopenSettledSaleInPos = (saleId: number) => {
     const sale = data.sales.find(s => s.id === saleId);
     if (!sale) return;
@@ -9530,6 +9632,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       voidSale,
       restoreVoidedSale,
       reopenSettledSaleInPos,
+      modifySettledSale,
       finishLinkedOrderInPos,
       updateSaleWaiter,
       saveMenuItem,
