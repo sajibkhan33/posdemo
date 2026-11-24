@@ -641,7 +641,7 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
       isTableReopened &&
       (table.reopenedByUserId ? table.reopenedByUserId === currentUser?.id : (!isWaiter && currentUser?.role === 'ADMIN'))
     );
-    const effectiveStatus = (isTableReopened && !isReopenOwner) ? 'free' : table.status;
+    const effectiveStatus = (table.cart && table.cart.length > 0) ? table.status : (table.status === 'free' ? 'free' : table.status);
     if (tableStatusFilter !== 'ALL' && effectiveStatus !== tableStatusFilter) {
       return false;
     }
@@ -864,7 +864,8 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
                 (table.reopenedByUserId ? table.reopenedByUserId === currentUser?.id : (!isWaiter && currentUser?.role === 'ADMIN'))
               );
               const isReopenedPaid = isReopenOwner;
-              const effectiveCart = (isTableReopened && !isReopenOwner) ? [] : table.cart;
+              // Never blank out active orders for waiters or other users!
+              const effectiveCart = table.cart || [];
               const tableSubtotal = effectiveCart.reduce((s, i) => s + (i.price * i.qty), 0);
               const reopenedPaidAmount = isReopenedPaid ? (Number(table.paidAmount) || 0) : 0;
               const tableRemainingDue = Math.max(0, tableSubtotal - reopenedPaidAmount);
@@ -872,11 +873,11 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
               const isHoldSyncOnKotOnly = data.restaurantProfile?.tableHoldSyncMode === 'on_kot';
               const hasAnyKotPrinted = !isReallyEmpty && effectiveCart.some(item => (item.kotPrintedQty || 0) > 0 || item.kotPrinted);
               
-              const isBilled = !isReallyEmpty && table.status === 'billed' && !isTableReopened;
-              const isHold = !isReallyEmpty && table.status === 'hold' && (!isHoldSyncOnKotOnly || hasAnyKotPrinted) && !(isTableReopened && !isReopenOwner);
-              const isFree = (table.status === 'free' || isReallyEmpty) || (isHoldSyncOnKotOnly && !hasAnyKotPrinted && !isBilled) || (isTableReopened && !isReopenOwner);
+              const isBilled = !isReallyEmpty && table.status === 'billed' && !isReopenedPaid;
+              const isHold = !isReallyEmpty && (table.status === 'hold' || hasAnyKotPrinted);
+              const isFree = (table.status === 'free' || isReallyEmpty);
               const hasUnprintedKot = !isReallyEmpty && effectiveCart.length > 0 && effectiveCart.some(item => !item.kotPrinted || item.qty > (item.kotPrintedQty || 0));
-              const isBillPrinted = !isReallyEmpty && table.status === 'billed' && !isTableReopened;
+              const isBillPrinted = !isReallyEmpty && table.status === 'billed' && !isReopenedPaid;
               const zoneLabel = table.zone || 'Floor 1';
 
               // Sizing specific variables

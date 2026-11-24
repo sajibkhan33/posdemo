@@ -2185,6 +2185,50 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         localStorage.setItem(ACTIVE_MODULE_KEY, mod);
       } catch {}
     }
+
+    // Auto-release any reopened table if user navigates away from POS to another tab/screen
+    if (tab !== 'pos') {
+      const curTables = dataRef.current?.tables || [];
+      const reopenedTables = curTables.filter(t => t.linkedSaleId || t.isPaidOrder);
+      if (reopenedTables.length > 0) {
+        const releasedTables = curTables.map(t => {
+          if (!t.linkedSaleId && !t.isPaidOrder) return t;
+          return {
+            ...t,
+            status: 'free' as const,
+            cart: [],
+            waiter: '',
+            customer: 'Walk-in Customer',
+            discountVal: 0,
+            channelOrAgentId: 'dine_in',
+            linkedSaleId: undefined,
+            linkedInvoiceNo: undefined,
+            isPaidOrder: false,
+            paidAmount: 0,
+            reopenedByUserId: undefined,
+            reopenedByUserName: undefined,
+            reopenedByUserRole: undefined,
+            orderCreatedBy: undefined,
+            orderCreatedRole: undefined,
+            orderCreatedId: undefined,
+            orderCreatedAt: undefined,
+            billedAt: undefined,
+            billedAtTime: undefined,
+            kotBaseSerial: undefined,
+            kotCount: 0,
+            billCount: 0,
+            orderRef: undefined
+          };
+        });
+        lastLocalEditTimeRef.current = Date.now();
+        lastSyncedTablesStrRef.current = JSON.stringify(releasedTables);
+        if (dataRef.current) {
+          dataRef.current = { ...dataRef.current, tables: releasedTables };
+        }
+        setData(prev => ({ ...prev, tables: releasedTables }));
+        syncPosTablesToServer(releasedTables, undefined, 'TABLES_UPDATE');
+      }
+    }
   };
 
   const setActiveSubNav = (sub: string) => {
@@ -2213,6 +2257,51 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     try {
       localStorage.setItem(POS_VIEW_KEY, v);
     } catch {}
+
+    // When returning to floor view, auto-release any reopened table owned by current user
+    if (v === 'floor') {
+      const curTables = dataRef.current?.tables || [];
+      const hasReopened = curTables.some(t => (t.linkedSaleId || t.isPaidOrder) && (t.reopenedByUserId ? t.reopenedByUserId === currentUser?.id : (!isWaiter && currentUser?.role === 'ADMIN')));
+      if (hasReopened) {
+        const releasedTables = curTables.map(t => {
+          const isOwnReopened = (t.linkedSaleId || t.isPaidOrder) && (t.reopenedByUserId ? t.reopenedByUserId === currentUser?.id : (!isWaiter && currentUser?.role === 'ADMIN'));
+          if (!isOwnReopened) return t;
+          return {
+            ...t,
+            status: 'free' as const,
+            cart: [],
+            waiter: '',
+            customer: 'Walk-in Customer',
+            discountVal: 0,
+            channelOrAgentId: 'dine_in',
+            linkedSaleId: undefined,
+            linkedInvoiceNo: undefined,
+            isPaidOrder: false,
+            paidAmount: 0,
+            reopenedByUserId: undefined,
+            reopenedByUserName: undefined,
+            reopenedByUserRole: undefined,
+            orderCreatedBy: undefined,
+            orderCreatedRole: undefined,
+            orderCreatedId: undefined,
+            orderCreatedAt: undefined,
+            billedAt: undefined,
+            billedAtTime: undefined,
+            kotBaseSerial: undefined,
+            kotCount: 0,
+            billCount: 0,
+            orderRef: undefined
+          };
+        });
+        lastLocalEditTimeRef.current = Date.now();
+        lastSyncedTablesStrRef.current = JSON.stringify(releasedTables);
+        if (dataRef.current) {
+          dataRef.current = { ...dataRef.current, tables: releasedTables };
+        }
+        setData(prev => ({ ...prev, tables: releasedTables }));
+        syncPosTablesToServer(releasedTables, undefined, 'TABLES_UPDATE');
+      }
+    }
   };
 
   const navigateTo = (tab: ActiveTab, subNav?: string, module?: string) => {
@@ -3920,18 +4009,19 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     );
 
     if (isReopenedOrder && !isReopenOwner) {
+      const hasExistingCart = Boolean(targetTable?.cart && targetTable.cart.length > 0);
       const sanitized = data.tables.map(t => t.id === tableId ? {
         ...t,
-        status: 'free' as const,
-        waiter: currentUser?.name || '',
-        customer: 'Walk-in Customer',
+        status: hasExistingCart ? t.status : ('free' as const),
+        waiter: (hasExistingCart && t.waiter) ? t.waiter : (currentUser?.name || ''),
+        customer: (hasExistingCart && t.customer) ? t.customer : 'Walk-in Customer',
         channelOrAgentId: 'dine_in',
-        cart: [],
-        discountVal: 0,
-        discountType: 'taka' as const,
-        orderRef: undefined,
-        kotCount: 0,
-        billCount: 0,
+        cart: hasExistingCart ? t.cart : [],
+        discountVal: hasExistingCart ? (t.discountVal || 0) : 0,
+        discountType: hasExistingCart ? (t.discountType || 'taka') : 'taka' as const,
+        orderRef: hasExistingCart ? t.orderRef : undefined,
+        kotCount: hasExistingCart ? (t.kotCount || 0) : 0,
+        billCount: hasExistingCart ? (t.billCount || 0) : 0,
         linkedSaleId: undefined,
         linkedInvoiceNo: undefined,
         isPaidOrder: false,
@@ -3939,10 +4029,10 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         reopenedByUserId: undefined,
         reopenedByUserName: undefined,
         reopenedByUserRole: undefined,
-        orderCreatedBy: currentUser?.name || '',
-        orderCreatedRole: currentUser?.role || 'WAITER',
-        orderCreatedId: currentUser?.id,
-        orderCreatedAt: Date.now()
+        orderCreatedBy: (hasExistingCart && t.orderCreatedBy) ? t.orderCreatedBy : (currentUser?.name || ''),
+        orderCreatedRole: (hasExistingCart && t.orderCreatedRole) ? t.orderCreatedRole : (currentUser?.role || 'WAITER'),
+        orderCreatedId: (hasExistingCart && t.orderCreatedId) ? t.orderCreatedId : currentUser?.id,
+        orderCreatedAt: (hasExistingCart && t.orderCreatedAt) ? t.orderCreatedAt : Date.now()
       } : t);
       lastLocalEditTimeRef.current = Date.now();
       lastSyncedTablesStrRef.current = JSON.stringify(sanitized);
@@ -4858,13 +4948,20 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         kotPrintedAt: item.kotPrintedAt || timeStr,
         kotPrintedTimestamp: item.kotPrintedTimestamp || now
       }));
+      const isReopenSession = Boolean(
+        (t.linkedSaleId || t.isPaidOrder) &&
+        (t.reopenedByUserId ? t.reopenedByUserId === currentUser?.id : (!isWaiter && currentUser?.role === 'ADMIN'))
+      );
       return {
         ...t,
-        status: t.status === 'free' ? 'hold' : t.status,
+        status: 'hold' as const,
         orderCreatedAt: t.orderCreatedAt || now,
         orderRef: baseKotNo,
         kotBaseSerial: baseKotNo,
-        linkedInvoiceNo,
+        linkedInvoiceNo: isReopenSession ? linkedInvoiceNo : undefined,
+        linkedSaleId: isReopenSession ? t.linkedSaleId : undefined,
+        isPaidOrder: isReopenSession ? t.isPaidOrder : false,
+        paidAmount: isReopenSession ? t.paidAmount : 0,
         kotCount: nextKotCount,
         cart: updatedCart
       };
