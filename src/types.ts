@@ -70,6 +70,7 @@ export type ThermalPaperWidth = '80mm' | '58mm';
 export interface PrinterConfig {
   id: string;
   name: string; // e.g. "Main Kitchen Thermal Printer", "Bar / Cafe Counter Printer", "Cashier Receipt Printer", "Accounts Report Printer"
+  systemPrinterName?: string; // Physical Windows / OS hardware printer device name e.g. "80 Printer", "POS-80"
   type: PrinterType; // KOT, BILL, REPORT, ALL
   connectionType: PrinterConnectionType; // USB, LAN
   ipAddress?: string; // e.g. "192.168.1.100"
@@ -79,6 +80,7 @@ export interface PrinterConfig {
   paperWidth: ThermalPaperWidth; // 80mm or 58mm
   departments: string[]; // Dept routing e.g. ["Main Kitchen", "Rooftop Grill & BBQ"]
   categories: string[]; // Category routing e.g. ["Steak & BBQ", "Rice & Biryani"]
+  itemIds?: number[]; // Specific menu item IDs routed to this printer
   printOnBill?: boolean;
   printOnSettle?: boolean;
   isDefault?: boolean;
@@ -874,4 +876,6 @@ export interface PrintableReceipt {
   showPaymentBreakdown?: boolean;
   footerMessage?: string;
   footerNotes?: string;
+  addonKotReceipt?: PrintableReceipt;
+  voidKotReceipt?: PrintableReceipt;
 }

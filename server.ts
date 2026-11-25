@@ -566,7 +566,7 @@ async function startServer() {
 
   // Build ESC/POS binary buffer for a compact single-page KOT slip
   function buildKotEscPosBuffer(
-    req: { tableName: string; tableZone?: string; waiter?: string; customer?: string; invoiceNo: string; dateTime?: string; showPrices?: boolean; showWaiter?: boolean; showCustomer?: boolean; showDateTime?: boolean; paperWidth?: string; isAddonKot?: boolean },
+    req: { tableName: string; tableZone?: string; waiter?: string; customer?: string; invoiceNo: string; dateTime?: string; showPrices?: boolean; showWaiter?: boolean; showCustomer?: boolean; showDateTime?: boolean; paperWidth?: string; isAddonKot?: boolean; isCancelKot?: boolean },
     slip: { station: string; category?: string; showPrices?: boolean; showWaiter?: boolean; showCustomer?: boolean; showDateTime?: boolean; paperWidth?: string; items: { name: string; qty: number; price?: number; variation?: string; addons?: string[]; notes?: string }[] },
     index: number,
     total: number,
@@ -596,7 +596,12 @@ async function startServer() {
     const cleanStation = (!slip.station || slip.station === 'SPLIT_ALL' || slip.station === 'ALL') ? 'MAIN KITCHEN' : slip.station;
     pushStr(`STATION: ${cleanStation.toUpperCase()}\n`);
     const invoiceVal = req.invoiceNo || 'KOT-0000';
-    pushStr(`KOT NO: ${invoiceVal}\n`);
+    if (req.isCancelKot || invoiceVal.startsWith('VOID:')) {
+      pushStr(`*** VOID / CANCELLED KOT ***\n`);
+      pushStr(`VOID KOT NO: ${invoiceVal}\n`);
+    } else {
+      pushStr(`KOT NO: ${invoiceVal}\n`);
+    }
     if (slip.category) {
       pushStr(`Category: ${slip.category}\n`);
     }
@@ -2015,7 +2020,7 @@ async function startServer() {
           console.log(` ➔ Printing KOT Slip ${i + 1}/${slips.length} on "${targetPrinter}"...`);
 
           const rawBuffer = buildKotEscPosBuffer(
-            { tableName, tableZone, waiter, customer, invoiceNo, dateTime, showPrices: req.body.showPrices, showWaiter: req.body.showWaiter, showCustomer: req.body.showCustomer, showDateTime: req.body.showDateTime, paperWidth: req.body.paperWidth, isAddonKot: req.body.isAddonKot },
+            { tableName, tableZone, waiter, customer, invoiceNo, dateTime, showPrices: req.body.showPrices, showWaiter: req.body.showWaiter, showCustomer: req.body.showCustomer, showDateTime: req.body.showDateTime, paperWidth: req.body.paperWidth, isAddonKot: req.body.isAddonKot, isCancelKot: req.body.isCancelKot },
             slip,
             i + 1,
             slips.length,

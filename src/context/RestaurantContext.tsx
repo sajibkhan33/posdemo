@@ -564,7 +564,7 @@ export const DEFAULT_PRINTERS: PrinterConfig[] = [
     usbPort: "USB002",
     baudRate: 9600,
     paperWidth: "80mm",
-    departments: ["Beverage & Cafe Counter"],
+    departments: ["Beverage"],
     categories: ["Cold Beverages & Coffee"],
     isDefault: false,
     isActive: true,
@@ -661,7 +661,7 @@ export const DEFAULT_PRINT_TEMPLATES: PrintTemplate[] = [
     name: "Beverage & Cafe Bar KOT (58mm)",
     templateType: "KOT",
     paperWidth: "80mm",
-    departments: ["Beverage & Cafe Counter"],
+    departments: ["Beverage"],
     categories: ["Cold Beverages & Coffee"],
     headerTitle: "*** BAR / DRINK TICKET ***",
     showLogo: false,
@@ -1130,7 +1130,7 @@ const DEFAULT_DATA: AppData = {
     { id: "RT-01", name: "Rooftop 01", zone: "Rooftop Garden", status: "free", waiter: "", customer: "Walk-in Customer", channelOrAgentId: "dine_in", discountType: "taka", discountVal: 0, cart: [] }
   ],
   waiters: ["Rahim", "Karim", "Sajjad", "Solim", "Tanvir"],
-  departments: ["Main Kitchen", "Rooftop Grill & BBQ", "Beverage & Cafe Counter"],
+  departments: ["Main Kitchen", "Rooftop Grill & BBQ", "Beverage"],
   menuCategories: ["Appetizers & Soup", "Steak & BBQ", "Rice & Biryani", "Cold Beverages & Coffee"],
   expenseHeads: ["Casual Waiter Charge", "Cleaning Bill", "Conveyance", "Electricity Bill", "Staff Salary"],
   purchaseCategories: ["Grocery", "Chicken", "Beef", "Fish", "Cold & Beverage", "Dairy & Eggs", "Spices"],
@@ -1595,7 +1595,9 @@ interface RestaurantContextType {
       adjustmentType: 'REFUND' | 'COLLECT' | 'EXACT';
       adjustmentAmount: number;
       adjustmentMethod: string;
+      primaryPaymentMethod?: string;
       reason?: string;
+      kotCount?: number;
     }
   ) => SaleRecord | null;
   finishLinkedOrderInPos: (tableId: string) => void;
@@ -2630,6 +2632,13 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         result.data.printTemplates = (dataRef.current.printTemplates && dataRef.current.printTemplates.length > 0)
           ? dataRef.current.printTemplates
           : DEFAULT_PRINT_TEMPLATES;
+      }
+      if (Array.isArray(result.data.printTemplates) && Array.isArray(result.data.departments)) {
+        const validDeptsSet = new Set(result.data.departments);
+        result.data.printTemplates = result.data.printTemplates.map((t: PrintTemplate) => ({
+          ...t,
+          departments: Array.isArray(t.departments) ? t.departments.filter(d => validDeptsSet.has(d)) : []
+        }));
       }
       if (result.data.chartOfAccounts) {
         result.data.chartOfAccounts = ensureAccountSystemRoles(result.data.chartOfAccounts);
@@ -4174,9 +4183,14 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         ...prev,
         printTemplates: currentList.map(t => {
           if (t.id === id) {
+            const activeDepts = prev.departments || [];
+            const sanitizedDepts = updates.departments 
+              ? updates.departments.filter(d => activeDepts.includes(d))
+              : (t.departments || []).filter(d => activeDepts.includes(d));
             return {
               ...t,
               ...updates,
+              departments: sanitizedDepts,
               showPricesOnKot: updates.showPricesOnKot !== undefined ? Boolean(updates.showPricesOnKot) : Boolean(t.showPricesOnKot),
               showTotalPriceOnKot: updates.showTotalPriceOnKot !== undefined ? Boolean(updates.showTotalPriceOnKot) : Boolean(t.showTotalPriceOnKot)
             };
@@ -5070,6 +5084,42 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         || printers.find(pr => pr.isActive && (pr.type === 'KOT' || pr.type === 'ALL'))
         || printers[0] || null;
 
+      // 3-Level Granular Item-Level Hardware Routing:
+      // Priority 1: Specific Item ID override (pr.itemIds)
+      // Priority 2: Specific Category match (pr.categories)
+      // Priority 3: Department match (pr.departments)
+      // Fallback: defaultKotPrinter
+      const getPrinterForItem = (item: { id?: number; department?: string; category?: string }) => {
+        // 1. Specific Item ID match
+        if (item.id) {
+          const itemP = printers.find(pr => pr.isActive && Array.isArray(pr.itemIds) && pr.itemIds.length > 0 && pr.itemIds.includes(item.id));
+          if (itemP) return itemP;
+        }
+        // 2. Category match (respecting itemIds filter if printer has itemIds)
+        if (item.category) {
+          const catP = printers.find(pr => {
+            if (!pr.isActive || !Array.isArray(pr.categories) || !pr.categories.includes(item.category!)) return false;
+            if (Array.isArray(pr.itemIds) && pr.itemIds.length > 0) {
+              return item.id ? pr.itemIds.includes(item.id) : false;
+            }
+            return true;
+          });
+          if (catP) return catP;
+        }
+        // 3. Department match (respecting categories filter if printer has categories)
+        if (item.department) {
+          const deptP = printers.find(pr => {
+            if (!pr.isActive || !Array.isArray(pr.departments) || !pr.departments.includes(item.department!)) return false;
+            if (Array.isArray(pr.categories) && pr.categories.length > 0) {
+              return item.category ? pr.categories.includes(item.category) : false;
+            }
+            return true;
+          });
+          if (deptP) return deptP;
+        }
+        return defaultKotPrinter;
+      };
+
       const getPrinterForDept = (dept: string) => {
         const p = printers.find(pr => pr.departments?.includes(dept) && pr.isActive);
         return p || defaultKotPrinter;
@@ -5086,6 +5136,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       const routedItems: ItemRouting[] = enriched.map(item => {
         const dept = item.department || defaultKotStation;
+        const targetPrinter = getPrinterForItem(item);
         const activeDedicatedTpl = allTemplates.find(t =>
           t.isActive &&
           (t.templateType === 'KOT' || t.templateType === 'BOTH') &&
@@ -5093,21 +5144,12 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           t.departments.includes(dept)
         );
 
-        if (activeDedicatedTpl) {
-          return {
-            item,
-            station: dept,
-            template: activeDedicatedTpl,
-            printerName: getPrinterForDept(dept)?.name
-          };
-        } else {
-          return {
-            item,
-            station: defaultKotStation,
-            template: defaultPrimaryKotTemplate,
-            printerName: defaultKotPrinter?.name
-          };
-        }
+        return {
+          item,
+          station: dept,
+          template: activeDedicatedTpl || defaultPrimaryKotTemplate,
+          printerName: targetPrinter?.systemPrinterName || targetPrinter?.name
+        };
       });
 
       const stationMap = new Map<string, {
@@ -5118,7 +5160,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }>();
 
       for (const r of routedItems) {
-        const key = `${r.station}_${r.template.id}`;
+        const key = `${r.printerName || 'default'}_${r.station}_${r.template.id}`;
         if (!stationMap.has(key)) {
           stationMap.set(key, {
             station: r.station,
@@ -5399,7 +5441,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       paperWidth: defaultPrimaryKotTemplate?.paperWidth || '80mm',
       slips: [{
         station: cancelledItemInfo.department || 'Main Kitchen',
-        targetPrinterName: getPrinterForDept(cancelledItemInfo.department || 'Main Kitchen')?.name,
+        targetPrinterName: getPrinterForDept(cancelledItemInfo.department || 'Main Kitchen')?.systemPrinterName || getPrinterForDept(cancelledItemInfo.department || 'Main Kitchen')?.name,
         items: [{
           name: `*** CANCELLED *** ${cancelledItemInfo.name}`,
           qty: cancelledItemInfo.qty,
@@ -5460,7 +5502,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         paperWidth: defaultPrimaryKotTemplate?.paperWidth || '80mm',
         slips: [{
           station: 'All Stations',
-          targetPrinterName: getPrinterForDept('Main Kitchen')?.name,
+          targetPrinterName: getPrinterForDept('Main Kitchen')?.systemPrinterName || getPrinterForDept('Main Kitchen')?.name,
           items: cancelledList.map(c => ({
             name: `*** TABLE RELEASED / VOID *** ${c.name}`,
             qty: c.qty,
@@ -5654,7 +5696,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       paperWidth: defaultPrimaryKotTemplate?.paperWidth || '80mm',
       slips: [{
         station: cancelledItems[0]?.department || 'Main Kitchen',
-        targetPrinterName: getPrinterForDept(cancelledItems[0]?.department || 'Main Kitchen')?.name,
+        targetPrinterName: getPrinterForDept(cancelledItems[0]?.department || 'Main Kitchen')?.systemPrinterName || getPrinterForDept(cancelledItems[0]?.department || 'Main Kitchen')?.name,
         items: cancelledItems.map(c => ({
           name: `*** CANCELLED *** ${c.name}`,
           qty: c.qty,
@@ -6142,6 +6184,42 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         || printers.find(pr => pr.isActive && (pr.type === 'KOT' || pr.type === 'ALL'))
         || printers[0] || null;
 
+      // 3-Level Granular Item-Level Hardware Routing for Auto-KOT:
+      // Priority 1: Specific Item ID override (pr.itemIds)
+      // Priority 2: Specific Category match (pr.categories)
+      // Priority 3: Department match (pr.departments)
+      // Fallback: defaultKotPrinter
+      const getPrinterForItem = (item: { id?: number; department?: string; category?: string }) => {
+        // 1. Specific Item ID match
+        if (item.id) {
+          const itemP = printers.find(pr => pr.isActive && Array.isArray(pr.itemIds) && pr.itemIds.length > 0 && pr.itemIds.includes(item.id));
+          if (itemP) return itemP;
+        }
+        // 2. Category match (respecting itemIds filter if printer has itemIds)
+        if (item.category) {
+          const catP = printers.find(pr => {
+            if (!pr.isActive || !Array.isArray(pr.categories) || !pr.categories.includes(item.category!)) return false;
+            if (Array.isArray(pr.itemIds) && pr.itemIds.length > 0) {
+              return item.id ? pr.itemIds.includes(item.id) : false;
+            }
+            return true;
+          });
+          if (catP) return catP;
+        }
+        // 3. Department match (respecting categories filter if printer has categories)
+        if (item.department) {
+          const deptP = printers.find(pr => {
+            if (!pr.isActive || !Array.isArray(pr.departments) || !pr.departments.includes(item.department!)) return false;
+            if (Array.isArray(pr.categories) && pr.categories.length > 0) {
+              return item.category ? pr.categories.includes(item.category) : false;
+            }
+            return true;
+          });
+          if (deptP) return deptP;
+        }
+        return defaultKotPrinter;
+      };
+
       const getPrinterForDept = (dept: string) => {
         const p = printers.find(pr => pr.departments?.includes(dept) && pr.isActive);
         return p || defaultKotPrinter;
@@ -6158,6 +6236,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       const routedUnprinted: UnprintedRouting[] = enrichedUnprinted.map(item => {
         const dept = item.department || defaultKotStation;
+        const targetPrinter = getPrinterForItem(item);
         const activeDedicatedTpl = allTemplates.find(t =>
           t.isActive &&
           (t.templateType === 'KOT' || t.templateType === 'BOTH') &&
@@ -6165,21 +6244,12 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           t.departments.includes(dept)
         );
 
-        if (activeDedicatedTpl) {
-          return {
-            item,
-            station: dept,
-            template: activeDedicatedTpl,
-            printerName: getPrinterForDept(dept)?.name
-          };
-        } else {
-          return {
-            item,
-            station: defaultKotStation,
-            template: defaultPrimaryKotTemplate,
-            printerName: defaultKotPrinter?.name
-          };
-        }
+        return {
+          item,
+          station: dept,
+          template: activeDedicatedTpl || defaultPrimaryKotTemplate,
+          printerName: targetPrinter?.systemPrinterName || targetPrinter?.name
+        };
       });
 
       const unprintedStationMap = new Map<string, {
@@ -6190,7 +6260,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }>();
 
       for (const r of routedUnprinted) {
-        const key = `${r.station}_${r.template.id}`;
+        const key = `${r.printerName || 'default'}_${r.station}_${r.template.id}`;
         if (!unprintedStationMap.has(key)) {
           unprintedStationMap.set(key, {
             station: r.station,
@@ -7437,7 +7507,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       adjustmentType: 'REFUND' | 'COLLECT' | 'EXACT';
       adjustmentAmount: number;
       adjustmentMethod: string;
+      primaryPaymentMethod?: string;
       reason?: string;
+      kotCount?: number;
     }
   ): SaleRecord | null => {
     const sale = data.sales.find(s => s.id === saleId);
@@ -7454,14 +7526,72 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const oldTotal = sale.total || 0;
     const diff = newTotal - oldTotal;
 
-    const paymentBreakdown = { ...(sale.paymentBreakdown || {}) };
-    const methodKey = options.adjustmentMethod || 'cash';
-    
-    if (diff < 0) {
-      const refundAmt = Math.abs(diff);
-      paymentBreakdown[methodKey] = Math.max(0, (paymentBreakdown[methodKey] || 0) - refundAmt);
-    } else if (diff > 0) {
-      paymentBreakdown[methodKey] = (paymentBreakdown[methodKey] || 0) + diff;
+    const methodList = (data.paymentMethods && data.paymentMethods.length > 0)
+      ? data.paymentMethods
+      : DEFAULT_PAYMENT_METHODS;
+
+    // Check if user changed the payment channel
+    const targetMethod = options.primaryPaymentMethod
+      ? methodList.find(m => m.id === options.primaryPaymentMethod || m.name.toLowerCase() === options.primaryPaymentMethod?.toLowerCase())
+      : null;
+
+    let paymentBreakdown: Record<string, number> = {};
+    let newCash = 0;
+    let newCard = 0;
+    let newBkash = 0;
+    let newNagad = 0;
+
+    if (targetMethod) {
+      // User explicitly specified/changed the payment channel (e.g. from Cash to Bangla QR)
+      const mName = targetMethod.name;
+      paymentBreakdown = { [mName]: newTotal };
+      
+      const norm = `${targetMethod.id} ${targetMethod.name} ${targetMethod.providerName || ''}`.toLowerCase();
+      if (targetMethod.type === 'CASH') {
+        newCash = newTotal;
+      } else if (targetMethod.type === 'CARD' || targetMethod.type === 'BANK' || targetMethod.type === 'BANGLA_QR') {
+        newCard = newTotal;
+      } else if (targetMethod.type === 'MFS') {
+        if (norm.includes('nagad')) newNagad = newTotal;
+        else newBkash = newTotal;
+      } else {
+        newCard = newTotal;
+      }
+    } else {
+      // Deduplicate and adjust existing breakdown cleanly
+      const existingBreakdown = { ...(sale.paymentBreakdown || {}) };
+      const adjMethodKey = options.adjustmentMethod || 'cash';
+
+      Object.entries(existingBreakdown).forEach(([k, amt]) => {
+        const m = methodList.find(x => x.id === k || x.name.toLowerCase() === k.toLowerCase());
+        const cleanKey = m ? m.name : k;
+        if (!paymentBreakdown[cleanKey]) {
+          paymentBreakdown[cleanKey] = Number(amt) || 0;
+        }
+      });
+
+      if (Object.keys(paymentBreakdown).length === 0) {
+        paymentBreakdown['Cash'] = oldTotal;
+      }
+
+      if (diff < 0) {
+        const refundAmt = Math.abs(diff);
+        const targetKey = Object.keys(paymentBreakdown).find(k => k.toLowerCase() === adjMethodKey.toLowerCase()) || Object.keys(paymentBreakdown)[0] || 'Cash';
+        paymentBreakdown[targetKey] = Math.max(0, (paymentBreakdown[targetKey] || 0) - refundAmt);
+      } else if (diff > 0) {
+        const targetKey = Object.keys(paymentBreakdown).find(k => k.toLowerCase() === adjMethodKey.toLowerCase()) || adjMethodKey;
+        paymentBreakdown[targetKey] = (paymentBreakdown[targetKey] || 0) + diff;
+      }
+
+      Object.entries(paymentBreakdown).forEach(([k, amt]) => {
+        const m = methodList.find(x => x.id === k || x.name.toLowerCase() === k.toLowerCase());
+        const norm = m ? `${m.id} ${m.name} ${m.providerName || ''}`.toLowerCase() : k.toLowerCase();
+        if (m?.type === 'CASH' || norm.includes('cash')) newCash += amt;
+        else if (m?.type === 'CARD' || m?.type === 'BANK' || m?.type === 'BANGLA_QR' || norm.includes('card') || norm.includes('bank') || norm.includes('qr')) newCard += amt;
+        else if (norm.includes('nagad')) newNagad += amt;
+        else if (norm.includes('bkash')) newBkash += amt;
+        else newCard += amt;
+      });
     }
 
     const itemSummary = updatedItems.map(i => `${i.name} (${i.qty})`).join(', ');
@@ -7498,10 +7628,12 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       details: newDetails,
       items: JSON.parse(JSON.stringify(updatedItems)),
       paymentBreakdown,
-      cash: paymentBreakdown['cash'] || 0,
-      card: paymentBreakdown['card'] || 0,
-      bkash: paymentBreakdown['bkash'] || 0,
-      nagad: paymentBreakdown['nagad'] || 0,
+      cash: newCash,
+      card: newCard,
+      bkash: newBkash,
+      nagad: newNagad,
+      channel: targetMethod ? targetMethod.name : sale.channel,
+      kotCount: options.kotCount !== undefined ? options.kotCount : (sale.kotCount || 1),
       refundAmount: (sale.refundAmount || 0) + (diff < 0 ? Math.abs(diff) : 0),
       refundItems
     };

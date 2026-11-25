@@ -63,6 +63,7 @@ export const PrintersConfigView: React.FC = () => {
 
   // Form State
   const [name, setName] = useState('');
+  const [systemPrinterName, setSystemPrinterName] = useState('');
   const [type, setType] = useState<PrinterType>('KOT');
   const [connectionType, setConnectionType] = useState<PrinterConnectionType>('LAN');
   const [ipAddress, setIpAddress] = useState('192.168.1.200');
@@ -72,6 +73,7 @@ export const PrintersConfigView: React.FC = () => {
   const [paperWidth, setPaperWidth] = useState<ThermalPaperWidth>('80mm');
   const [selectedDepts, setSelectedDepts] = useState<string[]>([]);
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
+  const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
   const [isDefault, setIsDefault] = useState(false);
   const [isActive, setIsActive] = useState(true);
   const [printOnBill, setPrintOnBill] = useState(true);
@@ -206,7 +208,11 @@ export const PrintersConfigView: React.FC = () => {
 
   // Apply a detected system printer's hardware settings into the modal form
   const handleSelectDetectedPrinter = (sysPrinter: DetectedSystemPrinter) => {
-    setName(sysPrinter.name);
+    setSystemPrinterName(sysPrinter.name);
+    // If display name is empty, auto-fill with detected printer's name
+    if (!name.trim()) {
+      setName(sysPrinter.name);
+    }
     setConnectionType(sysPrinter.connectionType);
     if (sysPrinter.connectionType === 'LAN') {
       setIpAddress(sysPrinter.ipAddress || '192.168.1.87');
@@ -221,6 +227,7 @@ export const PrintersConfigView: React.FC = () => {
   const handleOpenAdd = () => {
     setEditingPrinterId(null);
     setName('');
+    setSystemPrinterName('');
     setType('KOT');
     setConnectionType('USB');
     setIpAddress('192.168.1.87');
@@ -230,6 +237,7 @@ export const PrintersConfigView: React.FC = () => {
     setPaperWidth('80mm');
     setSelectedDepts(data.departments || []);
     setSelectedCats([]);
+    setSelectedItemIds([]);
     setIsDefault(false);
     setIsActive(true);
     setPrintOnBill(true);
@@ -243,6 +251,16 @@ export const PrintersConfigView: React.FC = () => {
   const handleOpenEdit = (p: PrinterConfig) => {
     setEditingPrinterId(p.id);
     setName(p.name);
+    // Bind hardware printer name: check p.systemPrinterName, or find matching detected printer
+    let matchedHwName = p.systemPrinterName || '';
+    if (!matchedHwName && detectedSystemPrinters.length > 0) {
+      const match = detectedSystemPrinters.find(dp => 
+        dp.name.toLowerCase() === p.name.toLowerCase() ||
+        (p.connectionType === 'USB' && dp.portName && p.usbPort && dp.portName.toLowerCase() === p.usbPort.toLowerCase())
+      );
+      if (match) matchedHwName = match.name;
+    }
+    setSystemPrinterName(matchedHwName || p.name);
     setType(p.type);
     setConnectionType(p.connectionType);
     setIpAddress(p.ipAddress || '192.168.1.87');
@@ -252,6 +270,7 @@ export const PrintersConfigView: React.FC = () => {
     setPaperWidth(p.paperWidth || '80mm');
     setSelectedDepts(p.departments || []);
     setSelectedCats(p.categories || []);
+    setSelectedItemIds(p.itemIds || []);
     setIsDefault(Boolean(p.isDefault));
     setIsActive(p.isActive !== false);
     setPrintOnBill(p.printOnBill !== false);
@@ -271,6 +290,7 @@ export const PrintersConfigView: React.FC = () => {
 
     const payload: Omit<PrinterConfig, 'id'> = {
       name: name.trim(),
+      systemPrinterName: systemPrinterName.trim() || undefined,
       type,
       connectionType,
       ipAddress: connectionType === 'LAN' ? ipAddress.trim() : undefined,
@@ -280,6 +300,7 @@ export const PrintersConfigView: React.FC = () => {
       paperWidth,
       departments: selectedDepts,
       categories: selectedCats,
+      itemIds: selectedItemIds.length > 0 ? selectedItemIds : undefined,
       isDefault,
       isActive,
       printOnBill: (type === 'BILL' || type === 'ALL') ? printOnBill : true,
@@ -310,9 +331,17 @@ export const PrintersConfigView: React.FC = () => {
 
   // Toggle Category selection
   const toggleCat = (cat: string) => {
-    setSelectedCats(prev => 
-      prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
-    );
+    setSelectedCats(prev => {
+      const next = prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat];
+      // Clean itemIds that are no longer in selected categories
+      setSelectedItemIds(currentIds => 
+        currentIds.filter(id => {
+          const item = (data.menuItems || []).find(m => m.id === id);
+          return item && next.includes(item.category);
+        })
+      );
+      return next;
+    });
   };
 
   // Real Hardware + UI Test Print
@@ -331,7 +360,7 @@ export const PrintersConfigView: React.FC = () => {
         slips: [
           {
             station: printer.name,
-            targetPrinterName: printer.name,
+            targetPrinterName: printer.systemPrinterName || printer.name,
             category: `${printer.type} (${printer.paperWidth})`,
             items: [
               { name: 'Thermal Print Head Check', qty: 1, notes: `Interface: ${printer.connectionType}` },
@@ -553,9 +582,16 @@ export const PrintersConfigView: React.FC = () => {
                 </div>
 
                 {/* Printer Name & Connection Info */}
-                <h4 className="font-extrabold text-sm text-slate-900 line-clamp-1 mb-1">
-                  {printer.name}
-                </h4>
+                <div className="flex items-center justify-between gap-1.5 mb-1">
+                  <h4 className="font-extrabold text-sm text-slate-900 line-clamp-1">
+                    {printer.name}
+                  </h4>
+                  {printer.systemPrinterName && printer.systemPrinterName.toLowerCase() !== printer.name.toLowerCase() && (
+                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded shrink-0" title={`Connected hardware device: ${printer.systemPrinterName}`}>
+                      HW: {printer.systemPrinterName}
+                    </span>
+                  )}
+                </div>
 
                 <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1 my-2.5 font-mono">
                   {isLan ? (
@@ -605,6 +641,26 @@ export const PrintersConfigView: React.FC = () => {
                           {c}
                         </span>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Specific Routed Dishes if filtered */}
+                {(printer.itemIds || []).length > 0 && (
+                  <div className="space-y-1 my-1.5">
+                    <div className="text-[10px] font-bold text-amber-800 flex items-center gap-1">
+                      <ChefHat className="w-2.5 h-2.5 text-amber-600" />
+                      <span>Specific Filtered Dishes ({printer.itemIds.length}):</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto">
+                      {printer.itemIds.map(id => {
+                        const m = (data.menuItems || []).find(it => it.id === id);
+                        return m ? (
+                          <span key={id} className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200 text-[10px] font-semibold">
+                            {m.name}
+                          </span>
+                        ) : null;
+                      })}
                     </div>
                   </div>
                 )}
@@ -801,91 +857,83 @@ export const PrintersConfigView: React.FC = () => {
             </div>
 
             <form onSubmit={handleSave} className="space-y-4 my-4">
-              {/* System Connected Printers Scanner & Selector */}
-              <div className="p-3.5 rounded-2xl bg-linear-to-r from-emerald-50/80 via-teal-50/40 to-slate-50 border border-emerald-200/90 space-y-2.5">
+              {/* Ultra-Compact System Hardware Printer Auto-Detector */}
+              <div className="p-2.5 rounded-xl bg-linear-to-r from-emerald-50/70 to-teal-50/40 border border-emerald-200/90 space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded-lg bg-emerald-600 text-white">
-                      <Cpu className="w-3.5 h-3.5" />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
-                        <span>System Printers (Check & Select)</span>
-                        {detectedSystemPrinters.length > 0 && (
-                          <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black border border-emerald-300">
-                            {detectedSystemPrinters.length} Found
-                          </span>
-                        )}
-                      </h4>
-                      <p className="text-[11px] text-slate-500">
-                        Click any connected USB or LAN printer below to auto-fill its settings
-                      </p>
-                    </div>
+                  <div className="flex items-center gap-1.5">
+                    <Cpu className="w-3.5 h-3.5 text-emerald-700" />
+                    <span className="text-xs font-extrabold text-slate-900">System Printer (Auto-Detect)</span>
+                    {detectedSystemPrinters.length > 0 && (
+                      <span className="px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black border border-emerald-300">
+                        {detectedSystemPrinters.length} Found
+                      </span>
+                    )}
                   </div>
 
                   <button
                     type="button"
                     onClick={() => scanSystemPrinters(true)}
                     disabled={isScanningPrinters}
-                    className="px-2.5 py-1.5 rounded-xl bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold text-[11px] flex items-center gap-1 shadow-2xs transition cursor-pointer"
+                    className="px-2 py-1 rounded-lg bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold text-[10px] flex items-center gap-1 shadow-2xs transition cursor-pointer"
                   >
-                    <RefreshCw className={`w-3 h-3 ${isScanningPrinters ? 'animate-spin text-emerald-600' : 'text-emerald-700'}`} />
+                    <RefreshCw className={`w-2.5 h-2.5 ${isScanningPrinters ? 'animate-spin text-emerald-600' : 'text-emerald-700'}`} />
                     <span>{isScanningPrinters ? 'Scanning...' : 'Check Printers'}</span>
                   </button>
                 </div>
 
                 {detectedSystemPrinters.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 max-h-56 overflow-y-auto pr-1">
-                    {detectedSystemPrinters.map((sysP, idx) => {
-                      const isSelected = name.trim().toLowerCase() === sysP.name.trim().toLowerCase();
-                      return (
-                        <button
-                          key={`${sysP.name}-${idx}`}
-                          type="button"
-                          onClick={() => handleSelectDetectedPrinter(sysP)}
-                          className={`p-2.5 rounded-xl border text-left transition flex items-center justify-between gap-2 cursor-pointer ${
-                            isSelected
-                              ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
-                              : 'bg-white hover:bg-emerald-50/70 text-slate-800 border-slate-200'
-                          }`}
-                        >
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              {sysP.connectionType === 'LAN' ? (
-                                <Wifi className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-white' : 'text-blue-600'}`} />
-                              ) : sysP.isVirtual ? (
-                                <Printer className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-white' : 'text-slate-500'}`} />
-                              ) : (
-                                <Usb className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-white' : 'text-amber-600'}`} />
-                              )}
-                              <span className="font-extrabold text-xs truncate" title={sysP.name}>{sysP.name}</span>
-                            </div>
-                            <div className={`text-[10px] font-mono mt-0.5 truncate ${isSelected ? 'text-emerald-100' : 'text-slate-500'}`}>
-                              {sysP.connectionType === 'LAN'
-                                ? `LAN IP: ${sysP.ipAddress || '192.168.1.87'}:${sysP.port || 9100}`
-                                : `Port: ${sysP.portName || sysP.usbPort || 'USB001'}`}
-                              {sysP.deviceCategory === 'Unspecified (USB)' ? ' • USB Device' : ''}
-                            </div>
-                          </div>
+                  <div className="space-y-1">
+                    <select
+                      value={systemPrinterName}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (!val) {
+                          setSystemPrinterName('');
+                          return;
+                        }
+                        const selected = detectedSystemPrinters.find(p => p.name === val);
+                        if (selected) {
+                          handleSelectDetectedPrinter(selected);
+                        } else {
+                          setSystemPrinterName(val);
+                        }
+                      }}
+                      className="w-full px-2.5 py-1.5 bg-white border border-emerald-300 rounded-lg text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none shadow-2xs cursor-pointer"
+                    >
+                      <option value="">-- Select Detected Hardware Printer ({detectedSystemPrinters.length} Available) --</option>
+                      {detectedSystemPrinters.map((sysP, idx) => {
+                        const portOrIp = sysP.connectionType === 'LAN' 
+                          ? `LAN IP: ${sysP.ipAddress || '192.168.1.87'}:${sysP.port || 9100}`
+                          : `Port: ${sysP.portName || sysP.usbPort || 'USB001'}`;
+                        const typeTag = sysP.connectionType === 'LAN' ? '🌐 [LAN]' : sysP.isVirtual ? '📄 [Virtual]' : '🔌 [USB]';
+                        return (
+                          <option key={`${sysP.name}-${idx}`} value={sysP.name}>
+                            {typeTag} {sysP.name} ({portOrIp})
+                          </option>
+                        );
+                      })}
+                    </select>
 
-                          <span
-                            className={`px-2 py-0.5 rounded-md text-[10px] font-black shrink-0 ${
-                              isSelected
-                                ? 'bg-white text-emerald-800'
-                                : sysP.isConnected
-                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                  : 'bg-slate-100 text-slate-600'
-                            }`}
-                          >
-                            {isSelected ? '✓ Selected' : sysP.isConnected ? 'Select' : 'Available'}
-                          </span>
-                        </button>
-                      );
-                    })}
+                    {/* Compact 1-line linked device status */}
+                    {systemPrinterName ? (
+                      <div className="text-[10px] text-emerald-800 font-bold flex items-center justify-between px-1.5 py-0.5">
+                        <span className="flex items-center gap-1">
+                          <Check className="w-3 h-3 text-emerald-600" />
+                          <span>Linked Device: <strong className="text-slate-900">{systemPrinterName}</strong></span>
+                        </span>
+                        <span className="font-mono text-emerald-700">
+                          {connectionType === 'LAN' ? `IP: ${ipAddress}:${port}` : `Port: ${usbPort}`}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="text-[10px] text-amber-700 italic px-1">
+                        Select a detected printer above to auto-link physical hardware.
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <div className="p-2.5 rounded-xl bg-white/80 border border-dashed border-slate-300 text-[11px] text-slate-600 flex items-center justify-between">
-                    <span>No active hardware printer detected yet. Connect USB/LAN cable & run Printer Agent.</span>
+                  <div className="p-2 rounded-lg bg-white/80 border border-dashed border-slate-300 text-[10px] text-slate-600 flex items-center justify-between">
+                    <span>No active hardware printer detected. Connect cable & click Check Printers.</span>
                   </div>
                 )}
               </div>
@@ -1081,12 +1129,17 @@ export const PrintersConfigView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Category Routing Selector */}
+              {/* Category & Specific Dishes Routing Selector */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold text-slate-700">
-                    Menu Categories Routing (Optional)
-                  </label>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700">
+                      Menu Categories Routing
+                    </label>
+                    <p className="text-[10px] text-slate-500">
+                      Dishes in selected categories will route to this printer
+                    </p>
+                  </div>
                   <div className="flex gap-2">
                     <button
                       type="button"
@@ -1098,13 +1151,17 @@ export const PrintersConfigView: React.FC = () => {
                     <span className="text-slate-300">|</span>
                     <button
                       type="button"
-                      onClick={() => setSelectedCats([])}
+                      onClick={() => {
+                        setSelectedCats([]);
+                        setSelectedItemIds([]);
+                      }}
                       className="text-[11px] font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
                     >
                       Clear
                     </button>
                   </div>
                 </div>
+
                 <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-2 bg-slate-50 border border-slate-200 rounded-xl">
                   {data.menuCategories.map(cat => {
                     const isChecked = selectedCats.includes(cat);
@@ -1115,7 +1172,7 @@ export const PrintersConfigView: React.FC = () => {
                         onClick={() => toggleCat(cat)}
                         className={`px-2.5 py-1 rounded-lg border text-xs font-medium transition flex items-center gap-1 cursor-pointer ${
                           isChecked 
-                            ? 'bg-slate-900 border-slate-900 text-amber-400 font-bold' 
+                            ? 'bg-slate-900 border-slate-900 text-amber-400 font-bold shadow-2xs' 
                             : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
                         }`}
                       >
@@ -1125,6 +1182,86 @@ export const PrintersConfigView: React.FC = () => {
                     );
                   })}
                 </div>
+
+                {/* Specific Dishes Filter for Selected Categories */}
+                {selectedCats.length > 0 && (() => {
+                  const matchingItems = (data.menuItems || []).filter(item => selectedCats.includes(item.category));
+                  if (matchingItems.length === 0) return null;
+
+                  const checkedInMatchingCount = selectedItemIds.filter(id => matchingItems.some(m => m.id === id)).length;
+
+                  return (
+                    <div className="p-3 bg-amber-50/60 border border-amber-200 rounded-xl space-y-2 mt-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <ChefHat className="w-3.5 h-3.5 text-amber-600" />
+                          <span className="text-xs font-extrabold text-slate-900">
+                            Specific Dishes Selection
+                          </span>
+                          <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                            {checkedInMatchingCount === 0 
+                              ? `All ${matchingItems.length} Dishes Allowed`
+                              : `${checkedInMatchingCount} of ${matchingItems.length} Filtered`}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 text-[10px]">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedItemIds(matchingItems.map(m => m.id))}
+                            className="font-bold text-amber-700 hover:underline cursor-pointer"
+                          >
+                            Select All
+                          </button>
+                          <span className="text-amber-300">|</span>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedItemIds([])}
+                            className="font-bold text-slate-500 hover:underline cursor-pointer"
+                          >
+                            Allow All (No Filter)
+                          </button>
+                        </div>
+                      </div>
+
+                      <p className="text-[10.5px] text-slate-600 leading-tight">
+                        {checkedInMatchingCount === 0 
+                          ? '👉 Leave unchecked to print every dish in the selected categories, or tick specific dishes below to print ONLY those dishes on this printer.'
+                          : '✓ Only the checked dishes below will be printed on this printer.'}
+                      </p>
+
+                      <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1.5 bg-white border border-amber-200/90 rounded-lg">
+                        {matchingItems.map(item => {
+                          const isItemSelected = selectedItemIds.includes(item.id);
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedItemIds(prev =>
+                                  prev.includes(item.id)
+                                    ? prev.filter(id => id !== item.id)
+                                    : [...prev, item.id]
+                                );
+                              }}
+                              className={`px-2 py-1 rounded-md text-[11px] font-semibold border transition flex items-center gap-1 cursor-pointer ${
+                                isItemSelected
+                                  ? 'bg-amber-500 text-white border-amber-600 shadow-2xs'
+                                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-amber-50/70'
+                              }`}
+                            >
+                              <span>{item.name}</span>
+                              <span className={`text-[9px] px-1 py-0.2 rounded font-normal ${isItemSelected ? 'bg-amber-600 text-amber-100' : 'bg-slate-200 text-slate-600'}`}>
+                                {item.category}
+                              </span>
+                              {isItemSelected && <Check className="w-3 h-3 text-white" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Options: Default & Active */}

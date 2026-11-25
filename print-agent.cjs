@@ -441,7 +441,12 @@ function buildKotEscPosBuffer(req, slip, index, total, targetPrinter) {
   const cleanStation = (!slip.station || slip.station === 'SPLIT_ALL' || slip.station === 'ALL') ? 'MAIN KITCHEN' : slip.station;
   pushStr('STATION: ' + cleanStation.toUpperCase() + '\n');
   const invoiceVal = req.invoiceNo || 'KOT-0000';
-  pushStr('KOT NO: ' + invoiceVal + '\n');
+  if (req.isCancelKot || (invoiceVal && invoiceVal.startsWith('VOID:'))) {
+    pushStr('*** VOID / CANCELLED KOT ***\n');
+    pushStr('VOID KOT NO: ' + invoiceVal + '\n');
+  } else {
+    pushStr('KOT NO: ' + invoiceVal + '\n');
+  }
   if (slip.category) {
     pushStr('Category: ' + slip.category + '\n');
   }

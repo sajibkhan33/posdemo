@@ -128,7 +128,8 @@ export const PrintTemplatesConfigView: React.FC = () => {
     setName(t.name);
     setTemplateType(t.templateType);
     setPaperWidth(t.paperWidth);
-    setSelectedDepts(t.departments ? [...t.departments] : []);
+    const activeDepts = data.departments || [];
+    setSelectedDepts((t.departments || []).filter(d => activeDepts.includes(d)));
     setSelectedCats(t.categories ? [...t.categories] : []);
     setHeaderTitle(t.headerTitle || (t.templateType === 'KOT' ? '*** KITCHEN ORDER TICKET ***' : 'INVOICE / CASH MEMO'));
     setShowLogo(t.showLogo !== false);
@@ -162,11 +163,14 @@ export const PrintTemplatesConfigView: React.FC = () => {
       return;
     }
 
+    const activeDepts = data.departments || [];
+    const sanitizedDepts = selectedDepts.filter(d => activeDepts.includes(d));
+
     const payload: Omit<PrintTemplate, 'id'> = {
       name: name.trim(),
       templateType,
       paperWidth,
-      departments: selectedDepts,
+      departments: sanitizedDepts,
       categories: selectedCats,
       headerTitle: headerTitle.trim(),
       showLogo,
@@ -376,17 +380,22 @@ export const PrintTemplatesConfigView: React.FC = () => {
                 <div className="my-3 space-y-1">
                   <div className="text-[11px] font-bold text-slate-600">Assigned Kitchen / Counter Depts:</div>
                   <div className="flex flex-wrap gap-1">
-                    {(template.departments || []).length === 0 ? (
-                      <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] italic">
-                        All Departments (Global Fallback)
-                      </span>
-                    ) : (
-                      template.departments.map(d => (
+                    {(() => {
+                      const activeDepts = data.departments || [];
+                      const validAssigned = (template.departments || []).filter(d => activeDepts.includes(d));
+                      if (validAssigned.length === 0) {
+                        return (
+                          <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] italic">
+                            All Departments (Global Fallback)
+                          </span>
+                        );
+                      }
+                      return validAssigned.map(d => (
                         <span key={d} className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-200 text-[10px] font-bold">
                           {d}
                         </span>
-                      ))
-                    )}
+                      ));
+                    })()}
                   </div>
                 </div>
 

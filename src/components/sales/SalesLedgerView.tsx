@@ -28,9 +28,11 @@ import {
   ArrowDown,
   Edit3,
   Save,
-  CreditCard
+  CreditCard,
+  ChefHat
 } from 'lucide-react';
 import { SaleRecord, TableCartItem, DiscountType } from '../../types';
+import { dispatchHardwarePrint } from '../../utils/hardwarePrint';
 
 export const SalesLedgerView: React.FC = () => {
   const { 
@@ -76,7 +78,9 @@ export const SalesLedgerView: React.FC = () => {
 
   // Direct Bill Edit / Refund Modal state (Option 3 - 0% floor table conflict)
   const [editingSale, setEditingSale] = useState<SaleRecord | null>(null);
+  const [editOriginalItems, setEditOriginalItems] = useState<TableCartItem[]>([]);
   const [editItems, setEditItems] = useState<TableCartItem[]>([]);
+  const [editPaymentMethod, setEditPaymentMethod] = useState<string>('cash');
   const [editDiscountVal, setEditDiscountVal] = useState<number>(0);
   const [editDiscountType, setEditDiscountType] = useState<DiscountType>('taka');
   const [editRefundMethod, setEditRefundMethod] = useState<string>('cash');
@@ -274,15 +278,53 @@ export const SalesLedgerView: React.FC = () => {
     if (sale.items && sale.items.length > 0) {
       initialItems = JSON.parse(JSON.stringify(sale.items));
     } else {
-      initialItems = [{
-        id: sale.id,
-        cartItemId: `item-${sale.id}-0`,
-        name: sale.details || 'Billed Items',
-        price: sale.total,
-        qty: 1,
-        basePrice: sale.total
-      }];
+      const detailsStr = sale.details || '';
+      if (detailsStr.includes(':')) {
+        const itemsPart = detailsStr.split(':').slice(1).join(':').trim();
+        if (itemsPart) {
+          const rawItems = itemsPart.split(',').map((s: string) => s.trim()).filter(Boolean);
+          if (rawItems.length > 0) {
+            initialItems = rawItems.map((str: string, idx: number) => {
+              const qtyXMatch = str.match(/^(\d+)\s*[xX*]\s*(.+)$/);
+              const parenMatch = str.match(/^(.+?)\s*\(([0-9]+)\)$/);
+              let name = str;
+              let qty = 1;
+              if (qtyXMatch) {
+                qty = parseInt(qtyXMatch[1], 10);
+                name = qtyXMatch[2].trim();
+              } else if (parenMatch) {
+                name = parenMatch[1].trim();
+                qty = parseInt(parenMatch[2], 10);
+              }
+              const menuItem = (data.menuItems || []).find(m => m.name.toLowerCase() === name.toLowerCase());
+              const price = menuItem ? menuItem.price : Math.round(sale.total / rawItems.length);
+              return {
+                id: menuItem ? menuItem.id : (idx + 1),
+                cartItemId: `item-${sale.id}-${idx}`,
+                name: menuItem ? menuItem.name : name,
+                qty,
+                price,
+                basePrice: price,
+                department: menuItem?.department || 'Main Kitchen',
+                category: menuItem?.category || 'General'
+              };
+            });
+          }
+        }
+      }
+      if (initialItems.length === 0) {
+        initialItems = [{
+          id: sale.id,
+          cartItemId: `item-${sale.id}-0`,
+          name: sale.details || 'Billed Items',
+          price: sale.total,
+          qty: 1,
+          basePrice: sale.total,
+          department: 'Main Kitchen'
+        }];
+      }
     }
+    setEditOriginalItems(JSON.parse(JSON.stringify(initialItems)));
     setEditItems(initialItems);
     setEditDiscountVal(sale.discountVal || 0);
     setEditDiscountType(sale.discountType || 'taka');
@@ -290,18 +332,34 @@ export const SalesLedgerView: React.FC = () => {
     setEditCustomReason('');
     setSelectedAddMenuItemId('');
 
-    const firstMethod = activeFundMethods[0]?.id || 'cash';
-    if (sale.paymentBreakdown) {
-      const keys = Object.keys(sale.paymentBreakdown).filter(k => (sale.paymentBreakdown![k] || 0) > 0);
-      const matchedKey = keys.find(k => activeFundMethods.some(m => m.id === k || m.name === k));
-      setEditRefundMethod(matchedKey || keys[0] || firstMethod);
+    // Pre-select payment method from sale breakdown or type
+    const firstMethodId = activeFundMethods[0]?.id || 'cash';
+    let currentMethodId = firstMethodId;
+
+    if (sale.paymentBreakdown && Object.keys(sale.paymentBreakdown).length > 0) {
+      const entries = Object.entries(sale.paymentBreakdown).filter(([_, amt]) => Number(amt) > 0);
+      if (entries.length > 0) {
+        entries.sort((a, b) => b[1] - a[1]);
+        const primaryKey = entries[0][0];
+        const matched = activeFundMethods.find(m => 
+          m.id === primaryKey || 
+          m.name.toLowerCase() === primaryKey.toLowerCase()
+        );
+        if (matched) currentMethodId = matched.id;
+      }
     } else if (sale.card && !sale.cash) {
-      setEditRefundMethod('card');
+      const cardMethod = activeFundMethods.find(m => m.type === 'CARD' || m.type === 'BANK' || m.type === 'BANGLA_QR');
+      if (cardMethod) currentMethodId = cardMethod.id;
     } else if (sale.bkash && !sale.cash) {
-      setEditRefundMethod('bkash');
+      const bkashMethod = activeFundMethods.find(m => m.type === 'MFS');
+      if (bkashMethod) currentMethodId = bkashMethod.id;
     } else {
-      setEditRefundMethod('cash');
+      const cashMethod = activeFundMethods.find(m => m.type === 'CASH');
+      if (cashMethod) currentMethodId = cashMethod.id;
     }
+
+    setEditPaymentMethod(currentMethodId);
+    setEditRefundMethod(currentMethodId);
   };
 
   const handleIncreaseQty = (idx: number) => {
@@ -349,7 +407,7 @@ export const SalesLedgerView: React.FC = () => {
     setSelectedAddMenuItemId('');
   };
 
-  const handleConfirmSaveEdit = () => {
+  const handleConfirmSaveEdit = async () => {
     if (!editingSale) return;
     if (editItems.length === 0) {
       alert("Bill cannot be empty! If you wish to cancel or void the entire bill, please use the Void / Cancel button.");
@@ -368,14 +426,221 @@ export const SalesLedgerView: React.FC = () => {
     const adjType = diff < 0 ? 'REFUND' : diff > 0 ? 'COLLECT' : 'EXACT';
     const adjAmount = Math.abs(diff);
 
-    modifySettledSale(editingSale.id, editItems, {
+    // 1. Detect item changes between editOriginalItems and editItems
+    const increasedOrAddedItems: TableCartItem[] = [];
+    const decreasedOrRemovedItems: TableCartItem[] = [];
+
+    // Check additions and increases
+    editItems.forEach(curItem => {
+      const orig = editOriginalItems.find(o => 
+        (o.cartItemId && curItem.cartItemId && o.cartItemId === curItem.cartItemId) ||
+        (o.id && curItem.id && o.id === curItem.id) ||
+        (o.name.toLowerCase().trim() === curItem.name.toLowerCase().trim())
+      );
+      const oldQty = orig ? orig.qty : 0;
+      if (curItem.qty > oldQty) {
+        increasedOrAddedItems.push({
+          ...curItem,
+          qty: curItem.qty - oldQty
+        });
+      }
+    });
+
+    // Check decreases and removals
+    editOriginalItems.forEach(origItem => {
+      const cur = editItems.find(c => 
+        (c.cartItemId && origItem.cartItemId && c.cartItemId === origItem.cartItemId) ||
+        (c.id && origItem.id && c.id === origItem.id) ||
+        (c.name.toLowerCase().trim() === origItem.name.toLowerCase().trim())
+      );
+      const newQty = cur ? cur.qty : 0;
+      if (origItem.qty > newQty) {
+        decreasedOrRemovedItems.push({
+          ...origItem,
+          qty: origItem.qty - newQty
+        });
+      }
+    });
+
+    const baseKot = extractKotSerial(editingSale);
+    const currentKotCount = editingSale.kotCount || 1;
+    const nextKotCount = increasedOrAddedItems.length > 0 ? currentKotCount + 1 : currentKotCount;
+
+    let addonKotPayload: any = null;
+    let voidKotPayload: any = null;
+    let addonKotReceiptObj: any = null;
+    let voidKotReceiptObj: any = null;
+
+    const printers = data.printers || [];
+    const getPrinterForDept = (dept: string) => {
+      const p = printers.find(pr => pr.departments?.includes(dept) && pr.isActive);
+      return p || printers.find(pr => pr.isDefault && pr.isActive) || printers[0] || null;
+    };
+    const allTemplates = (data.printTemplates && data.printTemplates.length > 0) ? data.printTemplates : [];
+    const defaultPrimaryKotTemplate = allTemplates.find(t => t.isActive && t.isDefault && (t.templateType === 'KOT' || t.templateType === 'BOTH'))
+      || allTemplates.find(t => t.isActive && (t.templateType === 'KOT' || t.templateType === 'BOTH'))
+      || allTemplates[0];
+
+    const tableName = editingSale.table || 'Table';
+    let tableZone = 'Floor 1';
+    const zoneMatch = (editingSale.details || '').match(/Zone:\s*([^\]]+)/i);
+    if (zoneMatch) tableZone = zoneMatch[1].trim();
+    const waiterName = (editingSale.waiterName && editingSale.waiterName !== 'Staff' && editingSale.waiterName !== 'N/A') ? editingSale.waiterName : 'Staff';
+    const customerName = editingSale.dueCustomer || editingSale.dueCollectedFrom || 'Walk-in Customer';
+    const dateTimeStr = new Date().toLocaleString('en-US');
+    const modifierName = currentUser?.name ? `${currentUser.name} (${currentUser.role || 'Staff'})` : 'Admin';
+
+    const isKotPrinterActive = (data.printers || []).some(
+      p => p.isActive && (p.type === 'KOT' || p.type === 'ALL')
+    );
+
+    // A. If items were increased or added: Print Addon KOT (#2, #3, etc.)
+    if (increasedOrAddedItems.length > 0 && isKotPrinterActive) {
+      const addonKotNo = `${baseKot} #${nextKotCount}`;
+
+      const deptGroups = new Map<string, typeof increasedOrAddedItems>();
+      increasedOrAddedItems.forEach(i => {
+        const dept = i.department || 'Main Kitchen';
+        if (!deptGroups.has(dept)) deptGroups.set(dept, []);
+        deptGroups.get(dept)!.push(i);
+      });
+
+      const slips = Array.from(deptGroups.entries()).map(([dept, dItems]) => ({
+        station: dept,
+        targetPrinterName: getPrinterForDept(dept)?.systemPrinterName || getPrinterForDept(dept)?.name,
+        items: dItems.map(i => ({
+          name: i.name,
+          qty: i.qty,
+          price: i.price,
+          notes: i.notes
+        }))
+      }));
+
+      addonKotPayload = {
+        tableName,
+        tableZone,
+        waiter: waiterName,
+        customer: customerName,
+        invoiceNo: addonKotNo,
+        orderRef: baseKot,
+        dateTime: dateTimeStr,
+        paperWidth: defaultPrimaryKotTemplate?.paperWidth || '80mm',
+        isAddonKot: true,
+        slips
+      };
+
+      try {
+        await dispatchHardwarePrint('/api/hardware/print-kot', addonKotPayload);
+      } catch (err) {
+        console.warn('Hardware Addon KOT dispatch error:', err);
+      }
+    }
+
+    // B. If items were decreased or removed: Print Void KOT receipt
+    if (decreasedOrRemovedItems.length > 0 && isKotPrinterActive) {
+      const activeKotTicket = currentKotCount > 1 ? `${baseKot} #${currentKotCount}` : baseKot;
+      const voidKotNo = `VOID: ${activeKotTicket}`;
+
+      const deptGroups = new Map<string, typeof decreasedOrRemovedItems>();
+      decreasedOrRemovedItems.forEach(i => {
+        const dept = i.department || 'Main Kitchen';
+        if (!deptGroups.has(dept)) deptGroups.set(dept, []);
+        deptGroups.get(dept)!.push(i);
+      });
+
+      const slips = Array.from(deptGroups.entries()).map(([dept, dItems]) => ({
+        station: dept,
+        targetPrinterName: getPrinterForDept(dept)?.systemPrinterName || getPrinterForDept(dept)?.name,
+        items: dItems.map(c => ({
+          name: `*** CANCELLED *** ${c.name}`,
+          qty: c.qty,
+          price: c.price,
+          notes: `REF KOT: ${activeKotTicket} | REASON: ${finalReason} | AUTH: ${modifierName}`
+        }))
+      }));
+
+      voidKotPayload = {
+        tableName,
+        tableZone,
+        waiter: waiterName,
+        customer: customerName,
+        invoiceNo: voidKotNo,
+        orderRef: baseKot,
+        dateTime: dateTimeStr,
+        paperWidth: defaultPrimaryKotTemplate?.paperWidth || '80mm',
+        isCancelKot: true,
+        slips
+      };
+
+      try {
+        await dispatchHardwarePrint('/api/hardware/print-kot', voidKotPayload);
+      } catch (err) {
+        console.warn('Hardware Void KOT dispatch error:', err);
+      }
+    }
+
+    // 2. Modify and Save Settled Sale
+    const updatedSale = modifySettledSale(editingSale.id, editItems, {
       discountVal: editDiscountVal,
       discountType: editDiscountType,
       adjustmentType: adjType,
       adjustmentAmount: adjAmount,
       adjustmentMethod: editRefundMethod,
-      reason: finalReason
+      primaryPaymentMethod: editPaymentMethod,
+      reason: finalReason,
+      kotCount: nextKotCount
     });
+
+    // 3. Print Updated Bill / Cash Memo only if hardware action control is active
+    if (updatedSale) {
+      const isSettlePrintActive = (data.printers || []).some(
+        p => p.isActive && (p.type === 'BILL' || p.type === 'ALL') && p.printOnSettle !== false
+      );
+
+      if (isSettlePrintActive) {
+        const billPayload = {
+          restaurantName: data.restaurantProfile?.name || 'BD HOSTT POS',
+          restaurantAddress: data.restaurantProfile?.address || 'Chattogram, Bangladesh',
+          restaurantHotline: data.restaurantProfile?.phone || '+880 1756-007600',
+          restaurantBin: data.restaurantProfile?.binOrVat || '0029381-01',
+          invoiceNo: updatedSale.invoiceNo,
+          dateTime: updatedSale.date || new Date().toISOString().split('T')[0],
+          tableName,
+          tableZone,
+          channelOrAgent: updatedSale.channelOrAgent,
+          waiter: waiterName,
+          orderTakenBy: getOrderTakerDisplay(updatedSale.orderCreatedBy || updatedSale.sellerName || updatedSale.waiterName, updatedSale.orderCreatedRole || updatedSale.sellerRole),
+          settleBillRole: formatRoleTitle(updatedSale.cashierRole || 'Cashier'),
+          customer: customerName,
+          items: editItems.map(i => ({
+            name: i.name,
+            qty: i.qty,
+            price: i.price
+          })),
+          subtotal: computedSub,
+          discountDeduction: computedDisc,
+          discountType: editDiscountType,
+          discountVal: editDiscountVal,
+          netTotal: computedTot,
+          paymentBreakdown: {
+            cash: updatedSale.cash,
+            card: updatedSale.card,
+            bkash: updatedSale.bkash,
+            nagad: updatedSale.nagad,
+            byMethod: updatedSale.paymentBreakdown
+          },
+          changeReturn: updatedSale.change || 0,
+          isSettled: true,
+          paperWidth: '80mm'
+        };
+
+        try {
+          await dispatchHardwarePrint('/api/hardware/print-bill', billPayload);
+        } catch (err) {
+          console.warn('Hardware bill print error:', err);
+        }
+      }
+    }
 
     setIsSavingEdit(false);
     setEditingSale(null);
@@ -966,19 +1231,28 @@ export const SalesLedgerView: React.FC = () => {
                 sortedSales.map(sale => {
                   let paymentItems: { label: string; amt: number; color: string }[] = [];
                   if (sale.paymentBreakdown && Object.keys(sale.paymentBreakdown).length > 0) {
-                    paymentItems = Object.entries(sale.paymentBreakdown)
+                    const labelMap = new Map<string, { label: string; amt: number; color: string }>();
+                    Object.entries(sale.paymentBreakdown)
                       .filter(([_, amt]) => Number(amt) > 0)
-                      .map(([mKey, amt]) => {
+                      .forEach(([mKey, amt]) => {
                         const mObj = (data.paymentMethods || []).find(m => m.id === mKey || m.name.toLowerCase() === mKey.toLowerCase());
                         const label = mObj?.name || mKey;
+                        const normKey = label.toLowerCase().trim();
                         let color = 'text-slate-800';
                         if (mObj?.type === 'CASH') color = 'text-emerald-700';
                         else if (mObj?.type === 'CARD') color = 'text-blue-700';
+                        else if (mObj?.type === 'BANGLA_QR' || normKey.includes('bangla') || normKey.includes('qr')) color = 'text-purple-700';
                         else if (mObj?.type === 'MFS') color = label.toLowerCase().includes('nagad') ? 'text-orange-700' : 'text-pink-700';
                         else if (mObj?.type === 'BANK') color = 'text-indigo-700';
                         else if (mObj?.type === 'CREDIT') color = 'text-amber-700';
-                        return { label, amt: Number(amt), color };
+
+                        if (labelMap.has(normKey)) {
+                          labelMap.get(normKey)!.amt = Math.max(labelMap.get(normKey)!.amt, Number(amt));
+                        } else {
+                          labelMap.set(normKey, { label, amt: Number(amt), color });
+                        }
                       });
+                    paymentItems = Array.from(labelMap.values());
                   }
                   if (paymentItems.length === 0) {
                     paymentItems = [
@@ -1519,6 +1793,38 @@ export const SalesLedgerView: React.FC = () => {
                     <span className="text-[11px] text-slate-400">Click + / - to change qty or trash to remove</span>
                   </div>
 
+                  {(() => {
+                    const increasedCount = editItems.reduce((acc, cur) => {
+                      const orig = editOriginalItems.find(o => (o.cartItemId && cur.cartItemId && o.cartItemId === cur.cartItemId) || (o.id && cur.id && o.id === cur.id) || (o.name.toLowerCase().trim() === cur.name.toLowerCase().trim()));
+                      const oldQ = orig ? orig.qty : 0;
+                      return acc + (cur.qty > oldQ ? (cur.qty - oldQ) : 0);
+                    }, 0);
+                    const decreasedCount = editOriginalItems.reduce((acc, orig) => {
+                      const cur = editItems.find(c => (c.cartItemId && orig.cartItemId && c.cartItemId === orig.cartItemId) || (c.id && orig.id && c.id === orig.id) || (c.name.toLowerCase().trim() === orig.name.toLowerCase().trim()));
+                      const newQ = cur ? cur.qty : 0;
+                      return acc + (orig.qty > newQ ? (orig.qty - newQ) : 0);
+                    }, 0);
+                    const baseK = extractKotSerial(editingSale);
+                    const curCount = editingSale.kotCount || 1;
+
+                    return (
+                      <div className="space-y-1 mb-2">
+                        {increasedCount > 0 && (
+                          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold">
+                            <ChefHat className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span>KOT Ticket ({baseK} #{curCount + 1}) will print for +{increasedCount} added items</span>
+                          </div>
+                        )}
+                        {decreasedCount > 0 && (
+                          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-bold">
+                            <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                            <span>Void Slip (VOID: {baseK}{curCount > 1 ? ` #${curCount}` : ''}) will print for -{decreasedCount} voided items</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   <div className="space-y-1.5 max-h-56 overflow-y-auto bg-slate-50 p-2.5 rounded-2xl border border-slate-200">
                     {editItems.map((item, idx) => (
                       <div key={item.cartItemId || idx} className="flex items-center justify-between p-2 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
@@ -1620,6 +1926,32 @@ export const SalesLedgerView: React.FC = () => {
                       <option value="percentage">Percentage (%)</option>
                     </select>
                   </div>
+                </div>
+
+                {/* 3.1 Payment Channel / Method Selection */}
+                <div className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[11px] font-bold text-slate-700">
+                      Payment Channel / Method
+                    </label>
+                    <span className="text-[10px] text-slate-500">
+                      Change channel (e.g. switch Cash ➔ Bangla QR / Card)
+                    </span>
+                  </div>
+                  <select
+                    value={editPaymentMethod}
+                    onChange={e => {
+                      setEditPaymentMethod(e.target.value);
+                      setEditRefundMethod(e.target.value);
+                    }}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none cursor-pointer"
+                  >
+                    {activeFundMethods.map(m => (
+                      <option key={m.id} value={m.id}>
+                        {m.name} ({m.type.replace('_', ' ')})
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* 4. Live Financial Reconciliation Box */}

@@ -18,14 +18,24 @@ import {
   Scissors,
   Send,
   RefreshCw,
-  Download,
-  RotateCcw
+  Download
 } from 'lucide-react';
 import { PrinterConfig, PrintTemplate, ThermalPaperWidth } from '../../types';
 import { dispatchHardwarePrint } from '../../utils/hardwarePrint';
 
 export const ThermalBillModal: React.FC = () => {
-  const { printableReceipt, closePrintReceipt, data, voidSale } = useRestaurant();
+  const { printableReceipt: contextReceipt, closePrintReceipt, data, voidSale } = useRestaurant();
+  const [activeSlipTab, setActiveSlipTab] = useState<'BILL' | 'ADDON_KOT' | 'VOID_KOT'>('BILL');
+
+  const printableReceipt = useMemo(() => {
+    if (activeSlipTab === 'ADDON_KOT' && contextReceipt?.addonKotReceipt) {
+      return contextReceipt.addonKotReceipt;
+    }
+    if (activeSlipTab === 'VOID_KOT' && contextReceipt?.voidKotReceipt) {
+      return contextReceipt.voidKotReceipt;
+    }
+    return contextReceipt;
+  }, [activeSlipTab, contextReceipt]);
 
   const isCancelKot = printableReceipt?.receiptType === 'CANCEL_KOT';
   const isVoidMemo = printableReceipt?.receiptType === 'VOID_MEMO';
@@ -295,7 +305,7 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
       const slipsToPrint = (selectedDeptFilter === 'ALL')
         ? [{
             station: 'Master KOT (All Active Stations)',
-            targetPrinterName: activePrinter?.name || 'Kot Printer',
+            targetPrinterName: activePrinter?.systemPrinterName || activePrinter?.name || 'Kot Printer',
             showPrices,
             showWaiter: activeTemplate?.showWaiter !== false,
             paperWidth: activeTemplate?.paperWidth || '80mm',
@@ -318,7 +328,7 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
                   const deptTemplate = templates.find(t => t.isActive && (t.templateType === 'KOT' || t.templateType === 'BOTH') && t.departments?.includes(dept)) || activeTemplate;
                   return {
                     station: dept,
-                    targetPrinterName: deptPrinter?.name || 'Kot Printer',
+                    targetPrinterName: deptPrinter?.systemPrinterName || deptPrinter?.name || 'Kot Printer',
                     showPrices: Boolean(deptTemplate?.showPricesOnKot || showPrices || printableReceipt?.showPrices),
                     showWaiter: Boolean(deptTemplate?.showWaiter ?? activeTemplate?.showWaiter ?? true),
                     paperWidth: deptTemplate?.paperWidth || activeTemplate?.paperWidth || '80mm',
@@ -336,7 +346,7 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
           : (isDepartmentKotActive(selectedDeptFilter, templates)
               ? [{
                   station: selectedDeptFilter,
-                  targetPrinterName: activePrinter?.name || 'Kot Printer',
+                  targetPrinterName: activePrinter?.systemPrinterName || activePrinter?.name || 'Kot Printer',
                   showPrices,
                   showWaiter: activeTemplate?.showWaiter !== false,
                   paperWidth: activeTemplate?.paperWidth || '80mm',
@@ -1013,8 +1023,53 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
         {/* Modal Controls Header (Hidden in Print) */}
         <div className="p-4 border-b border-slate-200 no-print space-y-3 bg-slate-50 rounded-t-2xl">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {isCancelKot ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              {(contextReceipt?.addonKotReceipt || contextReceipt?.voidKotReceipt) ? (
+                <div className="flex items-center gap-1 bg-slate-200/80 p-0.5 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setActiveSlipTab('BILL')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition cursor-pointer ${
+                      activeSlipTab === 'BILL'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-700 hover:bg-slate-300/60'
+                    }`}
+                  >
+                    <ReceiptText className="w-3.5 h-3.5" />
+                    <span>Bill / Memo</span>
+                  </button>
+
+                  {contextReceipt.addonKotReceipt && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveSlipTab('ADDON_KOT')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition cursor-pointer ${
+                        activeSlipTab === 'ADDON_KOT'
+                          ? 'bg-rose-600 text-white shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-300/60'
+                      }`}
+                    >
+                      <ChefHat className="w-3.5 h-3.5" />
+                      <span>KOT (#{contextReceipt.addonKotReceipt.kotSequence || contextReceipt.addonKotReceipt.kotCount || 2})</span>
+                    </button>
+                  )}
+
+                  {contextReceipt.voidKotReceipt && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveSlipTab('VOID_KOT')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition cursor-pointer ${
+                        activeSlipTab === 'VOID_KOT'
+                          ? 'bg-rose-700 text-white shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-300/60'
+                      }`}
+                    >
+                      <ChefHat className="w-3.5 h-3.5 animate-bounce" />
+                      <span>VOID KOT</span>
+                    </button>
+                  )}
+                </div>
+              ) : isCancelKot ? (
                 <div className="px-3 py-1.5 rounded-xl bg-rose-600 text-white font-black flex items-center gap-1.5 shadow-sm text-xs">
                   <ChefHat className="w-4 h-4 animate-bounce" />
                   <span>VOID KOT (CANCELLED)</span>
@@ -1541,32 +1596,6 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
           >
             Close
           </button>
-
-          {printableReceipt?.receiptType === 'PAID_MEMO' && (
-            <button
-              type="button"
-              id="btn-undo-paid-memo"
-              onClick={() => {
-                const matchingSale = data.sales.find(s => s.invoiceNo === printableReceipt.invoiceNo) || data.sales[data.sales.length - 1];
-                if (matchingSale) {
-                  const confirmed = window.confirm(`Undo settlement for ${printableReceipt.tableName || 'this table'} (${printableReceipt.invoiceNo}) and return order back to POS Cart?`);
-                  if (confirmed) {
-                    voidSale(matchingSale.id, {
-                      reason: 'Accidental settlement - Returned to table for edit/item cancellation',
-                      refundPayment: true,
-                      refundMethod: 'CASH',
-                      restoreToTable: true
-                    });
-                  }
-                }
-              }}
-              className="px-3.5 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-black text-xs sm:text-sm shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95"
-              title="Undo settlement, refund payment, and re-open order in POS Cart"
-            >
-              <RotateCcw className="w-4 h-4" />
-              <span>Undo Settle & Edit</span>
-            </button>
-          )}
 
           {!hasMatchingActivePrinter ? (
             <div
