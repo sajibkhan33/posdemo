@@ -27,11 +27,13 @@ import {
   FileText,
   Printer,
   Download,
-  Calendar
+  Calendar,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 interface SubReportProps {
-  reportType: 'daily-stock' | 'inwards' | 'outwards' | 'transactional';
+  reportType: 'daily-stock' | 'daily-opening' | 'daily-closing' | 'inwards' | 'outwards' | 'transactional';
 }
 
 interface StockValuationRow {
@@ -91,7 +93,19 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
     return reportType === 'transactional' ? 'continuous' : 'consolidated';
   });
   const [outwardTypeFilter, setOutwardTypeFilter] = useState<'ALL' | 'BOM' | 'MANUAL' | 'WASTAGE'>('ALL');
+  const isDailyStockReport = reportType === 'daily-stock' || reportType === 'daily-opening' || reportType === 'daily-closing';
   const [dailyViewMode, setDailyViewMode] = useState<'date-log' | 'item-sheet'>('date-log');
+  const [stockFocusMode, setStockFocusMode] = useState<'combined' | 'opening-only' | 'closing-only'>(() => {
+    if (reportType === 'daily-opening') return 'opening-only';
+    if (reportType === 'daily-closing') return 'closing-only';
+    return 'combined';
+  });
+
+  React.useEffect(() => {
+    if (reportType === 'daily-opening') setStockFocusMode('opening-only');
+    else if (reportType === 'daily-closing') setStockFocusMode('closing-only');
+    else if (reportType === 'daily-stock') setStockFocusMode('combined');
+  }, [reportType]);
   const [selectedDayLog, setSelectedDayLog] = useState<{
     date: string;
     formattedDate: string;
@@ -934,6 +948,9 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
     const totalPeriodPurchasesVal = filteredDays.reduce((sum, d) => sum + d.purchasesVal, 0);
     const totalPeriodUsedVal = filteredDays.reduce((sum, d) => sum + d.totalUsedVal, 0);
     const latestClosingVal = filteredDays[0]?.closingValuation || (allDayLogs[allDayLogs.length - 1]?.closingValuation || 0);
+    const latestOpeningVal = filteredDays[0]?.openingValuation || (allDayLogs[allDayLogs.length - 1]?.openingValuation || 0);
+    const avgDailyClosingVal = filteredDays.length > 0 ? Math.round(filteredDays.reduce((sum, d) => sum + d.closingValuation, 0) / filteredDays.length) : 0;
+    const avgDailyOpeningVal = filteredDays.length > 0 ? Math.round(filteredDays.reduce((sum, d) => sum + d.openingValuation, 0) / filteredDays.length) : 0;
     const avgDailyUsedVal = filteredDays.length > 0 ? Math.round(totalPeriodUsedVal / filteredDays.length) : 0;
 
     return {
@@ -941,6 +958,9 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
       totalPeriodPurchasesVal,
       totalPeriodUsedVal,
       latestClosingVal,
+      latestOpeningVal,
+      avgDailyClosingVal,
+      avgDailyOpeningVal,
       avgDailyUsedVal
     };
   }, [
@@ -978,27 +998,37 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
 
   // --- CSV EXPORT HANDLERS ---
   const handleExportDailyStockLog = () => {
-    const headers = [
-      'Date',
-      'Day',
-      'Opening Stock Value (৳)',
-      'Inward Purchases (+) (৳)',
-      'POS Recipe BOM Used (-) (৳)',
-      'Total Stock Consumed (-) (৳)',
-      'Closing Stock Value (৳)',
-      'Net Stock Change (৳)'
-    ];
-    const rows = dailyDateLogData.days.map(d => [
-      d.date,
-      d.dayName,
-      d.openingValuation,
-      d.purchasesVal,
-      d.recipeCostVal,
-      d.totalUsedVal,
-      d.closingValuation,
-      d.netChangeVal
-    ]);
-    exportCsvHelper('daily_stock_movement_log', headers, rows);
+    let headers: string[] = [];
+    let rows: any[][] = [];
+
+    if (stockFocusMode === 'opening-only') {
+      headers = ['Date', 'Day', 'Opening Stock Value (৳)', 'Monitored Items'];
+      rows = dailyDateLogData.days.map(d => [
+        d.date,
+        d.dayName,
+        d.openingValuation,
+        data.masterItems.length
+      ]);
+      exportCsvHelper('daily_opening_stock_report', headers, rows);
+    } else if (stockFocusMode === 'closing-only') {
+      headers = ['Date', 'Day', 'Closing Stock Value (৳)', 'Monitored Items'];
+      rows = dailyDateLogData.days.map(d => [
+        d.date,
+        d.dayName,
+        d.closingValuation,
+        data.masterItems.length
+      ]);
+      exportCsvHelper('daily_closing_stock_report', headers, rows);
+    } else {
+      headers = ['Date', 'Day', 'Opening Stock Value (৳)', 'Closing Stock Value (৳)'];
+      rows = dailyDateLogData.days.map(d => [
+        d.date,
+        d.dayName,
+        d.openingValuation,
+        d.closingValuation
+      ]);
+      exportCsvHelper('daily_opening_closing_stock_report', headers, rows);
+    }
   };
 
   const handleExportInwards = () => {
@@ -1474,150 +1504,236 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
       )}
 
       {/* 3. EXACT STOCK VALUATION LEDGER (DAILY OPENING & CLOSING REPORT / TRANSACTIONAL LEDGER) */}
-      {(reportType === 'daily-stock' || reportType === 'transactional') && (
+      {(isDailyStockReport || reportType === 'transactional') && (
         <>
           {/* Top Mode Toggle & Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-white border border-slate-200 shadow-xs">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 rounded-2xl bg-white border border-slate-200 shadow-xs">
             <div className="flex items-center gap-3">
               <div className="p-2.5 rounded-xl bg-teal-50 border border-teal-200 text-teal-700">
-                <Boxes className="w-5 h-5" />
+                {stockFocusMode === 'opening-only' ? (
+                  <Sun className="w-5 h-5 text-amber-500" />
+                ) : stockFocusMode === 'closing-only' ? (
+                  <Moon className="w-5 h-5 text-indigo-600" />
+                ) : (
+                  <Boxes className="w-5 h-5 text-teal-600" />
+                )}
               </div>
               <div>
                 <h3 className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
                   <span>
-                    {reportType === 'daily-stock' ? 'Daily Opening & Closing Stock Report' : 'Stock Valuation & Transactional Ledger'}
+                    {!isDailyStockReport
+                      ? 'Stock Valuation & Transactional Ledger'
+                      : stockFocusMode === 'opening-only'
+                      ? 'Daily Opening Stock Report (দৈনিক প্রারম্ভিক স্টক রিপোর্ট)'
+                      : stockFocusMode === 'closing-only'
+                      ? 'Daily Closing Stock Report (দৈনিক সমাপনী স্টক রিপোর্ট)'
+                      : 'Daily Opening & Closing Stock Report'}
                   </span>
                   <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold border border-emerald-300">
-                    Live POS Recipe BOM
+                    {stockFocusMode === 'opening-only' ? 'Morning Asset' : stockFocusMode === 'closing-only' ? 'Store Closing Asset' : 'Opening & Closing'}
                   </span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  {reportType === 'daily-stock'
-                    ? 'Complete date-wise opening stock, inward procurement, recipe usage, wastage & closing balance valuation'
-                    : 'Complete opening stock, inward procurement, recipe BOM outward & net valuation ledger'}
+                  {!isDailyStockReport
+                    ? 'Complete opening stock, inward procurement, recipe BOM outward & net valuation ledger'
+                    : stockFocusMode === 'opening-only'
+                    ? 'Day-by-day morning opening stock balances and initial physical store asset valuation'
+                    : stockFocusMode === 'closing-only'
+                    ? 'Day-by-day end-of-day store closing balances and physical store inventory asset valuation'
+                    : 'Complete date-wise opening stock and end-of-day closing balance valuation'}
                 </p>
               </div>
             </div>
 
-            {/* View Mode Toggle */}
-            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 self-start sm:self-auto">
-              {reportType === 'daily-stock' ? (
-                <>
+            {/* View Mode & Stock Focus Toggles */}
+            <div className="flex flex-wrap items-center gap-2">
+              {isDailyStockReport && (
+                <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
                   <button
                     type="button"
-                    onClick={() => setDailyViewMode('date-log')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                      dailyViewMode === 'date-log'
+                    onClick={() => setStockFocusMode('combined')}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                      stockFocusMode === 'combined'
                         ? 'bg-white text-slate-900 shadow-xs'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
+                    title="দুটোই একসাথে দেখুন"
                   >
-                    <Calendar className="w-3.5 h-3.5 text-teal-600" />
-                    <span>Date-wise Daily Log (তারিখ ভিত্তিক)</span>
+                    <Boxes className="w-3.5 h-3.5 text-teal-600" />
+                    <span>Combined (উভয়)</span>
                   </button>
+
                   <button
                     type="button"
-                    onClick={() => setDailyViewMode('item-sheet')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                      dailyViewMode === 'item-sheet'
-                        ? 'bg-white text-slate-900 shadow-xs'
+                    onClick={() => setStockFocusMode('opening-only')}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                      stockFocusMode === 'opening-only'
+                        ? 'bg-amber-500 text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
+                    title="শুধু ওপেনিং স্টক দেখুন"
                   >
-                    <Boxes className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Item-wise Stock Sheet (আইটেম ভিত্তিক)</span>
+                    <Sun className="w-3.5 h-3.5" />
+                    <span>Opening Only (ওপেনিং)</span>
                   </button>
-                </>
-              ) : (
-                <>
+
                   <button
                     type="button"
-                    onClick={() => setLedgerViewMode('consolidated')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                      ledgerViewMode === 'consolidated'
-                        ? 'bg-white text-slate-900 shadow-xs'
+                    onClick={() => setStockFocusMode('closing-only')}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                      stockFocusMode === 'closing-only'
+                        ? 'bg-slate-900 text-amber-400 shadow-xs'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
+                    title="শুধু ক্লোজিং স্টক দেখুন"
                   >
-                    <Layers className="w-3.5 h-3.5 text-teal-600" />
-                    <span>Consolidated Valuation Ledger</span>
+                    <Moon className="w-3.5 h-3.5" />
+                    <span>Closing Only (ক্লোজিং)</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setLedgerViewMode('continuous')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                      ledgerViewMode === 'continuous'
-                        ? 'bg-white text-slate-900 shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    <Activity className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Continuous Movement Ledger</span>
-                  </button>
-                </>
+                </div>
               )}
+
+              {/* View Mode Toggle */}
+              <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+                {isDailyStockReport ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setDailyViewMode('date-log')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                        dailyViewMode === 'date-log'
+                          ? 'bg-white text-slate-900 shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Calendar className="w-3.5 h-3.5 text-teal-600" />
+                      <span>Date-wise Daily Log (তারিখ ভিত্তিক)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDailyViewMode('item-sheet')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                        dailyViewMode === 'item-sheet'
+                          ? 'bg-white text-slate-900 shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Boxes className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Item-wise Stock Sheet (আইটেম ভিত্তিক)</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setLedgerViewMode('consolidated')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                        ledgerViewMode === 'consolidated'
+                          ? 'bg-white text-slate-900 shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Layers className="w-3.5 h-3.5 text-teal-600" />
+                      <span>Consolidated Valuation Ledger</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLedgerViewMode('continuous')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                        ledgerViewMode === 'continuous'
+                          ? 'bg-white text-slate-900 shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Activity className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Continuous Movement Ledger</span>
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* VIEW A: DATE-WISE DAILY LOG (When in daily-stock report and date-log mode) */}
-          {reportType === 'daily-stock' && dailyViewMode === 'date-log' ? (
+          {/* VIEW A: DATE-WISE DAILY LOG (When in daily stock report and date-log mode) */}
+          {isDailyStockReport && dailyViewMode === 'date-log' ? (
             <div className="space-y-4">
-              {/* 4 Summary Cards for Daily Date Log */}
+              {/* 4 Summary Cards for Daily Stock Log (Focus strictly on Opening & Closing Asset) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="p-4 rounded-2xl bg-slate-900 text-white shadow-xs flex flex-col justify-between">
+                {/* Card 1: Today's / Latest Opening Stock */}
+                <div className={`p-4 rounded-2xl border shadow-xs flex flex-col justify-between ${
+                  stockFocusMode === 'opening-only'
+                    ? 'bg-amber-500 text-white border-amber-600'
+                    : 'bg-white border-slate-200 text-slate-900'
+                }`}>
+                  <div>
+                    <div className={`flex items-center justify-between text-xs font-bold uppercase tracking-wide ${
+                      stockFocusMode === 'opening-only' ? 'text-amber-100' : 'text-slate-500'
+                    }`}>
+                      <span>Morning Opening Stock</span>
+                      <Sun className="w-4 h-4 text-amber-400" />
+                    </div>
+                    <div className={`text-2xl font-black mt-2 font-mono ${
+                      stockFocusMode === 'opening-only' ? 'text-white' : 'text-teal-700'
+                    }`}>
+                      ৳ {Math.round(dailyDateLogData.latestOpeningVal).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className={`text-[11px] mt-2 pt-2 border-t flex items-center justify-between ${
+                    stockFocusMode === 'opening-only' ? 'border-amber-400 text-amber-100' : 'border-slate-100 text-slate-500'
+                  }`}>
+                    <span>Day Start Asset Valuation</span>
+                    <span className="font-bold font-mono">{data.masterItems.length} Items</span>
+                  </div>
+                </div>
+
+                {/* Card 2: Today's / Latest Closing Stock */}
+                <div className={`p-4 rounded-2xl shadow-xs flex flex-col justify-between ${
+                  stockFocusMode === 'closing-only'
+                    ? 'bg-slate-950 text-white border border-slate-800'
+                    : stockFocusMode === 'opening-only'
+                    ? 'bg-white border border-slate-200 text-slate-900'
+                    : 'bg-slate-900 text-white'
+                }`}>
                   <div>
                     <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wide">
                       <span>Latest Closing Stock</span>
-                      <Boxes className="w-4 h-4 text-amber-400" />
+                      <Moon className="w-4 h-4 text-amber-400" />
                     </div>
                     <div className="text-2xl font-black text-amber-400 mt-2 font-mono">
                       ৳ {Math.round(dailyDateLogData.latestClosingVal).toLocaleString()}
                     </div>
                   </div>
                   <div className="text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-800 flex items-center justify-between">
-                    <span>Total Current Store Assets</span>
+                    <span>Store Closing Asset Valuation</span>
                     <span className="font-bold text-amber-300 font-mono">{data.masterItems.length} Items</span>
                   </div>
                 </div>
 
+                {/* Card 3: Total Monitored Master Raw Materials */}
                 <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between">
                   <div>
                     <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wide">
-                      <span>Inward Purchases (+)</span>
-                      <ArrowDownRight className="w-4 h-4 text-blue-600" />
+                      <span>Monitored Raw Materials</span>
+                      <Boxes className="w-4 h-4 text-indigo-600" />
                     </div>
-                    <div className="text-2xl font-black text-blue-700 mt-2 font-mono">
-                      ৳ {Math.round(dailyDateLogData.totalPeriodPurchasesVal).toLocaleString()}
+                    <div className="text-2xl font-black text-indigo-700 mt-2 font-mono">
+                      {data.masterItems.length} <span className="text-xs font-normal text-slate-500">Master SKUs</span>
                     </div>
                   </div>
                   <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100">
-                    <span>Purchases in selected period</span>
+                    <span>Active items tracked in inventory</span>
                   </div>
                 </div>
 
+                {/* Card 4: Average Daily Stock Valuation */}
                 <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between">
                   <div>
                     <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wide">
-                      <span>POS Recipe Consumed (-)</span>
-                      <ArrowUpRight className="w-4 h-4 text-rose-600" />
-                    </div>
-                    <div className="text-2xl font-black text-rose-700 mt-2 font-mono">
-                      ৳ {Math.round(dailyDateLogData.totalPeriodUsedVal).toLocaleString()}
-                    </div>
-                  </div>
-                  <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100">
-                    <span>Food cost consumed via sales</span>
-                  </div>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wide">
-                      <span>Average Daily Usage</span>
+                      <span>Avg Daily Stock Value</span>
                       <Calendar className="w-4 h-4 text-teal-600" />
                     </div>
                     <div className="text-2xl font-black text-teal-700 mt-2 font-mono">
-                      ৳ {Math.round(dailyDateLogData.avgDailyUsedVal).toLocaleString()} <span className="text-xs font-normal text-slate-500">/ Day</span>
+                      ৳ {Math.round(stockFocusMode === 'opening-only' ? dailyDateLogData.avgDailyOpeningVal : dailyDateLogData.avgDailyClosingVal).toLocaleString()} <span className="text-xs font-normal text-slate-500">/ Day</span>
                     </div>
                   </div>
                   <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
@@ -1654,10 +1770,20 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
                   <div>
                     <h3 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-teal-600" />
-                      <span>Date-by-Date Stock Movement & Valuation History</span>
+                      <span>
+                        {stockFocusMode === 'opening-only'
+                          ? 'Date-wise Daily Opening Stock History'
+                          : stockFocusMode === 'closing-only'
+                          ? 'Date-wise Daily Closing Stock History'
+                          : 'Date-by-Date Opening & Closing Stock History'}
+                      </span>
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Chronological daily record of opening stock, purchases, sales BOM usage, and closing valuation
+                      {stockFocusMode === 'opening-only'
+                        ? 'Chronological morning opening stock valuation records per day'
+                        : stockFocusMode === 'closing-only'
+                        ? 'Chronological end-of-day store closing valuation records per day'
+                        : 'Chronological daily record of morning opening stock and end-of-day closing valuation'}
                     </p>
                   </div>
                   <div className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-lg">
@@ -1670,19 +1796,22 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
                     <thead>
                       <tr className="bg-slate-900 text-slate-200 text-[11px]">
                         <th className="py-2.5 px-3 font-bold">Date & Day (তারিখ)</th>
-                        <th className="py-2.5 px-3 font-bold text-right text-teal-300">Opening Stock (৳)</th>
-                        <th className="py-2.5 px-3 font-bold text-right text-blue-300">Purchases Inward (+)</th>
-                        <th className="py-2.5 px-3 font-bold text-right text-amber-300">POS Recipe Cost (-)</th>
-                        <th className="py-2.5 px-3 font-bold text-right text-rose-300">Total Consumed (-)</th>
-                        <th className="py-2.5 px-3 font-bold text-right text-white">Closing Stock (৳)</th>
-                        <th className="py-2.5 px-3 font-bold text-right">Net Change (৳)</th>
+                        {stockFocusMode !== 'closing-only' && (
+                          <th className="py-2.5 px-3 font-bold text-right text-teal-300">Opening Stock (৳)</th>
+                        )}
+                        {stockFocusMode !== 'opening-only' && (
+                          <th className="py-2.5 px-3 font-bold text-right text-amber-300">Closing Stock (৳)</th>
+                        )}
+                        {(stockFocusMode === 'opening-only' || stockFocusMode === 'closing-only') && (
+                          <th className="py-2.5 px-3 font-bold text-center text-slate-300">Monitored Items</th>
+                        )}
                         <th className="py-2.5 px-3 font-bold text-center">Day Item Sheet</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-mono">
                       {dailyDateLogData.days.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="py-12 text-center text-slate-400 font-medium font-sans">
+                          <td colSpan={4} className="py-12 text-center text-slate-400 font-medium font-sans">
                             No daily stock records found for the selected period.
                           </td>
                         </tr>
@@ -1705,31 +1834,23 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
                               </div>
                             </td>
 
-                            <td className="py-3 px-3 text-right font-bold text-slate-800">
-                              ৳ {d.openingValuation.toLocaleString()}
-                            </td>
+                            {stockFocusMode !== 'closing-only' && (
+                              <td className="py-3 px-3 text-right font-bold text-slate-800">
+                                ৳ {d.openingValuation.toLocaleString()}
+                              </td>
+                            )}
 
-                            <td className="py-3 px-3 text-right font-bold text-blue-600">
-                              {d.purchasesVal > 0 ? `+৳ ${d.purchasesVal.toLocaleString()}` : '৳ 0'}
-                            </td>
+                            {stockFocusMode !== 'opening-only' && (
+                              <td className="py-3 px-3 text-right font-black text-slate-900 text-sm">
+                                ৳ {d.closingValuation.toLocaleString()}
+                              </td>
+                            )}
 
-                            <td className="py-3 px-3 text-right font-bold text-amber-600">
-                              {d.recipeCostVal > 0 ? `-৳ ${d.recipeCostVal.toLocaleString()}` : '৳ 0'}
-                            </td>
-
-                            <td className="py-3 px-3 text-right font-black text-rose-600">
-                              {d.totalUsedVal > 0 ? `-৳ ${d.totalUsedVal.toLocaleString()}` : '৳ 0'}
-                            </td>
-
-                            <td className="py-3 px-3 text-right font-black text-slate-900 text-sm">
-                              ৳ {d.closingValuation.toLocaleString()}
-                            </td>
-
-                            <td className="py-3 px-3 text-right font-bold">
-                              <span className={d.netChangeVal >= 0 ? 'text-emerald-700' : 'text-rose-700'}>
-                                {d.netChangeVal > 0 ? `+৳ ${d.netChangeVal.toLocaleString()}` : d.netChangeVal < 0 ? `-৳ ${Math.abs(d.netChangeVal).toLocaleString()}` : '৳ 0'}
-                              </span>
-                            </td>
+                            {(stockFocusMode === 'opening-only' || stockFocusMode === 'closing-only') && (
+                              <td className="py-3 px-3 text-center text-slate-600 font-sans font-bold">
+                                {data.masterItems.length} SKUs
+                              </td>
+                            )}
 
                             <td className="py-3 px-3 text-center">
                               <button
@@ -1738,7 +1859,13 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
                                 className="px-2.5 py-1 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-bold transition flex items-center gap-1 mx-auto cursor-pointer font-sans"
                               >
                                 <Eye className="w-3.5 h-3.5 text-teal-600" />
-                                <span>View Items</span>
+                                <span>
+                                  {stockFocusMode === 'opening-only'
+                                    ? 'View Opening Items'
+                                    : stockFocusMode === 'closing-only'
+                                    ? 'View Closing Items'
+                                    : 'View Items'}
+                                </span>
                               </button>
                             </td>
                           </tr>
@@ -1748,27 +1875,28 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
                     {dailyDateLogData.days.length > 0 && (
                       <tfoot>
                         <tr className="bg-slate-900 text-white font-mono text-xs">
-                          <td className="py-3 px-3 font-bold font-sans">Period Totals</td>
-                          <td className="py-3 px-3 text-right font-bold text-teal-300">
-                            ৳ {(dailyDateLogData.days[dailyDateLogData.days.length - 1]?.openingValuation || 0).toLocaleString()}
+                          <td className="py-3 px-3 font-bold font-sans">
+                            {stockFocusMode === 'opening-only'
+                              ? 'Period Opening Valuation'
+                              : stockFocusMode === 'closing-only'
+                              ? 'Latest Closing Valuation'
+                              : 'Period Summary'}
                           </td>
-                          <td className="py-3 px-3 text-right font-bold text-blue-300">
-                            +৳ {dailyDateLogData.totalPeriodPurchasesVal.toLocaleString()}
-                          </td>
-                          <td className="py-3 px-3 text-right font-bold text-amber-300">
-                            -৳ {dailyDateLogData.totalPeriodUsedVal.toLocaleString()}
-                          </td>
-                          <td className="py-3 px-3 text-right font-bold text-rose-300">
-                            -৳ {dailyDateLogData.totalPeriodUsedVal.toLocaleString()}
-                          </td>
-                          <td className="py-3 px-3 text-right font-bold text-amber-400 text-sm">
-                            ৳ {(dailyDateLogData.days[0]?.closingValuation || 0).toLocaleString()}
-                          </td>
-                          <td className="py-3 px-3 text-right font-bold">
-                            {dailyDateLogData.totalPeriodPurchasesVal - dailyDateLogData.totalPeriodUsedVal >= 0
-                              ? `+৳ ${(dailyDateLogData.totalPeriodPurchasesVal - dailyDateLogData.totalPeriodUsedVal).toLocaleString()}`
-                              : `-৳ ${Math.abs(dailyDateLogData.totalPeriodPurchasesVal - dailyDateLogData.totalPeriodUsedVal).toLocaleString()}`}
-                          </td>
+                          {stockFocusMode !== 'closing-only' && (
+                            <td className="py-3 px-3 text-right font-bold text-teal-300">
+                              ৳ {(dailyDateLogData.days[dailyDateLogData.days.length - 1]?.openingValuation || 0).toLocaleString()}
+                            </td>
+                          )}
+                          {stockFocusMode !== 'opening-only' && (
+                            <td className="py-3 px-3 text-right font-bold text-amber-400 text-sm">
+                              ৳ {(dailyDateLogData.days[0]?.closingValuation || 0).toLocaleString()}
+                            </td>
+                          )}
+                          {(stockFocusMode === 'opening-only' || stockFocusMode === 'closing-only') && (
+                            <td className="py-3 px-3 text-center font-bold text-slate-300 font-sans">
+                              {data.masterItems.length} Active Items
+                            </td>
+                          )}
                           <td></td>
                         </tr>
                       </tfoot>
@@ -2355,11 +2483,23 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                   <div className="flex items-center gap-3">
                     <div className="p-2.5 bg-teal-50 border border-teal-200 rounded-xl text-teal-700">
-                      <Calendar className="w-5 h-5" />
+                      {stockFocusMode === 'opening-only' ? (
+                        <Sun className="w-5 h-5 text-amber-500" />
+                      ) : stockFocusMode === 'closing-only' ? (
+                        <Moon className="w-5 h-5 text-indigo-600" />
+                      ) : (
+                        <Calendar className="w-5 h-5" />
+                      )}
                     </div>
                     <div>
                       <h3 className="font-extrabold text-slate-900 text-base sm:text-lg flex items-center gap-2">
-                        <span>Daily Stock Sheet: {selectedDayLog.formattedDate} ({selectedDayLog.dayName})</span>
+                        <span>
+                          {stockFocusMode === 'opening-only'
+                            ? `Day Opening Stock Sheet: ${selectedDayLog.formattedDate} (${selectedDayLog.dayName})`
+                            : stockFocusMode === 'closing-only'
+                            ? `Day Closing Stock Sheet: ${selectedDayLog.formattedDate} (${selectedDayLog.dayName})`
+                            : `Daily Stock Sheet: ${selectedDayLog.formattedDate} (${selectedDayLog.dayName})`}
+                        </span>
                         {selectedDayLog.date === new Date().toISOString().split('T')[0] && (
                           <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-black text-[10px] border border-emerald-300">
                             Today
@@ -2367,7 +2507,11 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
                         )}
                       </h3>
                       <p className="text-xs text-slate-500">
-                        Itemized opening stock, inward purchases, recipe usages & closing balances for this day
+                        {stockFocusMode === 'opening-only'
+                          ? 'Itemized morning opening quantities and asset valuation for this day'
+                          : stockFocusMode === 'closing-only'
+                          ? 'Itemized end-of-day closing quantities and store asset valuation for this day'
+                          : 'Itemized opening stock and closing balances for this day'}
                       </p>
                     </div>
                   </div>
@@ -2381,22 +2525,22 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
                 </div>
 
                 {/* Day Summary KPI Bar */}
-                <div className="my-3 p-3 bg-slate-50 border border-slate-200 rounded-xl grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
+                <div className="my-3 p-3 bg-slate-50 border border-slate-200 rounded-xl grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs font-mono">
+                  {stockFocusMode !== 'closing-only' && (
+                    <div className="p-2 bg-white rounded-lg border border-slate-200">
+                      <div className="text-[10px] text-slate-500 font-sans font-bold">Opening Valuation</div>
+                      <div className="font-black text-slate-800 text-sm mt-0.5">৳ {selectedDayLog.openingValuation.toLocaleString()}</div>
+                    </div>
+                  )}
+                  {stockFocusMode !== 'opening-only' && (
+                    <div className="p-2 bg-white rounded-lg border border-slate-200">
+                      <div className="text-[10px] text-slate-500 font-sans font-bold">Closing Valuation</div>
+                      <div className="font-black text-slate-900 text-sm mt-0.5">৳ {selectedDayLog.closingValuation.toLocaleString()}</div>
+                    </div>
+                  )}
                   <div className="p-2 bg-white rounded-lg border border-slate-200">
-                    <div className="text-[10px] text-slate-500 font-sans font-bold">Opening Valuation</div>
-                    <div className="font-black text-slate-800 text-sm mt-0.5">৳ {selectedDayLog.openingValuation.toLocaleString()}</div>
-                  </div>
-                  <div className="p-2 bg-white rounded-lg border border-slate-200">
-                    <div className="text-[10px] text-slate-500 font-sans font-bold">Inward Purchases (+)</div>
-                    <div className="font-black text-blue-700 text-sm mt-0.5">+৳ {selectedDayLog.purchasesVal.toLocaleString()}</div>
-                  </div>
-                  <div className="p-2 bg-white rounded-lg border border-slate-200">
-                    <div className="text-[10px] text-slate-500 font-sans font-bold">Total Consumed (-)</div>
-                    <div className="font-black text-rose-700 text-sm mt-0.5">-৳ {selectedDayLog.totalUsedVal.toLocaleString()}</div>
-                  </div>
-                  <div className="p-2 bg-white rounded-lg border border-slate-200">
-                    <div className="text-[10px] text-slate-500 font-sans font-bold">Closing Valuation</div>
-                    <div className="font-black text-slate-900 text-sm mt-0.5">৳ {selectedDayLog.closingValuation.toLocaleString()}</div>
+                    <div className="text-[10px] text-slate-500 font-sans font-bold">Active Master Items</div>
+                    <div className="font-black text-indigo-700 text-sm mt-0.5">{selectedDayLog.itemBreakdown.length} Items</div>
                   </div>
                 </div>
 
@@ -2419,12 +2563,19 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
                       <tr>
                         <th className="py-2 px-3 font-bold">Raw Material</th>
                         <th className="py-2 px-2 font-bold text-center">UOM</th>
-                        <th className="py-2 px-2.5 font-bold text-right text-teal-300">Opening Qty</th>
-                        <th className="py-2 px-2.5 font-bold text-right text-blue-300">Inward (+)</th>
-                        <th className="py-2 px-2.5 font-bold text-right text-rose-300">Used (-)</th>
-                        <th className="py-2 px-2.5 font-bold text-right text-white">Closing Qty</th>
+                        {stockFocusMode !== 'closing-only' && (
+                          <th className="py-2 px-2.5 font-bold text-right text-teal-300">Opening Qty</th>
+                        )}
+                        {stockFocusMode !== 'closing-only' && (
+                          <th className="py-2 px-3 font-bold text-right text-teal-400">Opening Value (৳)</th>
+                        )}
+                        {stockFocusMode !== 'opening-only' && (
+                          <th className="py-2 px-2.5 font-bold text-right text-white">Closing Qty</th>
+                        )}
+                        {stockFocusMode !== 'opening-only' && (
+                          <th className="py-2 px-3 font-bold text-right text-amber-400">Closing Value (৳)</th>
+                        )}
                         <th className="py-2 px-2.5 font-bold text-right">Avg Rate (৳)</th>
-                        <th className="py-2 px-3 font-bold text-right text-amber-400">Closing Value (৳)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-mono">
@@ -2437,12 +2588,19 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
                               <span className="text-[10px] text-slate-400 font-normal ml-1.5 font-sans">({item.category})</span>
                             </td>
                             <td className="py-2 px-2 text-center text-slate-600 font-sans">{item.uom}</td>
-                            <td className="py-2 px-2.5 text-right text-slate-700">{item.openQty.toFixed(2)}</td>
-                            <td className="py-2 px-2.5 text-right text-blue-600 font-bold">{item.inQty > 0 ? `+${item.inQty.toFixed(2)}` : '0.00'}</td>
-                            <td className="py-2 px-2.5 text-right text-rose-600 font-bold">{item.usedQty > 0 ? `-${item.usedQty.toFixed(2)}` : '0.00'}</td>
-                            <td className="py-2 px-2.5 text-right font-black text-slate-900">{item.closeQty.toFixed(2)}</td>
+                            {stockFocusMode !== 'closing-only' && (
+                              <td className="py-2 px-2.5 text-right text-slate-700">{item.openQty.toFixed(2)}</td>
+                            )}
+                            {stockFocusMode !== 'closing-only' && (
+                              <td className="py-2 px-3 text-right font-bold text-teal-800">৳{Math.round(item.openVal).toLocaleString()}</td>
+                            )}
+                            {stockFocusMode !== 'opening-only' && (
+                              <td className="py-2 px-2.5 text-right font-black text-slate-900">{item.closeQty.toFixed(2)}</td>
+                            )}
+                            {stockFocusMode !== 'opening-only' && (
+                              <td className="py-2 px-3 text-right font-bold text-slate-900">৳{Math.round(item.closeVal).toLocaleString()}</td>
+                            )}
                             <td className="py-2 px-2.5 text-right text-slate-600">৳{item.rate}</td>
-                            <td className="py-2 px-3 text-right font-bold text-slate-900">৳{item.closeVal.toLocaleString()}</td>
                           </tr>
                         ))}
                     </tbody>

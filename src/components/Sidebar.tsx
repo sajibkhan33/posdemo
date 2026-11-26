@@ -145,7 +145,7 @@ export const Sidebar: React.FC<{ isOpen?: boolean; onCloseMobile?: () => void }>
     if (activeTab === 'reports' && activeSubNav) {
       if (['pos-sessions', 'commission-report', 'user-sales', 'item-sales', 'category-sales', 'department-sales'].includes(activeSubNav)) {
         setOpenReportSuites(prev => ({ ...prev, pos: true }));
-      } else if (['daily-stock-report', 'inventory-inwards', 'inventory-outward', 'inventory-transactional'].includes(activeSubNav)) {
+      } else if (['daily-stock-report', 'daily-opening-stock', 'daily-closing-stock', 'inventory-inwards', 'inventory-outward', 'inventory-transactional'].includes(activeSubNav)) {
         setOpenReportSuites(prev => ({ ...prev, inventory: true }));
       } else if (['supplier-total-po', 'supplier-grn', 'supplier-returns', 'all-purchases', 'vendor-statement'].includes(activeSubNav)) {
         setOpenReportSuites(prev => ({ ...prev, procurement: true }));
@@ -292,8 +292,24 @@ export const Sidebar: React.FC<{ isOpen?: boolean; onCloseMobile?: () => void }>
           tabId: 'reports',
           subNav: 'daily-stock-report',
           label: 'Daily Opening & Closing Report',
-          subLabel: 'Opening, usages & closing sheet',
+          subLabel: 'Opening & closing balance',
+          icon: Boxes
+        },
+        {
+          id: 'rep-daily-opening-direct',
+          tabId: 'reports',
+          subNav: 'daily-opening-stock',
+          label: 'Daily Opening Stock Report',
+          subLabel: 'Day start stock & valuation',
           icon: Calendar
+        },
+        {
+          id: 'rep-daily-closing-direct',
+          tabId: 'reports',
+          subNav: 'daily-closing-stock',
+          label: 'Daily Closing Stock Report',
+          subLabel: 'Day end closing balance',
+          icon: CheckCircle2
         },
         {
           id: 'inv-inwards-rep',
@@ -566,14 +582,34 @@ export const Sidebar: React.FC<{ isOpen?: boolean; onCloseMobile?: () => void }>
           suiteTitle: 'POS & Sales'
         },
 
-        // Suite 2: Stock & Inventory (4)
+        // Suite 2: Stock & Inventory (6)
         {
           id: 'rep-daily-stock',
           tabId: 'reports',
           subNav: 'daily-stock-report',
           label: 'Daily Opening & Closing Stock',
-          subLabel: 'Opening, usages & closing balance',
+          subLabel: 'Opening & closing balance',
           icon: Boxes,
+          suiteId: 'inventory',
+          suiteTitle: 'Stock & Inventory'
+        },
+        {
+          id: 'rep-daily-opening',
+          tabId: 'reports',
+          subNav: 'daily-opening-stock',
+          label: 'Daily Opening Stock Report',
+          subLabel: 'Day start stock & valuation',
+          icon: Calendar,
+          suiteId: 'inventory',
+          suiteTitle: 'Stock & Inventory'
+        },
+        {
+          id: 'rep-daily-closing',
+          tabId: 'reports',
+          subNav: 'daily-closing-stock',
+          label: 'Daily Closing Stock Report',
+          subLabel: 'Day end closing balance',
+          icon: CheckCircle2,
           suiteId: 'inventory',
           suiteTitle: 'Stock & Inventory'
         },

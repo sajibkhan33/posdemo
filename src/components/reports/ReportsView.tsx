@@ -54,8 +54,10 @@ export type MasterReportId =
   | 'item-sales'
   | 'category-sales'
   | 'department-sales'
-  // Inventory (1-4)
+  // Inventory (1-6)
   | 'daily-stock-report'
+  | 'daily-opening-stock'
+  | 'daily-closing-stock'
   | 'inventory-inwards'
   | 'inventory-outward'
   | 'inventory-transactional'
@@ -145,12 +147,28 @@ export const ALL_REPORTS_REGISTRY: ReportMeta[] = [
     num: 1,
     title: 'Daily Opening & Closing Stock Report',
     category: 'inventory',
-    description: 'Track daily opening stock, inward procurement, POS recipe usage, closing balance & stock valuation',
+    description: 'Track daily opening stock and end-of-day closing balance valuation side-by-side',
     icon: Boxes
   },
   {
-    id: 'inventory-inwards',
+    id: 'daily-opening-stock',
     num: 2,
+    title: 'Daily Opening Stock Report',
+    category: 'inventory',
+    description: 'Daily morning opening stock balances, item-wise opening register & asset valuation',
+    icon: Calendar
+  },
+  {
+    id: 'daily-closing-stock',
+    num: 3,
+    title: 'Daily Closing Stock Report',
+    category: 'inventory',
+    description: 'End-of-day store closing balances, closing asset valuation & monitored inventory',
+    icon: CheckCircle2
+  },
+  {
+    id: 'inventory-inwards',
+    num: 4,
     title: 'Inventory Inwards Report',
     category: 'inventory',
     description: 'Raw material procurement receipts, bill vouchers, inward quantities and unit values',
@@ -158,7 +176,7 @@ export const ALL_REPORTS_REGISTRY: ReportMeta[] = [
   },
   {
     id: 'inventory-outward',
-    num: 3,
+    num: 5,
     title: 'Inventory Outward Report',
     category: 'inventory',
     description: 'Recipe BOM consumption from POS sales & manual kitchen spoilage deductions',
@@ -166,7 +184,7 @@ export const ALL_REPORTS_REGISTRY: ReportMeta[] = [
   },
   {
     id: 'inventory-transactional',
-    num: 4,
+    num: 6,
     title: 'Stock Movement Ledger (Bin Card)',
     category: 'inventory',
     description: 'Continuous item-wise stock card with running quantities, unit rates and valuation',
@@ -397,7 +415,7 @@ export const ReportsView: React.FC = () => {
                 Reports & Business Intelligence
               </h1>
               <span className="bg-teal-100 text-teal-800 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                23 Reports
+                {ALL_REPORTS_REGISTRY.length} Reports
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
@@ -558,6 +576,16 @@ export const ReportsView: React.FC = () => {
             {/* 1. Daily Opening & Closing Stock Report */}
             {activeReportId === 'daily-stock-report' && (
               <InventoryReports reportType="daily-stock" />
+            )}
+
+            {/* 1a. Daily Opening Stock Report */}
+            {activeReportId === 'daily-opening-stock' && (
+              <InventoryReports reportType="daily-opening" />
+            )}
+
+            {/* 1b. Daily Closing Stock Report */}
+            {activeReportId === 'daily-closing-stock' && (
+              <InventoryReports reportType="daily-closing" />
             )}
 
             {/* 2. Inventory Inwards */}
