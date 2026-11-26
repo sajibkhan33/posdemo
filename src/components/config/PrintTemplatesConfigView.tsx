@@ -78,6 +78,7 @@ export const PrintTemplatesConfigView: React.FC = () => {
   const [showDateTime, setShowDateTime] = useState(true);
   const [showPricesOnKot, setShowPricesOnKot] = useState(true);
   const [showTotalPriceOnKot, setShowTotalPriceOnKot] = useState(false);
+  const [combineAllStationsOnKot, setCombineAllStationsOnKot] = useState(false);
   const [showNotes, setShowNotes] = useState(true);
   const [fontSize, setFontSize] = useState<'sm' | 'base' | 'lg'>('base');
   const [footerMessage, setFooterMessage] = useState('⚡ Fast Kitchen Dispatch Required');
@@ -109,6 +110,7 @@ export const PrintTemplatesConfigView: React.FC = () => {
     setShowDateTime(base ? base.showDateTime !== false : true);
     setShowPricesOnKot(base ? Boolean(base.showPricesOnKot) : true);
     setShowTotalPriceOnKot(base ? Boolean(base.showTotalPriceOnKot) : false);
+    setCombineAllStationsOnKot(base ? Boolean(base.combineAllStationsOnKot) : false);
     setShowNotes(base ? base.showNotes !== false : true);
     setFontSize(base?.fontSize || 'base');
     const currentRestName = profile?.name || 'Restaurant POS';
@@ -143,6 +145,7 @@ export const PrintTemplatesConfigView: React.FC = () => {
     setShowDateTime(t.showDateTime !== false);
     setShowPricesOnKot(Boolean(t.showPricesOnKot));
     setShowTotalPriceOnKot(Boolean(t.showTotalPriceOnKot));
+    setCombineAllStationsOnKot(Boolean(t.combineAllStationsOnKot));
     setShowNotes(t.showNotes !== false);
     setFontSize(t.fontSize || 'base');
     setFooterMessage(t.footerMessage || '');
@@ -184,6 +187,7 @@ export const PrintTemplatesConfigView: React.FC = () => {
       showDateTime,
       showPricesOnKot: Boolean(showPricesOnKot),
       showTotalPriceOnKot: Boolean(showTotalPriceOnKot),
+      combineAllStationsOnKot: Boolean(combineAllStationsOnKot),
       showNotes,
       fontSize,
       footerMessage: footerMessage.trim(),
@@ -435,6 +439,12 @@ export const PrintTemplatesConfigView: React.FC = () => {
                     <span>Font Size:</span>
                     <span className="font-bold text-slate-800 uppercase">{template.fontSize || 'base'}</span>
                   </div>
+                  {template.combineAllStationsOnKot && (
+                    <div className="flex justify-between items-center text-teal-800 bg-teal-50 px-2 py-0.5 rounded text-[10px] font-bold border border-teal-200">
+                      <span>Ticket Mode:</span>
+                      <span>Single Combined Slip</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -794,6 +804,24 @@ export const PrintTemplatesConfigView: React.FC = () => {
                     </label>
                   </div>
                 </div>
+
+                {/* Single Consolidated Ticket Toggle for KOT */}
+                {(templateType === 'KOT' || templateType === 'BOTH') && (
+                  <div className="p-3 bg-linear-to-r from-emerald-50/70 via-teal-50/40 to-slate-50 border border-emerald-200/80 rounded-xl space-y-1 shadow-2xs">
+                    <label className="flex items-start gap-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={combineAllStationsOnKot}
+                        onChange={e => setCombineAllStationsOnKot(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-slate-800">Combine all kitchen departments into 1 single ticket</span>
+                        <p className="text-[11px] text-slate-500 leading-tight mt-0.5">এক টিকেটে সব খাবার প্রিন্ট (কাগজ কাটা ছাড়া সব কিচেনের খাবার একটিমাত্র KOT স্লিপে প্রিন্ট হবে)</p>
+                      </div>
+                    </label>
+                  </div>
+                )}
 
                 {/* Financials & Settlement Toggles (for Bill) */}
                 <div className="space-y-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">

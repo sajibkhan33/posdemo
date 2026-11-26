@@ -58,7 +58,8 @@ foreach ($sc in $printerScripts) {
 
 # Zip payload
 if (Test-Path $tempPayloadZip) { Remove-Item $tempPayloadZip -Force }
-Compress-Archive -Path "$pkgDir\*" -DestinationPath $tempPayloadZip -Force
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[System.IO.Compression.ZipFile]::CreateFromDirectory($pkgDir, $tempPayloadZip, [System.IO.Compression.CompressionLevel]::Optimal, $false)
 Remove-Item $pkgDir -Recurse -Force
 
 if (-not (Test-Path $downloadsDir)) {

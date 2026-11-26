@@ -180,6 +180,9 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
   useEffect(() => {
     if (defaultMatchedTemplate) {
       setSelectedTemplateId(defaultMatchedTemplate.id);
+      if (isKot && defaultMatchedTemplate.combineAllStationsOnKot) {
+        setSelectedDeptFilter('ALL');
+      }
     }
   }, [defaultMatchedTemplate?.id]);
 

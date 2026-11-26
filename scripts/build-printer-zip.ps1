@@ -4,7 +4,7 @@ $rootDir = (Get-Item $PSScriptRoot).Parent.FullName
 $pkgDir = Join-Path $rootDir "pkg-build-tmp"
 $downloadsDir = Join-Path $rootDir "public\downloads"
 
-if (Test-Path $pkgDir) { Remove-Item $pkgDir -Recurse -Force }
+if (Test-Path $pkgDir) { if (Test-Path $pkgDir) { Remove-Item $pkgDir -Recurse -Force } }
 New-Item -ItemType Directory -Path $pkgDir -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $pkgDir "scripts") -Force | Out-Null
 
@@ -47,7 +47,9 @@ if (-not (Test-Path $downloadsDir)) {
 $zipPath = Join-Path $downloadsDir "POSDEMO-Printer-Setup.zip"
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 
-Compress-Archive -Path "$pkgDir\*" -DestinationPath $zipPath -Force
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[System.IO.Compression.ZipFile]::CreateFromDirectory($pkgDir, $zipPath, [System.IO.Compression.CompressionLevel]::Optimal, $false)
+if (Test-Path $pkgDir) { Remove-Item $pkgDir -Recurse -Force }
 
 # Also sync to dist/downloads if dist exists
 $distDownloads = Join-Path $rootDir "dist\downloads"
@@ -58,7 +60,7 @@ if (Test-Path (Join-Path $rootDir "dist")) {
     Copy-Item $zipPath (Join-Path $distDownloads "POSDEMO-Printer-Setup.zip") -Force
 }
 
-Remove-Item $pkgDir -Recurse -Force
+if (Test-Path $pkgDir) { Remove-Item $pkgDir -Recurse -Force }
 
 Write-Host "Created Zip at: $zipPath"
 Get-Item $zipPath | Select-Object Name, Length

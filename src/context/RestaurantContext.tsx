@@ -4158,6 +4158,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       id,
       showPricesOnKot: Boolean(tpl.showPricesOnKot),
       showTotalPriceOnKot: Boolean(tpl.showTotalPriceOnKot),
+      combineAllStationsOnKot: Boolean(tpl.combineAllStationsOnKot),
       isActive: tpl.isActive !== undefined ? tpl.isActive : true
     };
     lastLocalEditTimeRef.current = Date.now();
@@ -5216,11 +5217,15 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }>();
 
       for (const r of routedItems) {
-        const key = `${r.printerName || 'default'}_${r.station}_${r.template.id}`;
+        const isCombined = Boolean(r.template?.combineAllStationsOnKot || defaultPrimaryKotTemplate?.combineAllStationsOnKot);
+        const key = isCombined
+          ? `${r.printerName || 'default'}_combined`
+          : `${r.printerName || 'default'}_${r.station}_${r.template.id}`;
+
         if (!stationMap.has(key)) {
           stationMap.set(key, {
-            station: r.station,
-            template: r.template,
+            station: isCombined ? (defaultPrimaryKotTemplate?.headerTitle || 'MASTER KOT') : r.station,
+            template: isCombined ? (defaultPrimaryKotTemplate || r.template) : r.template,
             printerName: r.printerName,
             items: []
           });
@@ -6372,11 +6377,15 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }>();
 
       for (const r of routedUnprinted) {
-        const key = `${r.printerName || 'default'}_${r.station}_${r.template.id}`;
+        const isCombined = Boolean(r.template?.combineAllStationsOnKot || defaultPrimaryKotTemplate?.combineAllStationsOnKot);
+        const key = isCombined
+          ? `${r.printerName || 'default'}_combined`
+          : `${r.printerName || 'default'}_${r.station}_${r.template.id}`;
+
         if (!unprintedStationMap.has(key)) {
           unprintedStationMap.set(key, {
-            station: r.station,
-            template: r.template,
+            station: isCombined ? (defaultPrimaryKotTemplate?.headerTitle || 'MASTER KOT') : r.station,
+            template: isCombined ? (defaultPrimaryKotTemplate || r.template) : r.template,
             printerName: r.printerName,
             items: []
           });
