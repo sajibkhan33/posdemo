@@ -91,6 +91,33 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
     return reportType === 'transactional' ? 'continuous' : 'consolidated';
   });
   const [outwardTypeFilter, setOutwardTypeFilter] = useState<'ALL' | 'BOM' | 'MANUAL' | 'WASTAGE'>('ALL');
+  const [dailyViewMode, setDailyViewMode] = useState<'date-log' | 'item-sheet'>('date-log');
+  const [selectedDayLog, setSelectedDayLog] = useState<{
+    date: string;
+    formattedDate: string;
+    dayName: string;
+    openingValuation: number;
+    purchasesVal: number;
+    recipeCostVal: number;
+    totalUsedVal: number;
+    closingValuation: number;
+    itemBreakdown: Array<{
+      id: number;
+      name: string;
+      category: string;
+      uom: string;
+      openQty: number;
+      openVal: number;
+      inQty: number;
+      inVal: number;
+      usedQty: number;
+      usedVal: number;
+      closeQty: number;
+      closeVal: number;
+      rate: number;
+    }>;
+  } | null>(null);
+  const [dayModalSearch, setDayModalSearch] = useState('');
 
   // Drilldown Modal State
   const [selectedLedgerItem, setSelectedLedgerItem] = useState<RawMasterItem | null>(null);
@@ -696,6 +723,237 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
     searchQuery
   ]);
 
+  // --- 4.5 CHRONOLOGICAL DATE-WISE DAILY OPENING & CLOSING LOG DATA ---
+  const dailyDateLogData = useMemo(() => {
+    const itemRates = new Map<number, number>();
+    const itemInitials = new Map<number, number>();
+    data.masterItems.forEach(item => {
+      const inv = data.inventory.find(i => i.id === item.id);
+      const initOpen = inv ? Number(inv.open) || 0 : 0;
+      const rate = inv?.rate || item.defaultRate || 0;
+      itemRates.set(item.id, rate);
+      itemInitials.set(item.id, initOpen);
+    });
+
+    const allDateSet = new Set<string>();
+    const todayStr = new Date().toISOString().split('T')[0];
+    allDateSet.add(todayStr);
+
+    data.purchases.forEach(p => {
+      if (p.status !== 'DRAFT' && p.date) {
+        allDateSet.add(p.date.split('T')[0]);
+      }
+    });
+
+    data.sales.forEach(s => {
+      if (isSaleActive(s) && s.date) {
+        allDateSet.add(s.date.split('T')[0]);
+      }
+    });
+
+    const sortedDates = Array.from(allDateSet).sort();
+
+    // Map purchases by date and raw item id
+    const dayPurchases: Record<string, Record<number, { qty: number; val: number }>> = {};
+    data.purchases.forEach(p => {
+      if (p.status === 'DRAFT' || !p.date) return;
+      const d = p.date.split('T')[0];
+      if (!dayPurchases[d]) dayPurchases[d] = {};
+      (p.items || []).forEach(pi => {
+        const raw = data.masterItems.find(m => m.id === pi.itemId || m.name.toLowerCase().trim() === pi.item?.toLowerCase().trim());
+        if (!raw) return;
+        const q = Number(pi.qty) || 0;
+        const r = Number(pi.rate) || (itemRates.get(raw.id) || 0);
+        if (!dayPurchases[d][raw.id]) dayPurchases[d][raw.id] = { qty: 0, val: 0 };
+        dayPurchases[d][raw.id].qty += q;
+        dayPurchases[d][raw.id].val += q * r;
+      });
+    });
+
+    // Map sales BOM recipe consumptions by date and raw item id
+    const daySalesBom: Record<string, Record<number, { qty: number; val: number }>> = {};
+    data.sales.forEach(s => {
+      if (!isSaleActive(s) || !s.date) return;
+      const d = s.date.split('T')[0];
+      if (!daySalesBom[d]) daySalesBom[d] = {};
+      (s.items || []).forEach(item => {
+        const menuItem = data.menuItems.find(m => m.id === item.id);
+        if (!menuItem?.recipe) return;
+        menuItem.recipe.forEach(ing => {
+          const raw = data.masterItems.find(m => m.id === ing.rawItemId);
+          if (!raw) return;
+          const used = (Number(ing.qty) || 0) * (Number(item.qty) || 0);
+          const r = itemRates.get(raw.id) || 0;
+          if (!daySalesBom[d][raw.id]) daySalesBom[d][raw.id] = { qty: 0, val: 0 };
+          daySalesBom[d][raw.id].qty += used;
+          daySalesBom[d][raw.id].val += used * r;
+        });
+      });
+    });
+
+    // Chronological simulation
+    const runningStock = new Map<number, number>();
+    data.masterItems.forEach(item => {
+      runningStock.set(item.id, itemInitials.get(item.id) || 0);
+    });
+
+    const allDayLogs: Array<{
+      date: string;
+      formattedDate: string;
+      dayName: string;
+      isToday: boolean;
+      openingValuation: number;
+      purchasesQty: number;
+      purchasesVal: number;
+      recipeUsedQty: number;
+      recipeCostVal: number;
+      manualUsedQty: number;
+      manualUsedVal: number;
+      wastageQty: number;
+      wastageVal: number;
+      totalUsedVal: number;
+      closingValuation: number;
+      netChangeVal: number;
+      itemBreakdown: Array<{
+        id: number;
+        name: string;
+        category: string;
+        uom: string;
+        openQty: number;
+        openVal: number;
+        inQty: number;
+        inVal: number;
+        usedQty: number;
+        usedVal: number;
+        closeQty: number;
+        closeVal: number;
+        rate: number;
+      }>;
+    }> = [];
+
+    sortedDates.forEach(d => {
+      let dayOpenVal = 0;
+      let dayPurchasesQty = 0;
+      let dayPurchasesVal = 0;
+      let dayRecipeUsedQty = 0;
+      let dayRecipeCostVal = 0;
+      let dayCloseVal = 0;
+
+      const itemBreakdown: Array<{
+        id: number;
+        name: string;
+        category: string;
+        uom: string;
+        openQty: number;
+        openVal: number;
+        inQty: number;
+        inVal: number;
+        usedQty: number;
+        usedVal: number;
+        closeQty: number;
+        closeVal: number;
+        rate: number;
+      }> = [];
+
+      data.masterItems.forEach(item => {
+        const curOpen = runningStock.get(item.id) || 0;
+        const rate = itemRates.get(item.id) || 0;
+        dayOpenVal += (curOpen * rate);
+
+        const inEvent = dayPurchases[d]?.[item.id] || { qty: 0, val: 0 };
+        const bomEvent = daySalesBom[d]?.[item.id] || { qty: 0, val: 0 };
+
+        dayPurchasesQty += inEvent.qty;
+        dayPurchasesVal += inEvent.val;
+        dayRecipeUsedQty += bomEvent.qty;
+        dayRecipeCostVal += bomEvent.val;
+
+        const curClose = curOpen + inEvent.qty - bomEvent.qty;
+        runningStock.set(item.id, curClose);
+        dayCloseVal += Math.max(0, curClose * rate);
+
+        itemBreakdown.push({
+          id: item.id,
+          name: item.name,
+          category: item.category,
+          uom: item.uom,
+          openQty: parseFloat(curOpen.toFixed(2)),
+          openVal: Math.round(curOpen * rate),
+          inQty: parseFloat(inEvent.qty.toFixed(2)),
+          inVal: Math.round(inEvent.val),
+          usedQty: parseFloat(bomEvent.qty.toFixed(2)),
+          usedVal: Math.round(bomEvent.val),
+          closeQty: parseFloat(curClose.toFixed(2)),
+          closeVal: Math.round(Math.max(0, curClose * rate)),
+          rate: Math.round(rate)
+        });
+      });
+
+      const totalUsedVal = dayRecipeCostVal;
+      const netChangeVal = dayPurchasesVal - totalUsedVal;
+
+      const dateObj = new Date(d + 'T00:00:00');
+      const formattedDate = dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      const dayName = dateObj.toLocaleDateString('en-GB', { weekday: 'short' });
+
+      allDayLogs.push({
+        date: d,
+        formattedDate,
+        dayName,
+        isToday: d === todayStr,
+        openingValuation: Math.round(dayOpenVal),
+        purchasesQty: parseFloat(dayPurchasesQty.toFixed(2)),
+        purchasesVal: Math.round(dayPurchasesVal),
+        recipeUsedQty: parseFloat(dayRecipeUsedQty.toFixed(2)),
+        recipeCostVal: Math.round(dayRecipeCostVal),
+        manualUsedQty: 0,
+        manualUsedVal: 0,
+        wastageQty: 0,
+        wastageVal: 0,
+        totalUsedVal: Math.round(totalUsedVal),
+        closingValuation: Math.round(dayCloseVal),
+        netChangeVal: Math.round(netChangeVal),
+        itemBreakdown
+      });
+    });
+
+    const filteredDays = allDayLogs.filter(day => {
+      if (startDate && day.date < startDate) return false;
+      if (endDate && day.date > endDate) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        return (
+          day.date.includes(q) ||
+          day.formattedDate.toLowerCase().includes(q) ||
+          day.dayName.toLowerCase().includes(q)
+        );
+      }
+      return true;
+    }).reverse();
+
+    const totalPeriodPurchasesVal = filteredDays.reduce((sum, d) => sum + d.purchasesVal, 0);
+    const totalPeriodUsedVal = filteredDays.reduce((sum, d) => sum + d.totalUsedVal, 0);
+    const latestClosingVal = filteredDays[0]?.closingValuation || (allDayLogs[allDayLogs.length - 1]?.closingValuation || 0);
+    const avgDailyUsedVal = filteredDays.length > 0 ? Math.round(totalPeriodUsedVal / filteredDays.length) : 0;
+
+    return {
+      days: filteredDays,
+      totalPeriodPurchasesVal,
+      totalPeriodUsedVal,
+      latestClosingVal,
+      avgDailyUsedVal
+    };
+  }, [
+    data.masterItems, 
+    data.inventory, 
+    data.purchases, 
+    data.sales, 
+    data.menuItems, 
+    startDate, 
+    endDate, 
+    searchQuery
+  ]);
+
   // --- 5. ITEM SPECIFIC LEDGER DRILLDOWN DATA FOR MODAL ---
   const modalItemLedgerEntries = useMemo(() => {
     if (!selectedLedgerItem) return [];
@@ -719,6 +977,30 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
   }, [selectedLedgerItem, continuousLedgerData, modalTypeFilter, modalSearch]);
 
   // --- CSV EXPORT HANDLERS ---
+  const handleExportDailyStockLog = () => {
+    const headers = [
+      'Date',
+      'Day',
+      'Opening Stock Value (৳)',
+      'Inward Purchases (+) (৳)',
+      'POS Recipe BOM Used (-) (৳)',
+      'Total Stock Consumed (-) (৳)',
+      'Closing Stock Value (৳)',
+      'Net Stock Change (৳)'
+    ];
+    const rows = dailyDateLogData.days.map(d => [
+      d.date,
+      d.dayName,
+      d.openingValuation,
+      d.purchasesVal,
+      d.recipeCostVal,
+      d.totalUsedVal,
+      d.closingValuation,
+      d.netChangeVal
+    ]);
+    exportCsvHelper('daily_stock_movement_log', headers, rows);
+  };
+
   const handleExportInwards = () => {
     const headers = ['Date', 'Bill No', 'Vendor', 'Raw Item', 'Category', 'Quantity', 'UoM', 'Unit Rate (৳)', 'Total Value (৳)', 'Payment Type'];
     const rows = inwardsData.map(r => [
@@ -1219,33 +1501,284 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
 
             {/* View Mode Toggle */}
             <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 self-start sm:self-auto">
-              <button
-                type="button"
-                onClick={() => setLedgerViewMode('consolidated')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                  ledgerViewMode === 'consolidated'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Layers className="w-3.5 h-3.5 text-teal-600" />
-                <span>Consolidated Valuation Ledger</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setLedgerViewMode('continuous')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                  ledgerViewMode === 'continuous'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Activity className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Continuous Movement Ledger</span>
-              </button>
+              {reportType === 'daily-stock' ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setDailyViewMode('date-log')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      dailyViewMode === 'date-log'
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Calendar className="w-3.5 h-3.5 text-teal-600" />
+                    <span>Date-wise Daily Log (তারিখ ভিত্তিক)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDailyViewMode('item-sheet')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      dailyViewMode === 'item-sheet'
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Boxes className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Item-wise Stock Sheet (আইটেম ভিত্তিক)</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setLedgerViewMode('consolidated')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      ledgerViewMode === 'consolidated'
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5 text-teal-600" />
+                    <span>Consolidated Valuation Ledger</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLedgerViewMode('continuous')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      ledgerViewMode === 'continuous'
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Activity className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Continuous Movement Ledger</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
+          {/* VIEW A: DATE-WISE DAILY LOG (When in daily-stock report and date-log mode) */}
+          {reportType === 'daily-stock' && dailyViewMode === 'date-log' ? (
+            <div className="space-y-4">
+              {/* 4 Summary Cards for Daily Date Log */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-4 rounded-2xl bg-slate-900 text-white shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wide">
+                      <span>Latest Closing Stock</span>
+                      <Boxes className="w-4 h-4 text-amber-400" />
+                    </div>
+                    <div className="text-2xl font-black text-amber-400 mt-2 font-mono">
+                      ৳ {Math.round(dailyDateLogData.latestClosingVal).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-800 flex items-center justify-between">
+                    <span>Total Current Store Assets</span>
+                    <span className="font-bold text-amber-300 font-mono">{data.masterItems.length} Items</span>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wide">
+                      <span>Inward Purchases (+)</span>
+                      <ArrowDownRight className="w-4 h-4 text-blue-600" />
+                    </div>
+                    <div className="text-2xl font-black text-blue-700 mt-2 font-mono">
+                      ৳ {Math.round(dailyDateLogData.totalPeriodPurchasesVal).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100">
+                    <span>Purchases in selected period</span>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wide">
+                      <span>POS Recipe Consumed (-)</span>
+                      <ArrowUpRight className="w-4 h-4 text-rose-600" />
+                    </div>
+                    <div className="text-2xl font-black text-rose-700 mt-2 font-mono">
+                      ৳ {Math.round(dailyDateLogData.totalPeriodUsedVal).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100">
+                    <span>Food cost consumed via sales</span>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wide">
+                      <span>Average Daily Usage</span>
+                      <Calendar className="w-4 h-4 text-teal-600" />
+                    </div>
+                    <div className="text-2xl font-black text-teal-700 mt-2 font-mono">
+                      ৳ {Math.round(dailyDateLogData.avgDailyUsedVal).toLocaleString()} <span className="text-xs font-normal text-slate-500">/ Day</span>
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+                    <span>Across {dailyDateLogData.days.length} Recorded Days</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Date Filters for Daily Date Log */}
+              <ReportFilters
+                datePreset={datePreset}
+                setDatePreset={setDatePreset}
+                startDate={startDate}
+                setStartDate={setStartDate}
+                endDate={endDate}
+                setEndDate={setEndDate}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                searchPlaceholder="Search date or day (e.g. 2026-11, Nov, Thu)..."
+                totalRecords={dailyDateLogData.days.length}
+                onExportCsv={handleExportDailyStockLog}
+                onPrint={() => window.print()}
+                onResetFilters={() => {
+                  setDatePreset('all');
+                  setStartDate('');
+                  setEndDate('');
+                  setSearchQuery('');
+                }}
+              />
+
+              {/* Date-wise Daily Movement Table */}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                <div className="p-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <h3 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-teal-600" />
+                      <span>Date-by-Date Stock Movement & Valuation History</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Chronological daily record of opening stock, purchases, sales BOM usage, and closing valuation
+                    </p>
+                  </div>
+                  <div className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-lg">
+                    {dailyDateLogData.days.length} Days Recorded
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-900 text-slate-200 text-[11px]">
+                        <th className="py-2.5 px-3 font-bold">Date & Day (তারিখ)</th>
+                        <th className="py-2.5 px-3 font-bold text-right text-teal-300">Opening Stock (৳)</th>
+                        <th className="py-2.5 px-3 font-bold text-right text-blue-300">Purchases Inward (+)</th>
+                        <th className="py-2.5 px-3 font-bold text-right text-amber-300">POS Recipe Cost (-)</th>
+                        <th className="py-2.5 px-3 font-bold text-right text-rose-300">Total Consumed (-)</th>
+                        <th className="py-2.5 px-3 font-bold text-right text-white">Closing Stock (৳)</th>
+                        <th className="py-2.5 px-3 font-bold text-right">Net Change (৳)</th>
+                        <th className="py-2.5 px-3 font-bold text-center">Day Item Sheet</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-mono">
+                      {dailyDateLogData.days.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="py-12 text-center text-slate-400 font-medium font-sans">
+                            No daily stock records found for the selected period.
+                          </td>
+                        </tr>
+                      ) : (
+                        dailyDateLogData.days.map(d => (
+                          <tr key={d.date} className="hover:bg-teal-50/40 transition">
+                            <td className="py-3 px-3">
+                              <div className="flex items-center gap-2">
+                                <span className="font-extrabold text-slate-900 text-xs sm:text-sm font-mono">
+                                  {d.formattedDate}
+                                </span>
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-sans">
+                                  {d.dayName}
+                                </span>
+                                {d.isToday && (
+                                  <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 font-sans">
+                                    Today
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            <td className="py-3 px-3 text-right font-bold text-slate-800">
+                              ৳ {d.openingValuation.toLocaleString()}
+                            </td>
+
+                            <td className="py-3 px-3 text-right font-bold text-blue-600">
+                              {d.purchasesVal > 0 ? `+৳ ${d.purchasesVal.toLocaleString()}` : '৳ 0'}
+                            </td>
+
+                            <td className="py-3 px-3 text-right font-bold text-amber-600">
+                              {d.recipeCostVal > 0 ? `-৳ ${d.recipeCostVal.toLocaleString()}` : '৳ 0'}
+                            </td>
+
+                            <td className="py-3 px-3 text-right font-black text-rose-600">
+                              {d.totalUsedVal > 0 ? `-৳ ${d.totalUsedVal.toLocaleString()}` : '৳ 0'}
+                            </td>
+
+                            <td className="py-3 px-3 text-right font-black text-slate-900 text-sm">
+                              ৳ {d.closingValuation.toLocaleString()}
+                            </td>
+
+                            <td className="py-3 px-3 text-right font-bold">
+                              <span className={d.netChangeVal >= 0 ? 'text-emerald-700' : 'text-rose-700'}>
+                                {d.netChangeVal > 0 ? `+৳ ${d.netChangeVal.toLocaleString()}` : d.netChangeVal < 0 ? `-৳ ${Math.abs(d.netChangeVal).toLocaleString()}` : '৳ 0'}
+                              </span>
+                            </td>
+
+                            <td className="py-3 px-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedDayLog(d)}
+                                className="px-2.5 py-1 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-bold transition flex items-center gap-1 mx-auto cursor-pointer font-sans"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-teal-600" />
+                                <span>View Items</span>
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                    {dailyDateLogData.days.length > 0 && (
+                      <tfoot>
+                        <tr className="bg-slate-900 text-white font-mono text-xs">
+                          <td className="py-3 px-3 font-bold font-sans">Period Totals</td>
+                          <td className="py-3 px-3 text-right font-bold text-teal-300">
+                            ৳ {(dailyDateLogData.days[dailyDateLogData.days.length - 1]?.openingValuation || 0).toLocaleString()}
+                          </td>
+                          <td className="py-3 px-3 text-right font-bold text-blue-300">
+                            +৳ {dailyDateLogData.totalPeriodPurchasesVal.toLocaleString()}
+                          </td>
+                          <td className="py-3 px-3 text-right font-bold text-amber-300">
+                            -৳ {dailyDateLogData.totalPeriodUsedVal.toLocaleString()}
+                          </td>
+                          <td className="py-3 px-3 text-right font-bold text-rose-300">
+                            -৳ {dailyDateLogData.totalPeriodUsedVal.toLocaleString()}
+                          </td>
+                          <td className="py-3 px-3 text-right font-bold text-amber-400 text-sm">
+                            ৳ {(dailyDateLogData.days[0]?.closingValuation || 0).toLocaleString()}
+                          </td>
+                          <td className="py-3 px-3 text-right font-bold">
+                            {dailyDateLogData.totalPeriodPurchasesVal - dailyDateLogData.totalPeriodUsedVal >= 0
+                              ? `+৳ ${(dailyDateLogData.totalPeriodPurchasesVal - dailyDateLogData.totalPeriodUsedVal).toLocaleString()}`
+                              : `-৳ ${Math.abs(dailyDateLogData.totalPeriodPurchasesVal - dailyDateLogData.totalPeriodUsedVal).toLocaleString()}`}
+                          </td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div>
           {/* 5 Summary Valuation KPI Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
             {/* 1. Opening Stock Valuation */}
@@ -1671,6 +2204,8 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
               </div>
             </div>
           )}
+          </div>
+          )}
 
           {/* ITEM STOCK LEDGER DRILLDOWN MODAL */}
           {selectedLedgerItem && (
@@ -1806,6 +2341,122 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
                     className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
                   >
                     Close Ledger
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* DAY ITEMIZED BREAKDOWN MODAL */}
+          {selectedDayLog && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
+              <div className="bg-white rounded-2xl max-w-4xl w-full p-5 sm:p-6 shadow-2xl border border-slate-200 max-h-[90vh] flex flex-col">
+                {/* Modal Header */}
+                <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-teal-50 border border-teal-200 rounded-xl text-teal-700">
+                      <Calendar className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-extrabold text-slate-900 text-base sm:text-lg flex items-center gap-2">
+                        <span>Daily Stock Sheet: {selectedDayLog.formattedDate} ({selectedDayLog.dayName})</span>
+                        {selectedDayLog.date === new Date().toISOString().split('T')[0] && (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-black text-[10px] border border-emerald-300">
+                            Today
+                          </span>
+                        )}
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        Itemized opening stock, inward purchases, recipe usages & closing balances for this day
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedDayLog(null); setDayModalSearch(''); }}
+                    className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Day Summary KPI Bar */}
+                <div className="my-3 p-3 bg-slate-50 border border-slate-200 rounded-xl grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
+                  <div className="p-2 bg-white rounded-lg border border-slate-200">
+                    <div className="text-[10px] text-slate-500 font-sans font-bold">Opening Valuation</div>
+                    <div className="font-black text-slate-800 text-sm mt-0.5">৳ {selectedDayLog.openingValuation.toLocaleString()}</div>
+                  </div>
+                  <div className="p-2 bg-white rounded-lg border border-slate-200">
+                    <div className="text-[10px] text-slate-500 font-sans font-bold">Inward Purchases (+)</div>
+                    <div className="font-black text-blue-700 text-sm mt-0.5">+৳ {selectedDayLog.purchasesVal.toLocaleString()}</div>
+                  </div>
+                  <div className="p-2 bg-white rounded-lg border border-slate-200">
+                    <div className="text-[10px] text-slate-500 font-sans font-bold">Total Consumed (-)</div>
+                    <div className="font-black text-rose-700 text-sm mt-0.5">-৳ {selectedDayLog.totalUsedVal.toLocaleString()}</div>
+                  </div>
+                  <div className="p-2 bg-white rounded-lg border border-slate-200">
+                    <div className="text-[10px] text-slate-500 font-sans font-bold">Closing Valuation</div>
+                    <div className="font-black text-slate-900 text-sm mt-0.5">৳ {selectedDayLog.closingValuation.toLocaleString()}</div>
+                  </div>
+                </div>
+
+                {/* Search Bar inside Modal */}
+                <div className="mb-3 relative">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={dayModalSearch}
+                    onChange={e => setDayModalSearch(e.target.value)}
+                    placeholder="Search raw material name, category in this day's sheet..."
+                    className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+
+                {/* Modal Items Table */}
+                <div className="flex-1 overflow-y-auto border border-slate-200 rounded-xl shadow-xs">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-900 text-slate-300 sticky top-0 text-[11px]">
+                      <tr>
+                        <th className="py-2 px-3 font-bold">Raw Material</th>
+                        <th className="py-2 px-2 font-bold text-center">UOM</th>
+                        <th className="py-2 px-2.5 font-bold text-right text-teal-300">Opening Qty</th>
+                        <th className="py-2 px-2.5 font-bold text-right text-blue-300">Inward (+)</th>
+                        <th className="py-2 px-2.5 font-bold text-right text-rose-300">Used (-)</th>
+                        <th className="py-2 px-2.5 font-bold text-right text-white">Closing Qty</th>
+                        <th className="py-2 px-2.5 font-bold text-right">Avg Rate (৳)</th>
+                        <th className="py-2 px-3 font-bold text-right text-amber-400">Closing Value (৳)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-mono">
+                      {selectedDayLog.itemBreakdown
+                        .filter(item => !dayModalSearch.trim() || item.name.toLowerCase().includes(dayModalSearch.toLowerCase().trim()) || item.category.toLowerCase().includes(dayModalSearch.toLowerCase().trim()))
+                        .map(item => (
+                          <tr key={item.id} className="hover:bg-slate-50 transition">
+                            <td className="py-2 px-3 font-sans font-bold text-slate-900">
+                              {item.name}
+                              <span className="text-[10px] text-slate-400 font-normal ml-1.5 font-sans">({item.category})</span>
+                            </td>
+                            <td className="py-2 px-2 text-center text-slate-600 font-sans">{item.uom}</td>
+                            <td className="py-2 px-2.5 text-right text-slate-700">{item.openQty.toFixed(2)}</td>
+                            <td className="py-2 px-2.5 text-right text-blue-600 font-bold">{item.inQty > 0 ? `+${item.inQty.toFixed(2)}` : '0.00'}</td>
+                            <td className="py-2 px-2.5 text-right text-rose-600 font-bold">{item.usedQty > 0 ? `-${item.usedQty.toFixed(2)}` : '0.00'}</td>
+                            <td className="py-2 px-2.5 text-right font-black text-slate-900">{item.closeQty.toFixed(2)}</td>
+                            <td className="py-2 px-2.5 text-right text-slate-600">৳{item.rate}</td>
+                            <td className="py-2 px-3 text-right font-bold text-slate-900">৳{item.closeVal.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Modal Footer */}
+                <div className="pt-3 mt-2 border-t border-slate-100 flex items-center justify-end">
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedDayLog(null); setDayModalSearch(''); }}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+                  >
+                    Close Day Sheet
                   </button>
                 </div>
               </div>
