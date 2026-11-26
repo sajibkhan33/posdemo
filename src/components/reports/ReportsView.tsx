@@ -43,7 +43,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   ChevronsUpDown,
-  Sparkles
+  Sparkles,
+  Calendar
 } from 'lucide-react';
 
 export type MasterReportId = 
