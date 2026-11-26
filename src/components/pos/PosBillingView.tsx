@@ -2325,7 +2325,7 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
             const actionButtons: React.ReactNode[] = [];
             actionButtons.push(cancelBtn(false));
 
-            if ((hasUnprintedKotItems || isSubmittingKot) && activeTableHasActiveKotPrinter) {
+            if (hasUnprintedKotItems || isSubmittingKot) {
               actionButtons.push(submitKotBtn);
             } else {
               actionButtons.push(printBillBtn(false));

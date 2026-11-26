@@ -5083,48 +5083,67 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       const printers = data?.printers || [];
       const activeKotPrinters = printers.filter(pr => pr.isActive && (pr.type === 'KOT' || pr.type === 'ALL'));
+      const defaultKotPrinter = activeKotPrinters.find(pr => pr.isDefault) || null;
 
-      // 3-Level Granular Item-Level Hardware Routing:
+      // 4-Level Granular Item-Level Hardware Routing:
       // Priority 1: Specific Item ID override (pr.itemIds)
       // Priority 2: Specific Category match (pr.categories)
       // Priority 3: Department match (pr.departments)
-      // Fallback: null (Unticked / excluded dishes in printer config MUST NOT print!)
+      // Priority 4: Catch-all printer (no filters)
+      // Fallback: Primary Default KOT Printer (if active and not explicitly unticked)
       const getPrinterForItem = (item: { id?: number; department?: string; category?: string }): PrinterConfig | null => {
         const itemId = item.id != null ? Number(item.id) : null;
         const cat = item.category ? String(item.category).trim() : '';
         const dept = item.department ? String(item.department).trim() : '';
 
-        // 1. Specific Item ID match
+        let explicitlyExcludedByActivePrinter = false;
+
+        // 1. Specific Item ID match on active printers
         if (itemId != null) {
           const itemP = activeKotPrinters.find(pr => Array.isArray(pr.itemIds) && pr.itemIds.length > 0 && pr.itemIds.includes(itemId));
           if (itemP) return itemP;
         }
 
-        // 2. Category match (strictly respecting itemIds filter if printer has itemIds)
+        // 2. Category match
         if (cat) {
-          const catP = activeKotPrinters.find(pr => {
-            if (!Array.isArray(pr.categories) || !pr.categories.includes(cat)) return false;
-            if (Array.isArray(pr.itemIds) && pr.itemIds.length > 0) {
-              return itemId != null ? pr.itemIds.includes(itemId) : false;
+          for (const pr of activeKotPrinters) {
+            if (Array.isArray(pr.categories) && pr.categories.includes(cat)) {
+              if (Array.isArray(pr.itemIds) && pr.itemIds.length > 0) {
+                if (itemId != null && pr.itemIds.includes(itemId)) {
+                  return pr;
+                } else {
+                  explicitlyExcludedByActivePrinter = true;
+                }
+              } else {
+                return pr;
+              }
             }
-            return true;
-          });
-          if (catP) return catP;
+          }
         }
 
-        // 3. Department match (strictly respecting categories and itemIds filters)
+        // 3. Department match
         if (dept) {
-          const deptP = activeKotPrinters.find(pr => {
-            if (!Array.isArray(pr.departments) || !pr.departments.includes(dept)) return false;
-            if (Array.isArray(pr.categories) && pr.categories.length > 0) {
-              if (!cat || !pr.categories.includes(cat)) return false;
+          for (const pr of activeKotPrinters) {
+            if (Array.isArray(pr.departments) && pr.departments.includes(dept)) {
+              if (Array.isArray(pr.categories) && pr.categories.length > 0) {
+                if (!cat || !pr.categories.includes(cat)) continue;
+              }
+              if (Array.isArray(pr.itemIds) && pr.itemIds.length > 0) {
+                if (itemId != null && pr.itemIds.includes(itemId)) {
+                  return pr;
+                } else {
+                  explicitlyExcludedByActivePrinter = true;
+                }
+              } else {
+                return pr;
+              }
             }
-            if (Array.isArray(pr.itemIds) && pr.itemIds.length > 0) {
-              return itemId != null ? pr.itemIds.includes(itemId) : false;
-            }
-            return true;
-          });
-          if (deptP) return deptP;
+          }
+        }
+
+        // If an active station printer specifically covers this dish but it was unticked, DO NOT PRINT!
+        if (explicitlyExcludedByActivePrinter) {
+          return null;
         }
 
         // 4. Catch-all: printer with NO department, NO category, and NO itemIds restrictions
@@ -5135,13 +5154,25 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         );
         if (catchAll) return catchAll;
 
-        // Item is not selected or explicitly unticked -> DO NOT PRINT
+        // 5. Fallback to Primary Default KOT Printer
+        // If the station printer is inactive or unrouted, send to Primary Default KOT Printer
+        if (defaultKotPrinter) {
+          if (Array.isArray(defaultKotPrinter.itemIds) && defaultKotPrinter.itemIds.length > 0) {
+            if (itemId != null && defaultKotPrinter.itemIds.includes(itemId)) {
+              return defaultKotPrinter;
+            }
+            return null;
+          }
+          return defaultKotPrinter;
+        }
+
+        // Item is not routed to any active printer -> DO NOT PRINT (Zero Paper Waste)
         return null;
       };
 
       const getPrinterForDept = (dept: string) => {
         const p = printers.find(pr => pr.departments?.includes(dept) && pr.isActive);
-        return p || activeKotPrinters[0] || null;
+        return p || defaultKotPrinter || activeKotPrinters[0] || null;
       };
 
       // Smart Item Routing: Each item routes to its dedicated active template/station.
@@ -6208,48 +6239,67 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       const printers = data?.printers || [];
       const activeKotPrinters = printers.filter(pr => pr.isActive && (pr.type === 'KOT' || pr.type === 'ALL'));
+      const defaultKotPrinter = activeKotPrinters.find(pr => pr.isDefault) || null;
 
-      // 3-Level Granular Item-Level Hardware Routing for Auto-KOT:
+      // 4-Level Granular Item-Level Hardware Routing for Auto-KOT:
       // Priority 1: Specific Item ID override (pr.itemIds)
       // Priority 2: Specific Category match (pr.categories)
       // Priority 3: Department match (pr.departments)
-      // Fallback: null (Unticked / excluded dishes in printer config MUST NOT print!)
+      // Priority 4: Catch-all printer (no filters)
+      // Fallback: Primary Default KOT Printer (if active and not explicitly unticked)
       const getPrinterForItem = (item: { id?: number; department?: string; category?: string }): PrinterConfig | null => {
         const itemId = item.id != null ? Number(item.id) : null;
         const cat = item.category ? String(item.category).trim() : '';
         const dept = item.department ? String(item.department).trim() : '';
 
-        // 1. Specific Item ID match
+        let explicitlyExcludedByActivePrinter = false;
+
+        // 1. Specific Item ID match on active printers
         if (itemId != null) {
           const itemP = activeKotPrinters.find(pr => Array.isArray(pr.itemIds) && pr.itemIds.length > 0 && pr.itemIds.includes(itemId));
           if (itemP) return itemP;
         }
 
-        // 2. Category match (strictly respecting itemIds filter if printer has itemIds)
+        // 2. Category match
         if (cat) {
-          const catP = activeKotPrinters.find(pr => {
-            if (!Array.isArray(pr.categories) || !pr.categories.includes(cat)) return false;
-            if (Array.isArray(pr.itemIds) && pr.itemIds.length > 0) {
-              return itemId != null ? pr.itemIds.includes(itemId) : false;
+          for (const pr of activeKotPrinters) {
+            if (Array.isArray(pr.categories) && pr.categories.includes(cat)) {
+              if (Array.isArray(pr.itemIds) && pr.itemIds.length > 0) {
+                if (itemId != null && pr.itemIds.includes(itemId)) {
+                  return pr;
+                } else {
+                  explicitlyExcludedByActivePrinter = true;
+                }
+              } else {
+                return pr;
+              }
             }
-            return true;
-          });
-          if (catP) return catP;
+          }
         }
 
-        // 3. Department match (strictly respecting categories and itemIds filters)
+        // 3. Department match
         if (dept) {
-          const deptP = activeKotPrinters.find(pr => {
-            if (!Array.isArray(pr.departments) || !pr.departments.includes(dept)) return false;
-            if (Array.isArray(pr.categories) && pr.categories.length > 0) {
-              if (!cat || !pr.categories.includes(cat)) return false;
+          for (const pr of activeKotPrinters) {
+            if (Array.isArray(pr.departments) && pr.departments.includes(dept)) {
+              if (Array.isArray(pr.categories) && pr.categories.length > 0) {
+                if (!cat || !pr.categories.includes(cat)) continue;
+              }
+              if (Array.isArray(pr.itemIds) && pr.itemIds.length > 0) {
+                if (itemId != null && pr.itemIds.includes(itemId)) {
+                  return pr;
+                } else {
+                  explicitlyExcludedByActivePrinter = true;
+                }
+              } else {
+                return pr;
+              }
             }
-            if (Array.isArray(pr.itemIds) && pr.itemIds.length > 0) {
-              return itemId != null ? pr.itemIds.includes(itemId) : false;
-            }
-            return true;
-          });
-          if (deptP) return deptP;
+          }
+        }
+
+        // If an active station printer specifically covers this dish but it was unticked, DO NOT PRINT!
+        if (explicitlyExcludedByActivePrinter) {
+          return null;
         }
 
         // 4. Catch-all: printer with NO department, NO category, and NO itemIds restrictions
@@ -6260,13 +6310,25 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         );
         if (catchAll) return catchAll;
 
-        // Item is not selected or explicitly unticked -> DO NOT PRINT
+        // 5. Fallback to Primary Default KOT Printer
+        // If the station printer is inactive or unrouted, send to Primary Default KOT Printer
+        if (defaultKotPrinter) {
+          if (Array.isArray(defaultKotPrinter.itemIds) && defaultKotPrinter.itemIds.length > 0) {
+            if (itemId != null && defaultKotPrinter.itemIds.includes(itemId)) {
+              return defaultKotPrinter;
+            }
+            return null;
+          }
+          return defaultKotPrinter;
+        }
+
+        // Item is not routed to any active printer -> DO NOT PRINT (Zero Paper Waste)
         return null;
       };
 
       const getPrinterForDept = (dept: string) => {
         const p = printers.find(pr => pr.departments?.includes(dept) && pr.isActive);
-        return p || activeKotPrinters[0] || null;
+        return p || defaultKotPrinter || activeKotPrinters[0] || null;
       };
 
       // Smart Item Routing for Auto-KOT: Each unsent item routes to its dedicated active template/station.
