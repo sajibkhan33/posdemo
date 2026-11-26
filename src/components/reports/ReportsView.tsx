@@ -53,7 +53,8 @@ export type MasterReportId =
   | 'item-sales'
   | 'category-sales'
   | 'department-sales'
-  // Inventory (1-3)
+  // Inventory (1-4)
+  | 'daily-stock-report'
   | 'inventory-inwards'
   | 'inventory-outward'
   | 'inventory-transactional'
@@ -139,16 +140,24 @@ export const ALL_REPORTS_REGISTRY: ReportMeta[] = [
 
   // Inventory
   {
-    id: 'inventory-inwards',
+    id: 'daily-stock-report',
     num: 1,
-    title: 'Inventory Inwards Report',
+    title: 'Daily Opening & Closing Stock Report',
     category: 'inventory',
-    description: 'Raw material procurement receipts, bill vouchers, inward quantities and unit values',
+    description: 'Track daily opening stock, inward procurement, POS recipe usage, closing balance & stock valuation',
     icon: Boxes
   },
   {
-    id: 'inventory-outward',
+    id: 'inventory-inwards',
     num: 2,
+    title: 'Inventory Inwards Report',
+    category: 'inventory',
+    description: 'Raw material procurement receipts, bill vouchers, inward quantities and unit values',
+    icon: ArrowDownRight
+  },
+  {
+    id: 'inventory-outward',
+    num: 3,
     title: 'Inventory Outward Report',
     category: 'inventory',
     description: 'Recipe BOM consumption from POS sales & manual kitchen spoilage deductions',
@@ -156,8 +165,8 @@ export const ALL_REPORTS_REGISTRY: ReportMeta[] = [
   },
   {
     id: 'inventory-transactional',
-    num: 3,
-    title: 'Inventory Transactional Report',
+    num: 4,
+    title: 'Stock Movement Ledger (Bin Card)',
     category: 'inventory',
     description: 'Continuous item-wise stock card with running quantities, unit rates and valuation',
     icon: Activity
@@ -545,17 +554,22 @@ export const ReportsView: React.FC = () => {
               <KitchenDepartmentSalesReport />
             )}
 
-            {/* 1. Inventory Inwards */}
+            {/* 1. Daily Opening & Closing Stock Report */}
+            {activeReportId === 'daily-stock-report' && (
+              <InventoryReports reportType="daily-stock" />
+            )}
+
+            {/* 2. Inventory Inwards */}
             {activeReportId === 'inventory-inwards' && (
               <InventoryReports reportType="inwards" />
             )}
 
-            {/* 2. Inventory Outward */}
+            {/* 3. Inventory Outward */}
             {activeReportId === 'inventory-outward' && (
               <InventoryReports reportType="outwards" />
             )}
 
-            {/* 3. Inventory Transactional Stock Ledger */}
+            {/* 4. Inventory Transactional Stock Ledger */}
             {activeReportId === 'inventory-transactional' && (
               <InventoryReports reportType="transactional" />
             )}
@@ -646,7 +660,7 @@ export const ReportsView: React.FC = () => {
                     Enterprise Reports Catalog
                   </h3>
                   <p className="text-[11px] text-slate-500">
-                    Search and jump directly to any of the 23 reporting modules
+                    Search and jump directly to any of the 24 reporting modules
                   </p>
                 </div>
               </div>

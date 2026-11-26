@@ -145,7 +145,7 @@ export const Sidebar: React.FC<{ isOpen?: boolean; onCloseMobile?: () => void }>
     if (activeTab === 'reports' && activeSubNav) {
       if (['pos-sessions', 'commission-report', 'user-sales', 'item-sales', 'category-sales', 'department-sales'].includes(activeSubNav)) {
         setOpenReportSuites(prev => ({ ...prev, pos: true }));
-      } else if (['inventory-inwards', 'inventory-outward', 'inventory-transactional'].includes(activeSubNav)) {
+      } else if (['daily-stock-report', 'inventory-inwards', 'inventory-outward', 'inventory-transactional'].includes(activeSubNav)) {
         setOpenReportSuites(prev => ({ ...prev, inventory: true }));
       } else if (['supplier-total-po', 'supplier-grn', 'supplier-returns', 'all-purchases', 'vendor-statement'].includes(activeSubNav)) {
         setOpenReportSuites(prev => ({ ...prev, procurement: true }));
@@ -286,6 +286,14 @@ export const Sidebar: React.FC<{ isOpen?: boolean; onCloseMobile?: () => void }>
           icon: Boxes,
           badge: `৳${Math.round(metrics.totalClosingStockVal / 1000)}k`,
           badgeColor: 'bg-indigo-500/20 text-indigo-300'
+        },
+        {
+          id: 'rep-daily-stock-direct',
+          tabId: 'reports',
+          subNav: 'daily-stock-report',
+          label: 'Daily Opening & Closing Report',
+          subLabel: 'Opening, usages & closing sheet',
+          icon: Calendar
         },
         {
           id: 'inv-inwards-rep',
@@ -490,9 +498,9 @@ export const Sidebar: React.FC<{ isOpen?: boolean; onCloseMobile?: () => void }>
           id: 'reports-hub',
           tabId: 'reports',
           label: 'BI Reports Center',
-          subLabel: 'All 23 Enterprise Reports',
+          subLabel: 'All 24 Enterprise Reports',
           icon: BarChart3,
-          badge: '23',
+          badge: '24',
           badgeColor: 'bg-teal-500/20 text-teal-300 font-bold'
         },
 
@@ -558,14 +566,24 @@ export const Sidebar: React.FC<{ isOpen?: boolean; onCloseMobile?: () => void }>
           suiteTitle: 'POS & Sales'
         },
 
-        // Suite 2: Stock & Inventory (3)
+        // Suite 2: Stock & Inventory (4)
+        {
+          id: 'rep-daily-stock',
+          tabId: 'reports',
+          subNav: 'daily-stock-report',
+          label: 'Daily Opening & Closing Stock',
+          subLabel: 'Opening, usages & closing balance',
+          icon: Boxes,
+          suiteId: 'inventory',
+          suiteTitle: 'Stock & Inventory'
+        },
         {
           id: 'rep-inv-inward',
           tabId: 'reports',
           subNav: 'inventory-inwards',
           label: 'Inventory Inwards Report',
           subLabel: 'Material procurement receipts',
-          icon: Boxes,
+          icon: ShoppingCart,
           suiteId: 'inventory',
           suiteTitle: 'Stock & Inventory'
         },
@@ -583,8 +601,8 @@ export const Sidebar: React.FC<{ isOpen?: boolean; onCloseMobile?: () => void }>
           id: 'rep-inv-trans',
           tabId: 'reports',
           subNav: 'inventory-transactional',
-          label: 'Inventory Transactional Report',
-          subLabel: 'Item-wise stock cards & valuation',
+          label: 'Stock Card Ledger (Bin Card)',
+          subLabel: 'Continuous audit trail & bin cards',
           icon: Activity,
           suiteId: 'inventory',
           suiteTitle: 'Stock & Inventory'

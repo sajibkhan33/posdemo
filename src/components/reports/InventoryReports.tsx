@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 
 interface SubReportProps {
-  reportType: 'inwards' | 'outwards' | 'transactional';
+  reportType: 'daily-stock' | 'inwards' | 'outwards' | 'transactional';
 }
 
 interface StockValuationRow {
@@ -87,7 +87,9 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
   const [selectedRawItem, setSelectedRawItem] = useState<string>('ALL');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [stockStatusFilter, setStockStatusFilter] = useState<'ALL' | 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK'>('ALL');
-  const [ledgerViewMode, setLedgerViewMode] = useState<'consolidated' | 'continuous'>('consolidated');
+  const [ledgerViewMode, setLedgerViewMode] = useState<'consolidated' | 'continuous'>(() => {
+    return reportType === 'transactional' ? 'continuous' : 'consolidated';
+  });
   const [outwardTypeFilter, setOutwardTypeFilter] = useState<'ALL' | 'BOM' | 'MANUAL' | 'WASTAGE'>('ALL');
 
   // Drilldown Modal State
@@ -1189,8 +1191,8 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
         </>
       )}
 
-      {/* 3. EXACT STOCK VALUATION LEDGER (INVENTORY TRANSACTIONAL REPORT) */}
-      {reportType === 'transactional' && (
+      {/* 3. EXACT STOCK VALUATION LEDGER (DAILY OPENING & CLOSING REPORT / TRANSACTIONAL LEDGER) */}
+      {(reportType === 'daily-stock' || reportType === 'transactional') && (
         <>
           {/* Top Mode Toggle & Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-white border border-slate-200 shadow-xs">
@@ -1200,13 +1202,17 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
               </div>
               <div>
                 <h3 className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-                  <span>Stock Valuation & Transactional Ledger</span>
+                  <span>
+                    {reportType === 'daily-stock' ? 'Daily Opening & Closing Stock Report' : 'Stock Valuation & Transactional Ledger'}
+                  </span>
                   <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold border border-emerald-300">
                     Live POS Recipe BOM
                   </span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Complete opening stock, inward procurement, recipe BOM outward & net valuation ledger
+                  {reportType === 'daily-stock'
+                    ? 'Complete date-wise opening stock, inward procurement, recipe usage, wastage & closing balance valuation'
+                    : 'Complete opening stock, inward procurement, recipe BOM outward & net valuation ledger'}
                 </p>
               </div>
             </div>
@@ -1240,9 +1246,79 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
             </div>
           </div>
 
-          {/* 4 Summary Valuation KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* 1. Closing Stock Valuation */}
+          {/* 5 Summary Valuation KPI Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+            {/* 1. Opening Stock Valuation */}
+            <div className="p-4 rounded-2xl bg-slate-800 text-white shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between text-xs font-bold text-slate-300 uppercase tracking-wide">
+                  <span>Opening Stock Valuation</span>
+                  <Calendar className="w-4 h-4 text-teal-300" />
+                </div>
+                <div className="text-2xl font-black text-teal-300 mt-2 font-mono">
+                  ৳ {Math.round(stockValuationData.totalOpeningVal).toLocaleString()}
+                </div>
+              </div>
+              <div className="text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-700 flex items-center justify-between">
+                <span>Period-Start Asset Value</span>
+                <span className="font-bold text-teal-200 font-mono">{stockValuationData.rows.length} Items</span>
+              </div>
+            </div>
+
+            {/* 2. Inward Purchases */}
+            <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wide">
+                  <span>Inward Purchases (+)</span>
+                  <ArrowDownRight className="w-4 h-4 text-blue-600" />
+                </div>
+                <div className="text-2xl font-black text-blue-700 mt-2 font-mono">
+                  ৳ {Math.round(stockValuationData.totalPurchasesVal).toLocaleString()}
+                </div>
+              </div>
+              <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+                <span>Received Quantity</span>
+                <span className="font-bold text-blue-700 font-mono">+{stockValuationData.totalPurchasesQty.toFixed(1)} Units</span>
+              </div>
+            </div>
+
+            {/* 3. Auto Recipe BOM Cost */}
+            <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wide">
+                  <span>POS Recipe Used (-)</span>
+                  <ArrowUpRight className="w-4 h-4 text-amber-600" />
+                </div>
+                <div className="text-2xl font-black text-amber-600 mt-2 font-mono">
+                  ৳ {Math.round(stockValuationData.totalBomVal).toLocaleString()}
+                </div>
+              </div>
+              <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+                <span>Via POS Sales</span>
+                <span className="font-bold text-amber-700 font-mono">-{stockValuationData.totalBomQty.toFixed(1)} Units</span>
+              </div>
+            </div>
+
+            {/* 4. Wastage & Alerts */}
+            <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wide">
+                  <span>Wastage & Loss (-)</span>
+                  <AlertTriangle className="w-4 h-4 text-rose-600" />
+                </div>
+                <div className="text-2xl font-black text-rose-700 mt-2 font-mono">
+                  ৳ {Math.round(stockValuationData.totalWastageVal).toLocaleString()}
+                </div>
+              </div>
+              <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+                <span>Alerts in Storeroom</span>
+                <span className="font-bold text-rose-600">
+                  {stockValuationData.lowStockCount} Low / {stockValuationData.negativeStockCount} Negative
+                </span>
+              </div>
+            </div>
+
+            {/* 5. Closing Stock Valuation */}
             <div className="p-4 rounded-2xl bg-slate-900 text-white shadow-xs flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wide">
@@ -1256,59 +1332,6 @@ export const InventoryReports: React.FC<SubReportProps> = ({ reportType }) => {
               <div className="text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-800 flex items-center justify-between">
                 <span>Total On-Hand Asset Value</span>
                 <span className="font-bold text-amber-300 font-mono">{stockValuationData.rows.length} Items</span>
-              </div>
-            </div>
-
-            {/* 2. Inward Purchases */}
-            <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wide">
-                  <span>Inward Received Purchases</span>
-                  <ArrowDownRight className="w-4 h-4 text-blue-600" />
-                </div>
-                <div className="text-2xl font-black text-blue-700 mt-2 font-mono">
-                  ৳ {Math.round(stockValuationData.totalPurchasesVal).toLocaleString()}
-                </div>
-              </div>
-              <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
-                <span>Received Quantity In Period</span>
-                <span className="font-bold text-blue-700 font-mono">+{stockValuationData.totalPurchasesQty.toFixed(1)} Units</span>
-              </div>
-            </div>
-
-            {/* 3. Auto Recipe BOM Cost */}
-            <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wide">
-                  <span>Auto Recipe (BOM) Cost</span>
-                  <ArrowUpRight className="w-4 h-4 text-amber-600" />
-                </div>
-                <div className="text-2xl font-black text-amber-600 mt-2 font-mono">
-                  ৳ {Math.round(stockValuationData.totalBomVal).toLocaleString()}
-                </div>
-              </div>
-              <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
-                <span>Auto Deducted via POS Sales</span>
-                <span className="font-bold text-amber-700 font-mono">-{stockValuationData.totalBomQty.toFixed(1)} Units</span>
-              </div>
-            </div>
-
-            {/* 4. Wastage & Alerts */}
-            <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wide">
-                  <span>Wastage & Stock Alerts</span>
-                  <AlertTriangle className="w-4 h-4 text-rose-600" />
-                </div>
-                <div className="text-2xl font-black text-rose-700 mt-2 font-mono">
-                  ৳ {Math.round(stockValuationData.totalWastageVal).toLocaleString()}
-                </div>
-              </div>
-              <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
-                <span>Alerts in Storeroom</span>
-                <span className="font-bold text-rose-600">
-                  {stockValuationData.lowStockCount} Low / {stockValuationData.negativeStockCount} Negative
-                </span>
               </div>
             </div>
           </div>
