@@ -647,21 +647,14 @@ export const PrintersConfigView: React.FC = () => {
 
                 {/* Specific Routed Dishes if filtered */}
                 {(printer.itemIds || []).length > 0 && (
-                  <div className="space-y-1 my-1.5">
-                    <div className="text-[10px] font-bold text-amber-800 flex items-center gap-1">
-                      <ChefHat className="w-2.5 h-2.5 text-amber-600" />
-                      <span>Specific Filtered Dishes ({printer.itemIds.length}):</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto">
-                      {printer.itemIds.map(id => {
-                        const m = (data.menuItems || []).find(it => it.id === id);
-                        return m ? (
-                          <span key={id} className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200 text-[10px] font-semibold">
-                            {m.name}
-                          </span>
-                        ) : null;
-                      })}
-                    </div>
+                  <div className="my-1.5 flex items-center">
+                    <span 
+                      className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-200 flex items-center gap-1"
+                      title={`${printer.itemIds.length} specific dishes filtered. Click Edit to view or modify.`}
+                    >
+                      <ChefHat className="w-3 h-3 text-amber-600" />
+                      <span>Specific Filtered Dishes ({printer.itemIds.length})</span>
+                    </span>
                   </div>
                 )}
 
