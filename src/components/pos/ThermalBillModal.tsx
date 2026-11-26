@@ -106,8 +106,10 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
         return false;
       });
 
+      const resolvedId = menuObj?.id != null ? Number(menuObj.id) : (item.id != null ? Number(item.id) : undefined);
       return {
         ...item,
+        id: (resolvedId !== undefined && !isNaN(resolvedId)) ? resolvedId : item.id,
         name: itemName || 'Item',
         qty: item.qty || 1,
         price: item.price || 0,
@@ -310,7 +312,13 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
             showWaiter: activeTemplate?.showWaiter !== false,
             paperWidth: activeTemplate?.paperWidth || '80mm',
             items: displayedItems
-              .filter(i => isDepartmentKotActive(i.department || 'Main Kitchen', templates))
+              .filter(i => {
+                if (!isDepartmentKotActive(i.department || 'Main Kitchen', templates)) return false;
+                if (Array.isArray(activePrinter?.itemIds) && activePrinter.itemIds.length > 0) {
+                  return i.id != null && activePrinter.itemIds.includes(Number(i.id));
+                }
+                return true;
+              })
               .map(i => ({
                 name: i.name,
                 qty: i.qty,
@@ -323,8 +331,14 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
         : (selectedDeptFilter === 'SPLIT_ALL')
           ? (activeOrderDepartments.length > 0 
               ? activeOrderDepartments.map(dept => {
-                  const deptItems = enrichedItems.filter(i => i.department === dept);
                   const deptPrinter = getPrinterForDept(dept);
+                  const deptItems = enrichedItems.filter(i => {
+                    if (i.department !== dept) return false;
+                    if (Array.isArray(deptPrinter?.itemIds) && deptPrinter.itemIds.length > 0) {
+                      return i.id != null && deptPrinter.itemIds.includes(Number(i.id));
+                    }
+                    return true;
+                  });
                   const deptTemplate = templates.find(t => t.isActive && (t.templateType === 'KOT' || t.templateType === 'BOTH') && t.departments?.includes(dept)) || activeTemplate;
                   return {
                     station: dept,
@@ -350,15 +364,22 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
                   showPrices,
                   showWaiter: activeTemplate?.showWaiter !== false,
                   paperWidth: activeTemplate?.paperWidth || '80mm',
-                  items: displayedItems.map(i => ({
-                    name: i.name,
-                    qty: i.qty,
-                    price: Number(i.price || 0),
-                    variation: i.selectedVariation?.name,
-                    addons: i.selectedAddons?.map(a => a.name),
-                    notes: i.notes
-                  }))
-                }]
+                  items: displayedItems
+                    .filter(i => {
+                      if (Array.isArray(activePrinter?.itemIds) && activePrinter.itemIds.length > 0) {
+                        return i.id != null && activePrinter.itemIds.includes(Number(i.id));
+                      }
+                      return true;
+                    })
+                    .map(i => ({
+                      name: i.name,
+                      qty: i.qty,
+                      price: Number(i.price || 0),
+                      variation: i.selectedVariation?.name,
+                      addons: i.selectedAddons?.map(a => a.name),
+                      notes: i.notes
+                    }))
+                }].filter(s => s.items.length > 0)
               : []);
 
       if (slipsToPrint.length === 0) {
