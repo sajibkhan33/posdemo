@@ -190,8 +190,8 @@ export const PrintTemplatesConfigView: React.FC = () => {
       showDateTime,
       showPricesOnKot: Boolean(showPricesOnKot),
       showTotalPriceOnKot: Boolean(showTotalPriceOnKot),
-      combineAllStationsOnKot: Boolean(combineAllStationsOnKot),
-      showItemDepartmentOnKot: Boolean(showItemDepartmentOnKot),
+      combineAllStationsOnKot: Boolean(isDefault && combineAllStationsOnKot),
+      showItemDepartmentOnKot: Boolean(isDefault && combineAllStationsOnKot && showItemDepartmentOnKot),
       showNotes,
       fontSize,
       footerMessage: footerMessage.trim(),
@@ -443,7 +443,7 @@ export const PrintTemplatesConfigView: React.FC = () => {
                     <span>Font Size:</span>
                     <span className="font-bold text-slate-800 uppercase">{template.fontSize || 'base'}</span>
                   </div>
-                  {template.combineAllStationsOnKot && (
+                  {template.isDefault && template.combineAllStationsOnKot && (
                     <div className="flex justify-between items-center text-teal-800 bg-teal-50 px-2 py-0.5 rounded text-[10px] font-bold border border-teal-200">
                       <span>Ticket Mode:</span>
                       <span>Single Combined Slip</span>
@@ -809,20 +809,17 @@ export const PrintTemplatesConfigView: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Single Consolidated Ticket Toggle for KOT */}
-                {(templateType === 'KOT' || templateType === 'BOTH') && (
+                {/* Single Consolidated Ticket Toggle for KOT (Only available on Primary Default Template) */}
+                {(templateType === 'KOT' || templateType === 'BOTH') && isDefault && (
                   <div className="p-3 bg-linear-to-r from-emerald-50/70 via-teal-50/40 to-slate-50 border border-emerald-200/80 rounded-xl space-y-2 shadow-2xs">
-                    <label className="flex items-start gap-2.5 cursor-pointer">
+                    <label className="flex items-center gap-2.5 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={combineAllStationsOnKot}
                         onChange={e => setCombineAllStationsOnKot(e.target.checked)}
-                        className="mt-0.5 w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                        className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
                       />
-                      <div>
-                        <span className="text-xs font-bold text-slate-800">Combine all kitchen departments into 1 single ticket</span>
-                        <p className="text-[11px] text-slate-500 leading-tight mt-0.5">এক টিকেটে সব খাবার প্রিন্ট (কাগজ কাটা ছাড়া সব কিচেনের খাবার একটিমাত্র KOT স্লিপে প্রিন্ট হবে)</p>
-                      </div>
+                      <span className="text-xs font-bold text-slate-800">Combine all kitchen departments into 1 single ticket</span>
                     </label>
 
                     {combineAllStationsOnKot && (
@@ -838,7 +835,6 @@ export const PrintTemplatesConfigView: React.FC = () => {
                             Show Department tag beside dish name (e.g. [Beverage], [Tea])
                           </span>
                         </label>
-                        <p className="text-[10px] text-slate-500 pl-5.5 mt-0.5">টিক দিলে আইটেমের পাশে তার ডিপার্টমেন্ট [ডিপার্টমেন্ট নাম] ব্র্যাকেটে শো করবে, আনটিক থাকলে শুধু আইটেমের নাম প্রিন্ট হবে।</p>
                       </div>
                     )}
                   </div>

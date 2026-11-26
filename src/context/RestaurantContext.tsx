@@ -5218,7 +5218,10 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }>();
 
       for (const r of routedItems) {
-        const isCombined = Boolean(r.template?.combineAllStationsOnKot || defaultPrimaryKotTemplate?.combineAllStationsOnKot);
+        const isCombined = Boolean(
+          (defaultPrimaryKotTemplate?.isDefault && defaultPrimaryKotTemplate?.combineAllStationsOnKot) ||
+          (r.template?.isDefault && r.template?.combineAllStationsOnKot)
+        );
         const key = isCombined
           ? `${r.printerName || 'default'}_combined`
           : `${r.printerName || 'default'}_${r.station}_${r.template.id}`;
@@ -6379,7 +6382,10 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }>();
 
       for (const r of routedUnprinted) {
-        const isCombined = Boolean(r.template?.combineAllStationsOnKot || defaultPrimaryKotTemplate?.combineAllStationsOnKot);
+        const isCombined = Boolean(
+          (defaultPrimaryKotTemplate?.isDefault && defaultPrimaryKotTemplate?.combineAllStationsOnKot) ||
+          (r.template?.isDefault && r.template?.combineAllStationsOnKot)
+        );
         const key = isCombined
           ? `${r.printerName || 'default'}_combined`
           : `${r.printerName || 'default'}_${r.station}_${r.template.id}`;
