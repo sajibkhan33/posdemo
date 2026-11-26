@@ -111,6 +111,7 @@ export interface PrintTemplate {
   showPrices?: boolean;
   showTotalPriceOnKot?: boolean;
   combineAllStationsOnKot?: boolean;
+  showItemDepartmentOnKot?: boolean;
   showNotes: boolean;
   fontSize: 'sm' | 'base' | 'lg';
   footerMessage?: string; // e.g. "Thank you for dining with us!", "⚡ Fast Kitchen Dispatch"

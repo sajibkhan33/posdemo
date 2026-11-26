@@ -4159,6 +4159,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       showPricesOnKot: Boolean(tpl.showPricesOnKot),
       showTotalPriceOnKot: Boolean(tpl.showTotalPriceOnKot),
       combineAllStationsOnKot: Boolean(tpl.combineAllStationsOnKot),
+      showItemDepartmentOnKot: Boolean(tpl.showItemDepartmentOnKot),
       isActive: tpl.isActive !== undefined ? tpl.isActive : true
     };
     lastLocalEditTimeRef.current = Date.now();
@@ -5224,7 +5225,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
         if (!stationMap.has(key)) {
           stationMap.set(key, {
-            station: isCombined ? (defaultPrimaryKotTemplate?.headerTitle || 'MASTER KOT') : r.station,
+            station: isCombined ? 'MASTER KOT (ALL STATIONS)' : r.station,
             template: isCombined ? (defaultPrimaryKotTemplate || r.template) : r.template,
             printerName: r.printerName,
             items: []
@@ -5241,6 +5242,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const showCustomer = Boolean(tpl?.showCustomer ?? defaultPrimaryKotTemplate?.showCustomer);
         const showDateTime = tpl?.showDateTime !== false;
         const paperWidth = tpl?.paperWidth || defaultPrimaryKotTemplate?.paperWidth || '80mm';
+        const showDeptTag = Boolean(tpl?.showItemDepartmentOnKot);
 
         return {
           station: group.station,
@@ -5252,7 +5254,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           showDateTime,
           paperWidth,
           items: group.items.map(i => ({
-            name: i.name,
+            name: (showDeptTag && i.department) ? `${i.name} [${i.department}]` : i.name,
             qty: i.qty,
             price: Number(i.price || 0),
             variation: i.selectedVariation?.name,
@@ -6384,7 +6386,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
         if (!unprintedStationMap.has(key)) {
           unprintedStationMap.set(key, {
-            station: isCombined ? (defaultPrimaryKotTemplate?.headerTitle || 'MASTER KOT') : r.station,
+            station: isCombined ? 'MASTER KOT (ALL STATIONS)' : r.station,
             template: isCombined ? (defaultPrimaryKotTemplate || r.template) : r.template,
             printerName: r.printerName,
             items: []
@@ -6395,6 +6397,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       const slipsToPrint = Array.from(unprintedStationMap.values()).map(group => {
         const tpl = group.template;
+        const showDeptTag = Boolean(tpl?.showItemDepartmentOnKot);
         return {
           station: group.station,
           targetPrinterName: group.printerName,
@@ -6405,7 +6408,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           showDateTime: tpl?.showDateTime !== false,
           paperWidth: tpl?.paperWidth || defaultPrimaryKotTemplate?.paperWidth || '80mm',
           items: group.items.map(i => ({
-            name: i.name,
+            name: (showDeptTag && i.department) ? `${i.name} [${i.department}]` : i.name,
             qty: i.unsentQty > 0 ? i.unsentQty : i.qty,
             price: Number(i.price || 0),
             variation: i.selectedVariation?.name,

@@ -79,6 +79,7 @@ export const PrintTemplatesConfigView: React.FC = () => {
   const [showPricesOnKot, setShowPricesOnKot] = useState(true);
   const [showTotalPriceOnKot, setShowTotalPriceOnKot] = useState(false);
   const [combineAllStationsOnKot, setCombineAllStationsOnKot] = useState(false);
+  const [showItemDepartmentOnKot, setShowItemDepartmentOnKot] = useState(false);
   const [showNotes, setShowNotes] = useState(true);
   const [fontSize, setFontSize] = useState<'sm' | 'base' | 'lg'>('base');
   const [footerMessage, setFooterMessage] = useState('⚡ Fast Kitchen Dispatch Required');
@@ -111,6 +112,7 @@ export const PrintTemplatesConfigView: React.FC = () => {
     setShowPricesOnKot(base ? Boolean(base.showPricesOnKot) : true);
     setShowTotalPriceOnKot(base ? Boolean(base.showTotalPriceOnKot) : false);
     setCombineAllStationsOnKot(base ? Boolean(base.combineAllStationsOnKot) : false);
+    setShowItemDepartmentOnKot(base ? Boolean(base.showItemDepartmentOnKot) : false);
     setShowNotes(base ? base.showNotes !== false : true);
     setFontSize(base?.fontSize || 'base');
     const currentRestName = profile?.name || 'Restaurant POS';
@@ -146,6 +148,7 @@ export const PrintTemplatesConfigView: React.FC = () => {
     setShowPricesOnKot(Boolean(t.showPricesOnKot));
     setShowTotalPriceOnKot(Boolean(t.showTotalPriceOnKot));
     setCombineAllStationsOnKot(Boolean(t.combineAllStationsOnKot));
+    setShowItemDepartmentOnKot(Boolean(t.showItemDepartmentOnKot));
     setShowNotes(t.showNotes !== false);
     setFontSize(t.fontSize || 'base');
     setFooterMessage(t.footerMessage || '');
@@ -188,6 +191,7 @@ export const PrintTemplatesConfigView: React.FC = () => {
       showPricesOnKot: Boolean(showPricesOnKot),
       showTotalPriceOnKot: Boolean(showTotalPriceOnKot),
       combineAllStationsOnKot: Boolean(combineAllStationsOnKot),
+      showItemDepartmentOnKot: Boolean(showItemDepartmentOnKot),
       showNotes,
       fontSize,
       footerMessage: footerMessage.trim(),
@@ -807,7 +811,7 @@ export const PrintTemplatesConfigView: React.FC = () => {
 
                 {/* Single Consolidated Ticket Toggle for KOT */}
                 {(templateType === 'KOT' || templateType === 'BOTH') && (
-                  <div className="p-3 bg-linear-to-r from-emerald-50/70 via-teal-50/40 to-slate-50 border border-emerald-200/80 rounded-xl space-y-1 shadow-2xs">
+                  <div className="p-3 bg-linear-to-r from-emerald-50/70 via-teal-50/40 to-slate-50 border border-emerald-200/80 rounded-xl space-y-2 shadow-2xs">
                     <label className="flex items-start gap-2.5 cursor-pointer">
                       <input
                         type="checkbox"
@@ -820,6 +824,23 @@ export const PrintTemplatesConfigView: React.FC = () => {
                         <p className="text-[11px] text-slate-500 leading-tight mt-0.5">এক টিকেটে সব খাবার প্রিন্ট (কাগজ কাটা ছাড়া সব কিচেনের খাবার একটিমাত্র KOT স্লিপে প্রিন্ট হবে)</p>
                       </div>
                     </label>
+
+                    {combineAllStationsOnKot && (
+                      <div className="pt-2 pl-6 border-t border-emerald-100">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={showItemDepartmentOnKot}
+                            onChange={e => setShowItemDepartmentOnKot(e.target.checked)}
+                            className="w-3.5 h-3.5 rounded text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <span className="text-xs font-bold text-slate-700">
+                            Show Department tag beside dish name (e.g. [Beverage], [Tea])
+                          </span>
+                        </label>
+                        <p className="text-[10px] text-slate-500 pl-5.5 mt-0.5">টিক দিলে আইটেমের পাশে তার ডিপার্টমেন্ট [ডিপার্টমেন্ট নাম] ব্র্যাকেটে শো করবে, আনটিক থাকলে শুধু আইটেমের নাম প্রিন্ট হবে।</p>
+                      </div>
+                    )}
                   </div>
                 )}
 

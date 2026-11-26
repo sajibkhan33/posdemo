@@ -323,7 +323,7 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
                 return true;
               })
               .map(i => ({
-                name: i.name,
+                name: (activeTemplate?.showItemDepartmentOnKot && i.department) ? `${i.name} [${i.department}]` : i.name,
                 qty: i.qty,
                 price: Number(i.price || 0),
                 variation: i.selectedVariation?.name,
