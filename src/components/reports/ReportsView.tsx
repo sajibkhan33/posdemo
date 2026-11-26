@@ -13,6 +13,7 @@ import { KitchenDepartmentSalesReport } from './KitchenDepartmentSalesReport';
 import { 
   BarChart3, 
   Boxes, 
+  ArrowDownRight,
   ShoppingCart, 
   Users, 
   FileText, 
