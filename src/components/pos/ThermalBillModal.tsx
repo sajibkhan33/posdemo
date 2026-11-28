@@ -233,6 +233,7 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
 
 
   const handlePrint = async () => {
+    if (!printableReceipt) return;
     setIsPrinting(true);
     setHardwarePrintStatus(null);
 
