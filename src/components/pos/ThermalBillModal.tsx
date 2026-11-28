@@ -20,7 +20,7 @@ import {
   RefreshCw,
   Download
 } from 'lucide-react';
-import { PrinterConfig, PrintTemplate, ThermalPaperWidth } from '../../types';
+import { PrinterConfig, PrintTemplate, ThermalPaperWidth, TableCartItem } from '../../types';
 import { dispatchHardwarePrint } from '../../utils/hardwarePrint';
 
 export const ThermalBillModal: React.FC = () => {
@@ -356,7 +356,7 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
                       qty: i.qty,
                       price: Number(i.price || 0),
                       variation: i.selectedVariation?.name,
-                      addons: i.selectedAddons?.map(a => a.name),
+                      addons: i.selectedAddons?.map((a: any) => a.name),
                       notes: i.notes
                     }))
                   };
@@ -381,7 +381,7 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
                       qty: i.qty,
                       price: Number(i.price || 0),
                       variation: i.selectedVariation?.name,
-                      addons: i.selectedAddons?.map(a => a.name),
+                      addons: i.selectedAddons?.map((a: any) => a.name),
                       notes: i.notes
                     }))
                 }].filter(s => s.items.length > 0)
@@ -794,12 +794,12 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
           }
         });
       } else {
-        if (pb.advance && pb.advance > 0) lines.push(line2Col('Advance Adjusted:', Number(pb.advance).toFixed(2), width));
-        if (pb.cash > 0) lines.push(line2Col('Cash Paid:', Number(pb.cash).toFixed(2), width));
-        if (pb.card > 0) lines.push(line2Col('Card Paid:', Number(pb.card).toFixed(2), width));
-        if (pb.bkash > 0) lines.push(line2Col('bKash Paid:', Number(pb.bkash).toFixed(2), width));
-        if (pb.nagad > 0) lines.push(line2Col('Nagad Paid:', Number(pb.nagad).toFixed(2), width));
-        if (pb.due > 0) lines.push(line2Col('Due / Credit:', Number(pb.due).toFixed(2), width));
+        if (pb.advance && Number(pb.advance) > 0) lines.push(line2Col('Advance Adjusted:', Number(pb.advance).toFixed(2), width));
+        if (Number(pb.cash || 0) > 0) lines.push(line2Col('Cash Paid:', Number(pb.cash).toFixed(2), width));
+        if (Number(pb.card || 0) > 0) lines.push(line2Col('Card Paid:', Number(pb.card).toFixed(2), width));
+        if (Number(pb.bkash || 0) > 0) lines.push(line2Col('bKash Paid:', Number(pb.bkash).toFixed(2), width));
+        if (Number(pb.nagad || 0) > 0) lines.push(line2Col('Nagad Paid:', Number(pb.nagad).toFixed(2), width));
+        if (Number(pb.due || 0) > 0) lines.push(line2Col('Due / Credit:', Number(pb.due).toFixed(2), width));
       }
       if (printableReceipt.changeReturn && printableReceipt.changeReturn > 0) {
         lines.push(line2Col('Change Return:', Number(printableReceipt.changeReturn).toFixed(2), width));
