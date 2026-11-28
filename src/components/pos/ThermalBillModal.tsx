@@ -77,18 +77,19 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
   const enrichedItems = useMemo(() => {
     if (!printableReceipt) return [];
 
-    const rawItems = (printableReceipt.receiptType === 'CANCEL_KOT' && printableReceipt.cancelledItems)
-      ? printableReceipt.cancelledItems.map((c, i) => ({
+    const rawItems: TableCartItem[] = (printableReceipt.receiptType === 'CANCEL_KOT' && printableReceipt.cancelledItems)
+      ? printableReceipt.cancelledItems.map((c, i): TableCartItem => ({
           id: i + 9000,
           name: c?.name || 'Cancelled Item',
           price: c?.price || 0,
           qty: c?.qty || 1,
           department: c?.department || 'Main Kitchen',
+          category: (c as any)?.category,
           notes: c?.reason ? `Reason: ${c.reason}` : undefined,
           selectedVariation: undefined,
           selectedAddons: undefined
         }))
-      : (Array.isArray(printableReceipt.items) ? printableReceipt.items : []);
+      : (Array.isArray(printableReceipt.items) ? (printableReceipt.items as TableCartItem[]) : []);
 
     const menuCatalog = Array.isArray(data?.menuItems) ? data.menuItems : [];
 
@@ -114,7 +115,7 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
         qty: item.qty || 1,
         price: item.price || 0,
         department: item.department || menuObj?.department || 'Main Kitchen',
-        category: item.category || menuObj?.category || 'Appetizers & Soup'
+        category: (item as any)?.category || menuObj?.category || 'Appetizers & Soup'
       };
     });
   }, [printableReceipt, data?.menuItems]);
@@ -895,6 +896,7 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
     ticketIndex?: number,
     totalTickets?: number
   ) => {
+    if (!printableReceipt) return null;
     return (
       <div>
         {/* Clean, Uniform KOT Header */}
