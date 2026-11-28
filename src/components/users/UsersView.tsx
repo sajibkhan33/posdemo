@@ -16,7 +16,8 @@ import {
   Save,
   AlertTriangle,
   Search,
-  X
+  X,
+  ChevronDown
 } from 'lucide-react';
 
 const ROLE_DEFINITIONS: Array<{ role: UserRole; title: string; desc: string; color: string }> = [
@@ -61,6 +62,7 @@ export const UsersView: React.FC = () => {
 
   const [activeSubTab, setActiveSubTab] = useState<'users' | 'roles'>('users');
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
+  const [isFloorDropdownOpen, setIsFloorDropdownOpen] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<'ALL' | UserRole>('ALL');
@@ -119,6 +121,7 @@ export const UsersView: React.FC = () => {
       canEditSubmittedOrders: false,
       assignedZones: []
     });
+    setIsFloorDropdownOpen(false);
     setEditingUserId(null);
     setIsAddUserModalOpen(true);
   };
@@ -135,6 +138,7 @@ export const UsersView: React.FC = () => {
       canEditSubmittedOrders: user.canEditSubmittedOrders ?? (user.role === 'ADMIN' || user.role === 'MANAGER' || user.role === 'CASHIER'),
       assignedZones: user.assignedZones || []
     });
+    setIsFloorDropdownOpen(false);
     setEditingUserId(user.id);
     setIsAddUserModalOpen(true);
   };
@@ -885,69 +889,86 @@ export const UsersView: React.FC = () => {
                 </select>
               </div>
 
-              {/* Assigned Floor Zones Selection */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-bold text-slate-700">
-                    🏢 Assigned Floor Zones (ফ্লোর অ্যাক্সেস)
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFormData(prev => ({ ...prev, assignedZones: [] }));
-                    }}
-                    className={`text-[11px] font-bold px-2 py-0.5 rounded transition ${
-                      formData.assignedZones.length === 0
-                        ? 'bg-blue-600 text-white shadow-2xs'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    All Floors (সব ফ্লোর)
-                  </button>
-                </div>
-                <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                  <div className="text-[11px] text-slate-500">
-                    {formData.assignedZones.length === 0 ? (
-                      <span className="text-blue-700 font-semibold">
-                        ✓ এই স্টাফ সব ফ্লোরের টেবিল ও অর্ডার দেখতে এবং বিল করতে পারবে।
-                      </span>
-                    ) : (
-                      <span className="text-indigo-700 font-semibold">
-                        🔒 নির্দিষ্ট ফ্লোরে সীমাবদ্ধ ({formData.assignedZones.length}টি ফ্লোর সিলেক্টেড)
+              {/* Compact Assigned Floor Zones Multi-select Dropdown */}
+              <div className="relative">
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Assigned Floor Zones
+                </label>
+                <div
+                  onClick={() => setIsFloorDropdownOpen(!isFloorDropdownOpen)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white hover:border-slate-400 cursor-pointer flex items-center justify-between transition focus:ring-2 focus:ring-purple-500 select-none shadow-2xs"
+                >
+                  <span className="font-semibold truncate text-slate-800">
+                    {formData.assignedZones.length === 0
+                      ? 'All Floors (Unrestricted)'
+                      : formData.assignedZones.join(', ')}
+                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                    {formData.assignedZones.length > 0 && (
+                      <span className="px-1.5 py-0.2 rounded-full bg-purple-100 text-purple-700 font-extrabold text-[10px]">
+                        {formData.assignedZones.length}
                       </span>
                     )}
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {allConfiguredZones.map(zone => {
-                      const isSelected = formData.assignedZones.includes(zone);
-                      return (
-                        <button
-                          key={zone}
-                          type="button"
-                          onClick={() => {
-                            setFormData(prev => {
-                              const current = prev.assignedZones;
-                              const exists = current.includes(zone);
-                              if (exists) {
-                                return { ...prev, assignedZones: current.filter(z => z !== zone) };
-                              } else {
-                                return { ...prev, assignedZones: [...current, zone] };
-                              }
-                            });
-                          }}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition flex items-center gap-1.5 ${
-                            isSelected
-                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
-                              : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-                          }`}
-                        >
-                          <span>{isSelected ? '✓' : '+'}</span>
-                          <span>{zone}</span>
-                        </button>
-                      );
-                    })}
+                    <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${isFloorDropdownOpen ? 'rotate-180' : ''}`} />
                   </div>
                 </div>
+
+                {/* Dropdown Menu with Checkboxes */}
+                {isFloorDropdownOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-20"
+                      onClick={() => setIsFloorDropdownOpen(false)}
+                    />
+                    <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl z-30 p-1.5 space-y-0.5 max-h-52 overflow-y-auto">
+                      <label
+                        className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer transition select-none"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={formData.assignedZones.length === 0}
+                          onChange={() => {
+                            setFormData(prev => ({ ...prev, assignedZones: [] }));
+                          }}
+                          className="w-3.5 h-3.5 rounded border-slate-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                        />
+                        <span className="text-xs font-bold text-slate-800">
+                          All Floors (Unrestricted)
+                        </span>
+                      </label>
+                      <div className="border-t border-slate-100 my-1" />
+                      {allConfiguredZones.map(zone => {
+                        const isChecked = formData.assignedZones.includes(zone);
+                        return (
+                          <label
+                            key={zone}
+                            className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer transition select-none"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                setFormData(prev => {
+                                  const current = prev.assignedZones;
+                                  const exists = current.includes(zone);
+                                  if (exists) {
+                                    return { ...prev, assignedZones: current.filter(z => z !== zone) };
+                                  } else {
+                                    return { ...prev, assignedZones: [...current, zone] };
+                                  }
+                                });
+                              }}
+                              className="w-3.5 h-3.5 rounded border-slate-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                            />
+                            <span className="text-xs font-medium text-slate-700">
+                              {zone}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="flex items-center gap-2 pt-2">
