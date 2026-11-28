@@ -706,6 +706,7 @@ export interface AppUser {
   isActive: boolean;
   phone?: string;
   canEditSubmittedOrders?: boolean;
+  assignedZones?: string[]; // Allowed Floor Zones (e.g. ['Floor 1'], ['Floor 2'], or empty/undefined for All Floors)
 }
 
 export interface RestaurantProfile {

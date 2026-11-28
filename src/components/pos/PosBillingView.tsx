@@ -181,7 +181,31 @@ export const PosBillingView: React.FC = () => {
     finishLinkedOrderInPos
   } = useRestaurant();
 
-  const activeTable = data.tables?.find(t => t.id === activeTableId) || data.tables?.[0];
+  // User Floor Zone Restriction (Admin has full access; staff can be restricted to specific zones)
+  const userAllowedZones = useMemo(() => {
+    if (currentUser?.role === 'ADMIN' || !currentUser?.assignedZones || currentUser.assignedZones.length === 0) {
+      return null; // Unrestricted access to all floors
+    }
+    return currentUser.assignedZones;
+  }, [currentUser]);
+
+  const accessibleTables = useMemo(() => {
+    if (!userAllowedZones) return data.tables || [];
+    return (data.tables || []).filter(t => userAllowedZones.includes(t.zone || 'Floor 1'));
+  }, [data.tables, userAllowedZones]);
+
+  const activeTable = accessibleTables.find(t => t.id === activeTableId) || accessibleTables[0] || data.tables?.[0];
+
+  // Auto-switch activeTableId if the current active table is not in the user's assigned zones
+  useEffect(() => {
+    if (userAllowedZones && accessibleTables.length > 0) {
+      const currentExists = accessibleTables.some(t => t.id === activeTableId);
+      if (!currentExists) {
+        setActiveTableId(accessibleTables[0].id);
+      }
+    }
+  }, [userAllowedZones, accessibleTables, activeTableId, setActiveTableId]);
+
   const isWaiter = currentUser?.role === 'WAITER';
   const hasActiveKotPrinter = Boolean(
     (data.printers || []).some(p => p.isActive && (p.type === 'KOT' || p.type === 'ALL'))
@@ -249,6 +273,11 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
   }, []);
 
   const handleTableCardClick = (table: Table) => {
+    const tableZone = table.zone || 'Floor 1';
+    if (userAllowedZones && !userAllowedZones.includes(tableZone)) {
+      alert(`Access Restricted: You are assigned only to ${userAllowedZones.join(', ')}.`);
+      return;
+    }
     setActiveTableId(table.id);
     if (table.status === 'billed') {
       if (isWaiter) {
@@ -572,9 +601,14 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
     setTimeout(checkCategoryScroll, 300);
   };
 
-  const allZones = data.tableZones && data.tableZones.length > 0 
+  const allBaseZones = data.tableZones && data.tableZones.length > 0 
     ? data.tableZones 
     : ['Floor 1', 'Floor 2', 'VIP Lounge', 'Rooftop Garden'];
+
+  const allZones = useMemo(() => {
+    if (!userAllowedZones) return allBaseZones;
+    return allBaseZones.filter(z => userAllowedZones.includes(z));
+  }, [allBaseZones, userAllowedZones]);
 
 
 
@@ -633,6 +667,9 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
   // Filtered floor plan tables sorted sequentially by floor/zone order and table number
   const filteredTables = data.tables.filter(table => {
     const tableZone = table.zone || 'Floor 1';
+    if (userAllowedZones && !userAllowedZones.includes(tableZone)) {
+      return false;
+    }
     if (selectedFloorZone !== 'ALL' && tableZone !== selectedFloorZone) {
       return false;
     }
@@ -693,11 +730,11 @@ const [nowTime, setNowTime] = useState<number>(() => Date.now());
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               >
-                <span>All Zones</span>
+                <span>{userAllowedZones ? 'Assigned Zones' : 'All Zones'}</span>
                 <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
                   selectedFloorZone === 'ALL' ? 'bg-[#004b9b] text-white font-black' : 'bg-slate-200 text-slate-600'
                 }`}>
-                  {data.tables.length}
+                  {accessibleTables.length}
                 </span>
               </button>
 

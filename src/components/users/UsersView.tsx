@@ -78,6 +78,12 @@ export const UsersView: React.FC = () => {
     });
   }, [usersList, roleFilter, searchQuery]);
 
+  const allConfiguredZones = useMemo(() => {
+    return (data.tableZones && data.tableZones.length > 0)
+      ? data.tableZones
+      : ['Floor 1', 'Floor 2', 'VIP Lounge', 'Rooftop Garden'];
+  }, [data.tableZones]);
+
   // Form State
   const [formData, setFormData] = useState<{
     name: string;
@@ -88,6 +94,7 @@ export const UsersView: React.FC = () => {
     phone: string;
     isActive: boolean;
     canEditSubmittedOrders: boolean;
+    assignedZones: string[];
   }>({
     name: '',
     username: '',
@@ -96,7 +103,8 @@ export const UsersView: React.FC = () => {
     role: 'CASHIER',
     phone: '',
     isActive: true,
-    canEditSubmittedOrders: true
+    canEditSubmittedOrders: true,
+    assignedZones: []
   });
 
   const handleOpenAdd = () => {
@@ -108,7 +116,8 @@ export const UsersView: React.FC = () => {
       role: 'CASHIER',
       phone: '',
       isActive: true,
-      canEditSubmittedOrders: false
+      canEditSubmittedOrders: false,
+      assignedZones: []
     });
     setEditingUserId(null);
     setIsAddUserModalOpen(true);
@@ -123,7 +132,8 @@ export const UsersView: React.FC = () => {
       role: user.role,
       phone: user.phone || '',
       isActive: user.isActive !== false,
-      canEditSubmittedOrders: user.canEditSubmittedOrders ?? (user.role === 'ADMIN' || user.role === 'MANAGER' || user.role === 'CASHIER')
+      canEditSubmittedOrders: user.canEditSubmittedOrders ?? (user.role === 'ADMIN' || user.role === 'MANAGER' || user.role === 'CASHIER'),
+      assignedZones: user.assignedZones || []
     });
     setEditingUserId(user.id);
     setIsAddUserModalOpen(true);
@@ -162,7 +172,8 @@ export const UsersView: React.FC = () => {
         role: formData.role,
         phone: formData.phone.trim(),
         isActive: formData.isActive,
-        canEditSubmittedOrders: formData.canEditSubmittedOrders
+        canEditSubmittedOrders: formData.canEditSubmittedOrders,
+        assignedZones: formData.assignedZones
       });
     } else {
       addUser({
@@ -173,7 +184,8 @@ export const UsersView: React.FC = () => {
         role: formData.role,
         phone: formData.phone.trim(),
         isActive: formData.isActive,
-        canEditSubmittedOrders: formData.canEditSubmittedOrders
+        canEditSubmittedOrders: formData.canEditSubmittedOrders,
+        assignedZones: formData.assignedZones
       });
     }
     setIsAddUserModalOpen(false);
@@ -332,6 +344,7 @@ export const UsersView: React.FC = () => {
                     <th className="py-2.5 px-3">Contact (Phone / Email)</th>
                     <th className="py-2.5 px-3 text-center">Security PIN</th>
                     <th className="py-2.5 px-3 text-center">Modules</th>
+                    <th className="py-2.5 px-3 text-center">Assigned Floors</th>
                     <th className="py-2.5 px-3 text-center">Order Edit / Void</th>
                     <th className="py-2.5 px-3 text-center">Status</th>
                     <th className="py-2.5 px-3 text-right">Actions</th>
@@ -340,7 +353,7 @@ export const UsersView: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 text-xs">
                   {filteredUsers.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="text-center py-8 text-slate-400 text-xs font-semibold">
+                      <td colSpan={9} className="text-center py-8 text-slate-400 text-xs font-semibold">
                         No operators found matching your filter
                       </td>
                     </tr>
@@ -429,7 +442,24 @@ export const UsersView: React.FC = () => {
                             )}
                           </td>
 
-                          {/* 6. Order Edit / Cancel Permission */}
+                          {/* 6. Assigned Floors */}
+                          <td className="py-2 px-3 text-center whitespace-nowrap">
+                            {(!user.assignedZones || user.assignedZones.length === 0) ? (
+                              <span className="text-blue-700 font-extrabold bg-blue-50 px-2 py-0.5 rounded border border-blue-200 text-[10px]">
+                                All Floors
+                              </span>
+                            ) : (
+                              <div className="inline-flex flex-wrap items-center justify-center gap-1 max-w-[170px]">
+                                {user.assignedZones.map(zone => (
+                                  <span key={zone} className="px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 text-[9px] font-bold">
+                                    {zone}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* 7. Order Edit / Cancel Permission */}
                           <td className="py-2 px-3 text-center whitespace-nowrap">
                             <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded ${
                               canEditOrder
@@ -853,6 +883,71 @@ export const UsersView: React.FC = () => {
                   <option value="WAITER">WAITER (Table Orders & KOT)</option>
                   <option value="CHEF">CHEF (Kitchen & Recipe BOM)</option>
                 </select>
+              </div>
+
+              {/* Assigned Floor Zones Selection */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-slate-700">
+                    🏢 Assigned Floor Zones (ফ্লোর অ্যাক্সেস)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, assignedZones: [] }));
+                    }}
+                    className={`text-[11px] font-bold px-2 py-0.5 rounded transition ${
+                      formData.assignedZones.length === 0
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    All Floors (সব ফ্লোর)
+                  </button>
+                </div>
+                <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                  <div className="text-[11px] text-slate-500">
+                    {formData.assignedZones.length === 0 ? (
+                      <span className="text-blue-700 font-semibold">
+                        ✓ এই স্টাফ সব ফ্লোরের টেবিল ও অর্ডার দেখতে এবং বিল করতে পারবে।
+                      </span>
+                    ) : (
+                      <span className="text-indigo-700 font-semibold">
+                        🔒 নির্দিষ্ট ফ্লোরে সীমাবদ্ধ ({formData.assignedZones.length}টি ফ্লোর সিলেক্টেড)
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {allConfiguredZones.map(zone => {
+                      const isSelected = formData.assignedZones.includes(zone);
+                      return (
+                        <button
+                          key={zone}
+                          type="button"
+                          onClick={() => {
+                            setFormData(prev => {
+                              const current = prev.assignedZones;
+                              const exists = current.includes(zone);
+                              if (exists) {
+                                return { ...prev, assignedZones: current.filter(z => z !== zone) };
+                              } else {
+                                return { ...prev, assignedZones: [...current, zone] };
+                              }
+                            });
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition flex items-center gap-1.5 ${
+                            isSelected
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <span>{isSelected ? '✓' : '+'}</span>
+                          <span>{zone}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
 
               <div className="flex items-center gap-2 pt-2">
