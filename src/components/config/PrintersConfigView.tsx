@@ -23,7 +23,8 @@ import {
   Search,
   Sparkles,
   Download,
-  Cpu
+  Cpu,
+  ChevronDown
 } from 'lucide-react';
 import { PrinterBridgeModal } from '../common/PrinterBridgeModal';
 import { dispatchHardwarePrint } from '../../utils/hardwarePrint';
@@ -74,6 +75,8 @@ export const PrintersConfigView: React.FC = () => {
   const [selectedDepts, setSelectedDepts] = useState<string[]>([]);
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
   const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
+  const [isDishDropdownOpen, setIsDishDropdownOpen] = useState(false);
+  const [dishSearchQuery, setDishSearchQuery] = useState('');
   const [isDefault, setIsDefault] = useState(false);
   const [isActive, setIsActive] = useState(true);
   const [printOnBill, setPrintOnBill] = useState(true);
@@ -238,6 +241,8 @@ export const PrintersConfigView: React.FC = () => {
     setSelectedDepts(data.departments || []);
     setSelectedCats([]);
     setSelectedItemIds([]);
+    setIsDishDropdownOpen(false);
+    setDishSearchQuery('');
     setIsDefault(false);
     setIsActive(true);
     setPrintOnBill(true);
@@ -271,6 +276,8 @@ export const PrintersConfigView: React.FC = () => {
     setSelectedDepts(p.departments || []);
     setSelectedCats(p.categories || []);
     setSelectedItemIds(p.itemIds || []);
+    setIsDishDropdownOpen(false);
+    setDishSearchQuery('');
     setIsDefault(Boolean(p.isDefault));
     setIsActive(p.isActive !== false);
     setPrintOnBill(p.printOnBill !== false);
@@ -1176,29 +1183,26 @@ export const PrintersConfigView: React.FC = () => {
                   })}
                 </div>
 
-                {/* Specific Dishes Filter for Selected Categories */}
+                {/* Specific Dishes Filter for Selected Categories - Sleek Compact Dropdown */}
                 {selectedCats.length > 0 && (() => {
                   const matchingItems = (data.menuItems || []).filter(item => selectedCats.includes(item.category));
                   if (matchingItems.length === 0) return null;
 
                   const checkedInMatchingCount = selectedItemIds.filter(id => matchingItems.some(m => m.id === id)).length;
+                  const filteredDishes = matchingItems.filter(item => {
+                    if (!dishSearchQuery.trim()) return true;
+                    const q = dishSearchQuery.toLowerCase().trim();
+                    return item.name.toLowerCase().includes(q) || item.category.toLowerCase().includes(q);
+                  });
 
                   return (
-                    <div className="p-3 bg-amber-50/60 border border-amber-200 rounded-xl space-y-2 mt-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5">
+                    <div className="relative mt-2">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-bold text-slate-700 flex items-center gap-1.5">
                           <ChefHat className="w-3.5 h-3.5 text-amber-600" />
-                          <span className="text-xs font-extrabold text-slate-900">
-                            Specific Dishes Selection
-                          </span>
-                          <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                            {checkedInMatchingCount === 0 
-                              ? `All ${matchingItems.length} Dishes Allowed`
-                              : `${checkedInMatchingCount} of ${matchingItems.length} Filtered`}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-1.5 text-[10px]">
+                          <span>Specific Dishes Routing</span>
+                        </label>
+                        <div className="flex items-center gap-2 text-[11px]">
                           <button
                             type="button"
                             onClick={() => setSelectedItemIds(matchingItems.map(m => m.id))}
@@ -1206,7 +1210,7 @@ export const PrintersConfigView: React.FC = () => {
                           >
                             Select All
                           </button>
-                          <span className="text-amber-300">|</span>
+                          <span className="text-slate-300">|</span>
                           <button
                             type="button"
                             onClick={() => setSelectedItemIds([])}
@@ -1217,41 +1221,121 @@ export const PrintersConfigView: React.FC = () => {
                         </div>
                       </div>
 
-                      <p className="text-[10.5px] text-slate-600 leading-tight">
-                        {checkedInMatchingCount === 0 
-                          ? '👉 Leave unchecked to print every dish in the selected categories, or tick specific dishes below to print ONLY those dishes on this printer.'
-                          : '✓ Only the checked dishes below will be printed on this printer.'}
-                      </p>
-
-                      <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1.5 bg-white border border-amber-200/90 rounded-lg">
-                        {matchingItems.map(item => {
-                          const isItemSelected = selectedItemIds.includes(item.id);
-                          return (
-                            <button
-                              key={item.id}
-                              type="button"
-                              onClick={() => {
-                                setSelectedItemIds(prev =>
-                                  prev.includes(item.id)
-                                    ? prev.filter(id => id !== item.id)
-                                    : [...prev, item.id]
-                                );
-                              }}
-                              className={`px-2 py-1 rounded-md text-[11px] font-semibold border transition flex items-center gap-1 cursor-pointer ${
-                                isItemSelected
-                                  ? 'bg-amber-500 text-white border-amber-600 shadow-2xs'
-                                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-amber-50/70'
-                              }`}
-                            >
-                              <span>{item.name}</span>
-                              <span className={`text-[9px] px-1 py-0.2 rounded font-normal ${isItemSelected ? 'bg-amber-600 text-amber-100' : 'bg-slate-200 text-slate-600'}`}>
-                                {item.category}
-                              </span>
-                              {isItemSelected && <Check className="w-3 h-3 text-white" />}
-                            </button>
-                          );
-                        })}
+                      {/* Dropdown trigger bar */}
+                      <div
+                        onClick={() => setIsDishDropdownOpen(!isDishDropdownOpen)}
+                        className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white hover:border-amber-400 cursor-pointer flex items-center justify-between transition focus:ring-2 focus:ring-amber-500 select-none shadow-2xs"
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          {checkedInMatchingCount === 0 ? (
+                            <span className="font-semibold text-slate-600 truncate">
+                              All Dishes Allowed (No Filter)
+                            </span>
+                          ) : (
+                            <span className="font-bold text-amber-900 truncate">
+                              {checkedInMatchingCount} of {matchingItems.length} Dishes Selected
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black border ${
+                            checkedInMatchingCount === 0 
+                              ? 'bg-slate-100 text-slate-600 border-slate-200' 
+                              : 'bg-amber-100 text-amber-800 border-amber-300'
+                          }`}>
+                            {checkedInMatchingCount === 0 ? `All (${matchingItems.length})` : `${checkedInMatchingCount} Active`}
+                          </span>
+                          <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${isDishDropdownOpen ? 'rotate-180' : ''}`} />
+                        </div>
                       </div>
+
+                      {/* Dropdown Menu popover */}
+                      {isDishDropdownOpen && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-20"
+                            onClick={() => setIsDishDropdownOpen(false)}
+                          />
+                          <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl z-30 p-2 space-y-1.5 max-h-60 overflow-y-auto">
+                            {/* Search inside dishes */}
+                            {matchingItems.length > 6 && (
+                              <div className="relative pb-1">
+                                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                                <input
+                                  type="text"
+                                  value={dishSearchQuery}
+                                  onChange={e => setDishSearchQuery(e.target.value)}
+                                  placeholder="Search dishes..."
+                                  className="w-full pl-8 pr-2.5 py-1 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                  onClick={e => e.stopPropagation()}
+                                />
+                              </div>
+                            )}
+
+                            {/* Option 1: All Dishes / No Filter */}
+                            <label
+                              className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer transition select-none"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checkedInMatchingCount === 0}
+                                onChange={() => setSelectedItemIds([])}
+                                className="w-3.5 h-3.5 rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                              />
+                              <div className="flex flex-col">
+                                <span className="text-xs font-bold text-slate-800">
+                                  All Dishes Allowed (No Filter)
+                                </span>
+                                <span className="text-[10px] text-slate-400">
+                                  Print every dish in selected categories
+                                </span>
+                              </div>
+                            </label>
+
+                            <div className="border-t border-slate-100 my-1" />
+
+                            {/* Dishes List with Checkboxes */}
+                            <div className="space-y-0.5">
+                              {filteredDishes.length === 0 ? (
+                                <div className="text-center py-3 text-xs text-slate-400">
+                                  No dishes match &quot;{dishSearchQuery}&quot;
+                                </div>
+                              ) : (
+                                filteredDishes.map(item => {
+                                  const isChecked = selectedItemIds.includes(item.id);
+                                  return (
+                                    <label
+                                      key={item.id}
+                                      className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg hover:bg-amber-50/60 cursor-pointer transition select-none"
+                                    >
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <input
+                                          type="checkbox"
+                                          checked={isChecked}
+                                          onChange={() => {
+                                            setSelectedItemIds(prev =>
+                                              prev.includes(item.id)
+                                                ? prev.filter(id => id !== item.id)
+                                                : [...prev, item.id]
+                                            );
+                                          }}
+                                          className="w-3.5 h-3.5 rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                                        />
+                                        <span className="text-xs font-medium text-slate-700 truncate">
+                                          {item.name}
+                                        </span>
+                                      </div>
+                                      <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 text-[9px] font-semibold shrink-0">
+                                        {item.category}
+                                      </span>
+                                    </label>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   );
                 })()}
