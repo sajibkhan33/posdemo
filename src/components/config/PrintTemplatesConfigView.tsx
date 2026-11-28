@@ -208,13 +208,13 @@ export const PrintTemplatesConfigView: React.FC = () => {
       if ((templateType === 'KOT' || templateType === 'BOTH') && isDefault) {
         setAllKotShowPrices(Boolean(showPricesOnKot));
       }
-      showToast(language === 'bn' ? 'সফলভাবে টেমপ্লেট সেটিংস আপডেট ও সংরক্ষণ করা হয়েছে!' : 'Template settings updated and saved successfully!');
+      showToast('Template settings updated and saved successfully!');
     } else {
       addPrintTemplate(payload);
       if ((templateType === 'KOT' || templateType === 'BOTH') && isDefault) {
         setAllKotShowPrices(Boolean(showPricesOnKot));
       }
-      showToast(language === 'bn' ? 'নতুন টেমপ্লেট সফলভাবে তৈরি এবং কার্যকর করা হয়েছে!' : 'New template created and set as active!');
+      showToast('New template created and set as active!');
     }
 
     setIsModalOpen(false);
@@ -223,7 +223,7 @@ export const PrintTemplatesConfigView: React.FC = () => {
   // Delete Template
   const handleDelete = (id: string) => {
     deletePrintTemplate(id);
-    showToast(language === 'bn' ? 'টেমপ্লেট মুছে ফেলা হয়েছে' : 'Template deleted');
+    showToast('Template deleted');
   };
 
   // Duplicate
@@ -265,9 +265,7 @@ export const PrintTemplatesConfigView: React.FC = () => {
                 Bill & KOT Template Builder
               </h3>
               <p className="text-xs text-slate-500">
-                {language === 'bn'
-                  ? 'রান্নাঘরের KOT ও কাস্টমার বিল স্লিপের সেটিংস এবং মূল্য প্রদর্শন কনফিগার করুন'
-                  : 'Design, edit, and configure Kitchen KOT and Customer Bill slip templates'}
+                {'Design, edit, and configure Kitchen KOT and Customer Bill slip templates'}
               </p>
             </div>
           </div>
@@ -427,7 +425,7 @@ export const PrintTemplatesConfigView: React.FC = () => {
                         if (template.isDefault && (template.templateType === 'KOT' || template.templateType === 'BOTH')) {
                           setAllKotShowPrices(nextVal);
                         }
-                        showToast(nextVal ? '✓ KOT-এ মূল্য প্রিন্ট চালু (Prices ON)' : '✓ KOT-এ মূল্য প্রিন্ট বন্ধ (Prices OFF)');
+                        showToast(nextVal ? '✓ Prices on KOT enabled' : '✓ Prices on KOT disabled');
                       }}
                       className={`px-2 py-0.5 rounded text-[10px] font-black cursor-pointer transition flex items-center gap-1 ${
                         template.showPricesOnKot 
@@ -521,9 +519,7 @@ export const PrintTemplatesConfigView: React.FC = () => {
                       : (templateType === 'KOT' ? 'Create Custom KOT Template' : 'Create Custom Bill Template')}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    {language === 'bn' 
-                      ? 'লেআউট, টগলসমূহ, পেপার সাইজ কনফিগার করে সংরক্ষণ করুন' 
-                      : 'Customize layout, toggles, paper width (58mm / 80mm), and save changes'}
+                    {'Customize layout, toggles, paper width (58mm / 80mm), and save changes'}
                   </p>
                 </div>
               </div>
@@ -1106,7 +1102,7 @@ export const PrintTemplatesConfigView: React.FC = () => {
                 onClick={handleSave}
                 className="px-6 py-2.5 rounded-xl bg-[#004b9b] hover:bg-[#005bb8] text-white font-black text-xs shadow-md transition cursor-pointer"
               >
-                {editingTemplateId ? 'Save & Apply Changes (সংরক্ষণ করুন)' : 'Create & Apply Template'}
+                {editingTemplateId ? 'Save & Apply Changes' : 'Create & Apply Template'}
               </button>
             </div>
           </div>
