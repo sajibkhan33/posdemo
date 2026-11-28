@@ -93,9 +93,9 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
 
     const menuCatalog = Array.isArray(data?.menuItems) ? data.menuItems : [];
 
-    return rawItems.map(item => {
+    return rawItems.map((item): TableCartItem => {
       if (!item) {
-        return { name: 'Item', qty: 1, price: 0, department: 'Main Kitchen', category: 'General' };
+        return { id: 0, name: 'Item', qty: 1, price: 0, department: 'Main Kitchen', category: 'General' };
       }
       const itemName = item.name ? String(item.name).trim() : '';
       const itemId = item.id != null ? String(item.id) : null;
@@ -110,7 +110,7 @@ const allPrinters = (data?.printers && data.printers.length > 0) ? data.printers
       const resolvedId = menuObj?.id != null ? Number(menuObj.id) : (item.id != null ? Number(item.id) : undefined);
       return {
         ...item,
-        id: (resolvedId !== undefined && !isNaN(resolvedId)) ? resolvedId : item.id,
+        id: (resolvedId !== undefined && !isNaN(resolvedId)) ? resolvedId : (item.id || 0),
         name: itemName || 'Item',
         qty: item.qty || 1,
         price: item.price || 0,
