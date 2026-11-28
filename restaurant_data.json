@@ -65,9 +65,6 @@
           "Bangla Kitchen"
         ],
         "categories": [
-          "Rice & Biryani",
-          "Steak & BBQ",
-          "Appetizers & Soup",
           "Bangla Items"
         ],
         "isDefault": true,
@@ -90,8 +87,6 @@
           "Snacks"
         ],
         "categories": [
-          "Steak & BBQ",
-          "Rice & Biryani",
           "Snacks Items",
           "Grill & BBQ Items",
           "Beverage Items",

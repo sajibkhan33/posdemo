@@ -281,10 +281,15 @@ export const PrintersConfigView: React.FC = () => {
     setUsbPort(p.usbPort || 'USB001');
     setBaudRate(p.baudRate || 9600);
     setPaperWidth(p.paperWidth || '80mm');
-    setSelectedDepts(p.departments || []);
+    const currentDepts = data.departments || [];
+    const validDepts = (p.departments || []).filter(d => currentDepts.length === 0 || currentDepts.includes(d));
+    setSelectedDepts(validDepts);
     setIsDeptDropdownOpen(false);
     setDeptSearchQuery('');
-    setSelectedCats(p.categories || []);
+
+    const currentCats = data.menuCategories || [];
+    const validCats = (p.categories || []).filter(c => currentCats.length === 0 || currentCats.includes(c));
+    setSelectedCats(validCats);
     setIsCatDropdownOpen(false);
     setCatSearchQuery('');
     setSelectedItemIds(p.itemIds || []);
@@ -651,18 +656,23 @@ export const PrintersConfigView: React.FC = () => {
                 </div>
 
                 {/* Routed Categories if specified */}
-                {(printer.categories || []).length > 0 && (
-                  <div className="space-y-1 my-2">
-                    <div className="text-[10px] font-bold text-slate-500">Categories:</div>
-                    <div className="flex flex-wrap gap-1">
-                      {printer.categories.map(c => (
-                        <span key={c} className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-medium">
-                          {c}
-                        </span>
-                      ))}
+                {(() => {
+                  const currentCats = data.menuCategories || [];
+                  const validCats = (printer.categories || []).filter(c => currentCats.length === 0 || currentCats.includes(c));
+                  if (validCats.length === 0) return null;
+                  return (
+                    <div className="space-y-1 my-2">
+                      <div className="text-[10px] font-bold text-slate-500">Categories:</div>
+                      <div className="flex flex-wrap gap-1">
+                        {validCats.map(c => (
+                          <span key={c} className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-medium">
+                            {c}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Specific Routed Dishes if filtered */}
                 {(printer.itemIds || []).length > 0 && (

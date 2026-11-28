@@ -551,7 +551,7 @@ export const DEFAULT_PRINTERS: PrinterConfig[] = [
     port: 9100,
     paperWidth: "80mm",
     departments: ["Main Kitchen", "Rooftop Grill & BBQ"],
-    categories: ["Steak & BBQ", "Rice & Biryani", "Appetizers & Soup"],
+    categories: ["Bangla Items", "Grill & BBQ Items"],
     isDefault: true,
     isActive: true,
     notes: "Kitchen master line thermal printer"
@@ -565,7 +565,7 @@ export const DEFAULT_PRINTERS: PrinterConfig[] = [
     baudRate: 9600,
     paperWidth: "80mm",
     departments: ["Beverage"],
-    categories: ["Cold Beverages & Coffee"],
+    categories: ["Beverage Items", "Tea"],
     isDefault: false,
     isActive: true,
     notes: "Bar counter drink order ticket printer"
